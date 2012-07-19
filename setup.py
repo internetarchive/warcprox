@@ -1,0 +1,16 @@
+from setuptools import setup, find_packages
+
+
+setup(
+    name='pymiproxy',
+    author='Nadeem Douba',
+    version='1.0',
+    author_email='ndouba@gmail.com',
+    description='Micro Interceptor Proxy - a simple MITM HTTP/S proxy',
+    license='GPL',
+    packages=find_packages('src'),
+    package_dir={ '' : 'src' },
+    install_requires = [
+        'pyopenssl'
+    ]
+)
