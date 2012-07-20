@@ -2,12 +2,14 @@
 
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
 from SocketServer import ThreadingMixIn
+from os import path, mkdir, listdir
 from httplib import HTTPResponse
+from tempfile import gettempdir
 from urlparse import urlparse
 from ssl import wrap_socket
-from os import path, mkdir
 from socket import socket
 from re import compile
+from sys import argv
 
 from OpenSSL.crypto import (X509Extension, X509, dump_privatekey, dump_certificate, load_certificate, load_privatekey,
                             PKey, TYPE_RSA, X509Req)
@@ -36,15 +38,24 @@ __all__ = [
 
 class CertificateAuthority(object):
 
-    def __init__(self, ca_file='ca.pem'):
-        self.ca_file = 'ca.pem'
-        self._serial = 1
-        if not path.exists('.ssl'):
-            mkdir('.ssl')
+    def __init__(self, ca_file='ca.pem', cache_dir=gettempdir()):
+        self.ca_file = ca_file
+        self.cache_dir = cache_dir
+        self._serial = self._get_serial()
         if not path.exists(ca_file):
             self._generate_ca()
         else:
             self._read_ca(ca_file)
+
+    def _get_serial(self):
+        s = 1
+        for c in filter(lambda x: x.startswith('.pymp_'), listdir(self.cache_dir)):
+            c = load_certificate(FILETYPE_PEM, open(path.sep.join([self.cache_dir, c])).read())
+            sc = c.get_serial_number()
+            if sc > s:
+                s = sc
+            del c
+        return s
 
     def _generate_ca(self):
         # Generate key
@@ -67,7 +78,7 @@ class CertificateAuthority(object):
             ])
         self.cert.sign(self.key, "sha1")
 
-        with open('ca.pem', 'wb+') as f:
+        with open(self.ca_file, 'wb+') as f:
             f.write(dump_privatekey(FILETYPE_PEM, self.key))
             f.write(dump_certificate(FILETYPE_PEM, self.cert))
 
@@ -76,7 +87,7 @@ class CertificateAuthority(object):
         self.key = load_privatekey(FILETYPE_PEM, open(file).read())
 
     def __getitem__(self, cn):
-        cnp = path.sep.join(['.ssl', '.%s.pem' % cn])
+        cnp = path.sep.join([self.cache_dir, '.pymp_%s.pem' % cn])
         if not path.exists(cnp):
             # create certificate
             key = PKey()
@@ -293,7 +304,11 @@ class DebugInterceptor(RequestInterceptorPlugin, ResponseInterceptorPlugin):
 
 
 if __name__ == '__main__':
-    proxy = AsyncMitmProxy()
+    proxy = None
+    if not argv[1:]:
+        proxy = AsyncMitmProxy()
+    else:
+        proxy = AsyncMitmProxy(ca_file=argv[1])
     proxy.register_interceptor(DebugInterceptor)
     try:
         proxy.serve_forever()
