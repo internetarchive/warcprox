@@ -12,6 +12,7 @@ setup(
     description='Micro Interceptor Proxy - a simple MITM HTTP/S proxy',
     license='GPL',
     url='https://github.com/allfro/pymiproxy/',
+    download_url='https://github.com/allfro/pymiproxy/tarball/master',
     long_description=read('README.md'),
     packages=find_packages('src'),
     package_dir={ '' : 'src' },
