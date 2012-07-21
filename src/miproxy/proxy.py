@@ -16,13 +16,13 @@ from OpenSSL.crypto import (X509Extension, X509, dump_privatekey, dump_certifica
 from OpenSSL.SSL import FILETYPE_PEM
 
 __author__ = 'Nadeem Douba'
-__copyright__ = 'Copyright 2012, Cygnos Corporation'
+__copyright__ = 'Copyright 2012, PyMiProxy Project'
 __credits__ = ['Nadeem Douba']
 
 __license__ = 'GPL'
 __version__ = '0.1'
 __maintainer__ = 'Nadeem Douba'
-__email__ = 'ndouba@cygnos.com'
+__email__ = 'ndouba@gmail.com'
 __status__ = 'Development'
 
 __all__ = [
