@@ -27,7 +27,7 @@ Installation
 Just run the following command at the command prompt:
 
 ```bash
-    $ sudo python setup.py install
+    sh# sudo python setup.py install
 ```
 
 Usage
@@ -37,7 +37,7 @@ The module offers a few examples in the code. In brief, pymiproxy can be run rig
 at the the command-prompt:
 
 ```bash
-    $ python -m miproxy.proxy
+    sh# python -m miproxy.proxy
 ```
 
 This will invoke pymiproxy with the ```DebugInterceptor``` plugin which simply outputs the first 100 bytes of each request
