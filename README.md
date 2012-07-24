@@ -5,7 +5,7 @@ A small and sweet man-in-the-middle proxy capable of doing HTTP and HTTP over SS
 
 
 Introduction
-============
+------------
 
 pymiproxy is a small, lightweight, man-in-the-middle proxy capable of performing HTTP and HTTPS (or SSL) inspection. The
 proxy provides a built-in certificate authority that is capable of generating certificates for SSL-based destinations.
@@ -14,7 +14,7 @@ interface. It is ideal for situations where you're in dire need of a cool proxy 
 data.
 
 Installation Requirements
-=========================
+-------------------------
 
 The following modules are required:
 
@@ -22,7 +22,7 @@ The following modules are required:
 
 
 Installation
-============
+------------
 
 Just run the following command at the command prompt:
 
@@ -30,7 +30,7 @@ Just run the following command at the command prompt:
 
 
 Usage
-=====
+-----
 
 The module offers a few examples in the code. In brief, pymiproxy can be run right-away by issuing the following command
 at the the command-prompt:
@@ -40,9 +40,9 @@ at the the command-prompt:
 This will invoke pymiproxy with the *DebugInterceptor* plugin which simply outputs the first 100 bytes of each request
 and response. The proxy runs on port 8080 and listens on all addresses. Go ahead and give it a try.
 
-===================================
+
 Extending or Implementing pymiproxy
-===================================
+-----------------------------------
 
 There are two ways of extending the proxy:
 
@@ -54,7 +54,6 @@ There are two ways of extending the proxy:
 The decision on which method you choose to use is entirely dependant on whether or not you wish to push the data being
 intercepted through a set of interceptors or not.
 
--------------------
 Interceptor Plugins
 -------------------
 
@@ -104,8 +103,6 @@ The following is a simple code example of how to run the proxy with plugins:
         except KeyboardInterrupt:
             proxy.server_close()
 
-
-------------------
 Method Overloading
 ------------------
 
@@ -140,7 +137,7 @@ Note: In both cases, the methods that process the data need to return the data b
 you'll get an exception.
 
 Kudos
-=====
+-----
 
 Thanks to the great documentation at python.org, GnuCitizen's PDP for the ideas, the pyOpenSSL group for making a great
 OpenSSL API.
