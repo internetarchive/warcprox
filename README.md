@@ -12,7 +12,6 @@ interface. It is ideal for situations where you're in dire need of a cool proxy 
 data.
 
 ##Installation Requirements
--------------------------
 
 The following modules are required:
 
