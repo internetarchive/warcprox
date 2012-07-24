@@ -109,8 +109,9 @@ Method Overloading
 ------------------
 
 The alternate approach to extending the proxy functionality is to subclass the ProxyHandler class and overload the
-mitm_request and mitm_response methods. The following is a quick example:
+```mitm_request``` and ```mitm_response``` methods. The following is a quick example:
 
+```python
     from miproxy.proxy import AsyncMitmProxy
 
     class MitmProxyHandler(ProxyHandler):
@@ -134,6 +135,7 @@ mitm_request and mitm_response methods. The following is a quick example:
             proxy.serve_forever()
         except KeyboardInterrupt:
             proxy.server_close()
+```
 
 Note: In both cases, the methods that process the data need to return the data back to the proxy handler. Otherwise,
 you'll get an exception.
