@@ -26,8 +26,9 @@ Installation
 
 Just run the following command at the command prompt:
 
+```bash
     $ sudo python setup.py install
-
+```
 
 Usage
 -----
