@@ -78,7 +78,7 @@ another.
 
 The following is a simple code example of how to run the proxy with plugins:
 
-    ```python
+```python
     from miproxy.proxy import RequestInterceptorPlugin, ResponseInterceptorPlugin, AsyncMitmProxy
 
     class DebugInterceptor(RequestInterceptorPlugin, ResponseInterceptorPlugin):
@@ -103,7 +103,7 @@ The following is a simple code example of how to run the proxy with plugins:
             proxy.serve_forever()
         except KeyboardInterrupt:
             proxy.server_close()
-    ```
+```
 
 Method Overloading
 ------------------
