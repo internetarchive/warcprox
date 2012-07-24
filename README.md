@@ -27,7 +27,7 @@ Installation
 Just run the following command at the command prompt:
 
 ```bash
-    sh# sudo python setup.py install
+$ sudo python setup.py install
 ```
 
 Usage
@@ -37,7 +37,7 @@ The module offers a few examples in the code. In brief, pymiproxy can be run rig
 at the the command-prompt:
 
 ```bash
-    sh# python -m miproxy.proxy
+$ python -m miproxy.proxy
 ```
 
 This will invoke pymiproxy with the ```DebugInterceptor``` plugin which simply outputs the first 100 bytes of each request
@@ -82,30 +82,30 @@ another.
 The following is a simple code example of how to run the proxy with plugins:
 
 ```python
-    from miproxy.proxy import RequestInterceptorPlugin, ResponseInterceptorPlugin, AsyncMitmProxy
+from miproxy.proxy import RequestInterceptorPlugin, ResponseInterceptorPlugin, AsyncMitmProxy
 
-    class DebugInterceptor(RequestInterceptorPlugin, ResponseInterceptorPlugin):
+class DebugInterceptor(RequestInterceptorPlugin, ResponseInterceptorPlugin):
 
-            def do_request(self, data):
-                print '>> %s' % repr(data[:100])
-                return data
+        def do_request(self, data):
+            print '>> %s' % repr(data[:100])
+            return data
 
-            def do_response(self, data):
-                print '<< %s' % repr(data[:100])
-                return data
+        def do_response(self, data):
+            print '<< %s' % repr(data[:100])
+            return data
 
 
-    if __name__ == '__main__':
-        proxy = None
-        if not argv[1:]:
-            proxy = AsyncMitmProxy()
-        else:
-            proxy = AsyncMitmProxy(ca_file=argv[1])
-        proxy.register_interceptor(DebugInterceptor)
-        try:
-            proxy.serve_forever()
-        except KeyboardInterrupt:
-            proxy.server_close()
+if __name__ == '__main__':
+    proxy = None
+    if not argv[1:]:
+        proxy = AsyncMitmProxy()
+    else:
+        proxy = AsyncMitmProxy(ca_file=argv[1])
+    proxy.register_interceptor(DebugInterceptor)
+    try:
+        proxy.serve_forever()
+    except KeyboardInterrupt:
+        proxy.server_close()
 ```
 
 Method Overloading
@@ -115,29 +115,29 @@ The alternate approach to extending the proxy functionality is to subclass the P
 ```mitm_request``` and ```mitm_response``` methods. The following is a quick example:
 
 ```python
-    from miproxy.proxy import AsyncMitmProxy
+from miproxy.proxy import AsyncMitmProxy
 
-    class MitmProxyHandler(ProxyHandler):
+class MitmProxyHandler(ProxyHandler):
 
-        def mitm_request(self, data):
-            print '>> %s' % repr(data[:100])
-            return data
+    def mitm_request(self, data):
+        print '>> %s' % repr(data[:100])
+        return data
 
-        def mitm_response(self, data):
-            print '<< %s' % repr(data[:100])
-            return data
+    def mitm_response(self, data):
+        print '<< %s' % repr(data[:100])
+        return data
 
 
-    if __name__ == '__main__':
-        proxy = None
-        if not argv[1:]:
-            proxy = AsyncMitmProxy(RequestHandlerClass=MitmProxyHandler)
-        else:
-            proxy = AsyncMitmProxy(RequestHandlerClass=MitmProxyHandler, ca_file=argv[1])
-        try:
-            proxy.serve_forever()
-        except KeyboardInterrupt:
-            proxy.server_close()
+if __name__ == '__main__':
+    proxy = None
+    if not argv[1:]:
+        proxy = AsyncMitmProxy(RequestHandlerClass=MitmProxyHandler)
+    else:
+        proxy = AsyncMitmProxy(RequestHandlerClass=MitmProxyHandler, ca_file=argv[1])
+    try:
+        proxy.serve_forever()
+    except KeyboardInterrupt:
+        proxy.server_close()
 ```
 
 Note: In both cases, the methods that process the data need to return the data back to the proxy handler. Otherwise,
