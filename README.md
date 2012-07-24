@@ -36,9 +36,11 @@ Usage
 The module offers a few examples in the code. In brief, pymiproxy can be run right-away by issuing the following command
 at the the command-prompt:
 
+```bash
     $ python -m miproxy.proxy
+```
 
-This will invoke pymiproxy with the *DebugInterceptor* plugin which simply outputs the first 100 bytes of each request
+This will invoke pymiproxy with the ```DebugInterceptor``` plugin which simply outputs the first 100 bytes of each request
 and response. The proxy runs on port 8080 and listens on all addresses. Go ahead and give it a try.
 
 
@@ -49,7 +51,7 @@ There are two ways of extending the proxy:
 
 
 - Develop and register an Interceptor plugin; or
-- Overload the mitm_request, and mitm_response methods in the ProxyHandler class.
+- Overload the ```mitm_request```, and ```mitm_response``` methods in the ```ProxyHandler``` class.
 
 
 The decision on which method you choose to use is entirely dependant on whether or not you wish to push the data being
@@ -60,8 +62,8 @@ Interceptor Plugins
 
 There are currently two types of interceptor plugins:
 
-- RequestInterceptorPlugins: executed prior to sending the request to the remote server; and
-- ResponseInterceptorPlugins: executed prior to sending the response back to the client.
+- ```RequestInterceptorPlugins```: executed prior to sending the request to the remote server; and
+- ```ResponseInterceptorPlugins```: executed prior to sending the response back to the client.
 
 The following flow is taken by pymiproxy in this mode:
 
