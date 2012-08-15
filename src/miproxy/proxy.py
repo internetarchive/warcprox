@@ -127,7 +127,7 @@ class UnsupportedSchemeException(Exception):
 
 class ProxyHandler(BaseHTTPRequestHandler):
 
-    r = compile(r'http://[^/]+(/?.*)')
+    r = compile(r'http://[^/]+(/?.*)(?i)')
 
     def _connect_to_host(self):
         # Get hostname and port to connect to
