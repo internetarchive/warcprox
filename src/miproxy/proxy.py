@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
+from urlparse import urlparse, urlunparse, ParseResult
 from SocketServer import ThreadingMixIn
-from os import path, mkdir, listdir
 from httplib import HTTPResponse
 from tempfile import gettempdir
-from urlparse import urlparse
+from os import path, listdir
 from ssl import wrap_socket
 from socket import socket
 from re import compile
@@ -129,21 +129,35 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
     r = compile(r'http://[^/]+(/?.*)(?i)')
 
+    def __init__(self, request, client_address, server):
+        self.is_connect = False
+        BaseHTTPRequestHandler.__init__(self, request, client_address, server)
+
     def _connect_to_host(self):
         # Get hostname and port to connect to
         if self.is_connect:
-            host, port = self.path.split(':')
+            self.hostname, self.port = self.path.split(':')
         else:
             u = urlparse(self.path)
             if u.scheme != 'http':
                 raise UnsupportedSchemeException('Unknown scheme %s' % repr(u.scheme))
-            host = u.hostname
-            port = u.port or 80
+            self.hostname = u.hostname
+            self.port = u.port or 80
+            self.path = urlunparse(
+                ParseResult(
+                    scheme='',
+                    netloc='',
+                    params=u.params,
+                    path=u.path or '/',
+                    query=u.query,
+                    fragment=u.fragment
+                )
+            )
 
         # Connect to destination
         self._proxy_sock = socket()
         self._proxy_sock.settimeout(10)
-        self._proxy_sock.connect((host, int(port)))
+        self._proxy_sock.connect((self.hostname, int(self.port)))
 
         # Wrap socket if SSL is required
         if self.is_connect:
@@ -178,8 +192,6 @@ class ProxyHandler(BaseHTTPRequestHandler):
     def do_COMMAND(self):
 
         # Is this an SSL tunnel?
-        path = self.path or '/'
-
         if not self.is_connect:
             try:
                 # Connect to destination
@@ -188,10 +200,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 self.send_error(500, str(e))
                 return
             # Extract path
-            path = self.r.search(path).groups()[0] or '/'
 
         # Build request
-        req = '%s %s %s\r\n' % (self.command, path, self.request_version)
+        req = '%s %s %s\r\n' % (self.command, self.path, self.request_version)
 
         # Add headers to the request
         req += '%s\r\n' % self.headers
@@ -270,7 +281,7 @@ class MitmProxy(HTTPServer):
 
     def register_interceptor(self, interceptor_class):
         if not issubclass(interceptor_class, InterceptorPlugin):
-            raise InvalidInterceptorException('Expected type InterceptorPlugin got %s instead' % type(interceptor_class))
+            raise InvalidInterceptorPluginException('Expected type InterceptorPlugin got %s instead' % type(interceptor_class))
         if issubclass(interceptor_class, RequestInterceptorPlugin):
             self._req_plugins.append(interceptor_class)
         if issubclass(interceptor_class, ResponseInterceptorPlugin):
