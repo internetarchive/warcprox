@@ -1,4 +1,12 @@
-#!/usr/bin/env python
+#!/usr/bin/python
+# vim:set sw=4 et:
+#
+
+# python3 imports
+# from http.server import HTTPServer, BaseHTTPRequestHandler
+# from urllib.parse import urlparse, urlunparse, ParseResult
+# from socketserver import ThreadingMixIn
+# from http.client import HTTPResponse
 
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
 from urlparse import urlparse, urlunparse, ParseResult
@@ -8,12 +16,22 @@ from tempfile import gettempdir
 from os import path, listdir
 from ssl import wrap_socket
 from socket import socket
-from re import compile
 from sys import argv
 
 from OpenSSL.crypto import (X509Extension, X509, dump_privatekey, dump_certificate, load_certificate, load_privatekey,
                             PKey, TYPE_RSA, X509Req)
 from OpenSSL.SSL import FILETYPE_PEM
+import logging
+import sys
+import ssl
+from hanzo.warctools import WarcRecord
+from hanzo.warctools.warc import warc_datetime_str
+import uuid
+import hashlib
+from datetime import datetime
+import time
+import Queue
+import threading
 
 __author__ = 'Nadeem Douba'
 __copyright__ = 'Copyright 2012, PyMiProxy Project'
@@ -127,8 +145,6 @@ class UnsupportedSchemeException(Exception):
 
 class ProxyHandler(BaseHTTPRequestHandler):
 
-    r = compile(r'http://[^/]+(/?.*)(?i)')
-
     def __init__(self, request, client_address, server):
         self.is_connect = False
         BaseHTTPRequestHandler.__init__(self, request, client_address, server)
@@ -138,7 +154,8 @@ class ProxyHandler(BaseHTTPRequestHandler):
         if self.is_connect:
             self.hostname, self.port = self.path.split(':')
         else:
-            u = urlparse(self.path)
+            self.url = self.path
+            u = urlparse(self.url)
             if u.scheme != 'http':
                 raise UnsupportedSchemeException('Unknown scheme %s' % repr(u.scheme))
             self.hostname = u.hostname
@@ -179,14 +196,17 @@ class ProxyHandler(BaseHTTPRequestHandler):
             self.end_headers()
             #self.request.sendall('%s 200 Connection established\r\n\r\n' % self.request_version)
             self._transition_to_ssl()
-        except Exception, e:
+        except Exception as e:
             self.send_error(500, str(e))
             return
 
         # Reload!
         self.setup()
-        self.ssl_host = 'https://%s' % self.path
         self.handle_one_request()
+#         try:
+#         except ssl.SSLError, e:
+#             logging.warn("caught SSLError {0}".format(e))
+#             pass
 
 
     def do_COMMAND(self):
@@ -196,14 +216,14 @@ class ProxyHandler(BaseHTTPRequestHandler):
             try:
                 # Connect to destination
                 self._connect_to_host()
-            except Exception, e:
+            except Exception as e:
                 self.send_error(500, str(e))
                 return
             # Extract path
 
         # Build request
         req = '%s %s %s\r\n' % (self.command, self.path, self.request_version)
-
+        
         # Add headers to the request
         req += '%s\r\n' % self.headers
 
@@ -288,41 +308,123 @@ class MitmProxy(HTTPServer):
             self._res_plugins.append(interceptor_class)
 
 
+    def server_activate(self):
+        HTTPServer.server_activate(self)
+        logging.info('listening on {0}:{1}'.format(self.server_address[0], self.server_address[1]))
+
+
+    def server_close(self):
+        HTTPServer.server_close(self)
+        logging.info('shut down')
+
+
 class AsyncMitmProxy(ThreadingMixIn, MitmProxy):
     pass
 
 
-class MitmProxyHandler(ProxyHandler):
+class WarcRecordQueuer(RequestInterceptorPlugin, ResponseInterceptorPlugin):
 
-    def mitm_request(self, data):
-        print '>> %s' % repr(data[:100])
+    warc_record_out_queue = Queue.Queue()
+
+    def __init__(self, server, msg):
+        InterceptorPlugin.__init__(self, server, msg)
+
+        if msg.is_connect:
+            assert not msg.url
+
+            if int(msg.port) == 443:
+                netloc = msg.hostname
+            else:
+                netloc = '{0}:{1}'.format(msg.hostname, msg.port)
+
+            self.url = urlunparse(
+                ParseResult(
+                    scheme='https',
+                    netloc=netloc,
+                    params='',
+                    path=msg.path,
+                    query='',
+                    fragment=''
+                )
+            )
+        else:
+            assert msg.url
+            self.url = msg.url
+
+
+    def do_request(self, data):
+        logging.info('{0} >> {1}'.format(self.url, repr(data[:100])))
         return data
 
-    def mitm_response(self, data):
-        print '<< %s' % repr(data[:100])
+
+    def make_warc_uuid(self, text):
+        return "<urn:uuid:{0}>".format(uuid.UUID(hashlib.sha1(text).hexdigest()[0:32]))
+
+
+    def do_response(self, data):
+        logging.info('{0} << {1}'.format(self.url, repr(data[:100])))
+
+        warc_record_id = self.make_warc_uuid("{0} {1}".format(self.url, time.time()))
+        logging.info('{0}: {1}'.format(WarcRecord.ID, warc_record_id))
+
+        headers = []
+        headers.append((WarcRecord.ID, warc_record_id))
+        headers.append((WarcRecord.URL, self.url))
+        headers.append((WarcRecord.DATE, warc_datetime_str(datetime.now())))
+        # headers.append((WarcRecord.IP_ADDRESS, ip))
+        headers.append((WarcRecord.TYPE, WarcRecord.RESPONSE))
+
+        warcrecord = WarcRecord(headers=headers, content=("application/http;msgtype=response", data))
+
+        # warcrecord.write_to(sys.stdout, gzip=False)
+        WarcRecordQueuer.warc_record_out_queue.put(warcrecord)
+        
         return data
 
 
-class DebugInterceptor(RequestInterceptorPlugin, ResponseInterceptorPlugin):
+class WarcWriterThread(threading.Thread):
 
-        def do_request(self, data):
-            print '>> %s' % repr(data[:100])
-            return data
+    # def __init__(self, group=None, target=None, name=None, args=(), kwargs=None, verbose=None):
+    #     Thread.__init__(self, group=group, target=target, name=name, args=args, kwargs=args
 
-        def do_response(self, data):
-            print '<< %s' % repr(data[:100])
-            return data
+    def __init__(self, warc_record_in_queue):
+        threading.Thread.__init__(self, name='WarcWriterThread')
+        self.warc_record_in_queue = warc_record_in_queue
+        self.stop = threading.Event()
+
+
+    def run(self):
+        logging.info('WarcWriterThread starting')
+
+        while not self.stop.is_set():
+            try:
+                warc_record = self.warc_record_in_queue.get(block=False, timeout=0.5)
+                logging.info('got warc record to write from the queue: {0}'.format(warc_record))
+                # warc_record.write_to(sys.stdout, gzip=False)
+            except Queue.Empty:
+                pass
+
+        logging.info('WarcWriterThread shutting down')
 
 
 if __name__ == '__main__':
+    logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, format='%(asctime)s %(process)d %(levelname)s %(funcName)s(%(filename)s:%(lineno)d) %(message)s')
     proxy = None
     if not argv[1:]:
         proxy = AsyncMitmProxy()
     else:
         proxy = AsyncMitmProxy(ca_file=argv[1])
-    proxy.register_interceptor(DebugInterceptor)
+
+    proxy.register_interceptor(WarcRecordQueuer)
+
+    warc_writer = WarcWriterThread(WarcRecordQueuer.warc_record_out_queue)
+    warc_writer.start()
+
     try:
         proxy.serve_forever()
     except KeyboardInterrupt:
+        pass
+    finally:
+        warc_writer.stop.set()
         proxy.server_close()
 

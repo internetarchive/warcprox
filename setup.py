@@ -5,18 +5,18 @@ def read(fname):
     return open(path.join(path.dirname(__file__), fname)).read()
 
 setup(
-    name='pymiproxy',
-    author='Nadeem Douba',
+    name='warcprox',
+    author='Noah Levitt',
     version='1.0',
-    author_email='ndouba@gmail.com',
-    description='Micro Interceptor Proxy - a simple MITM HTTP/S proxy',
+    author_email='nlevitt@archive.org',
+    description='warcprox - WARC writing MITM HTTP/S proxy',
     license='GPL',
-    url='https://github.com/allfro/pymiproxy',
-    download_url='https://github.com/allfro/pymiproxy/zipball/master',
+    url='https://github.com/nlevitt/warcprox',
     long_description=read('README.md'),
     packages=find_packages('src'),
     package_dir={ '' : 'src' },
     install_requires = [
-        'pyopenssl'
+        'pyopenssl',
+        'warctools'
     ]
 )
