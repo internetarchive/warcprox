@@ -335,7 +335,7 @@ class WarcWriterThread(threading.Thread):
 
         while not self.stop.is_set():
             try:
-                warc_record = self.warc_record_in_queue.get(block=False, timeout=0.5)
+                warc_record = self.warc_record_in_queue.get(block=True, timeout=0.5)
                 logging.info('got warc record to write from the queue: {0}'.format(warc_record))
                 # warc_record.write_to(sys.stdout, gzip=False)
             except Queue.Empty:
@@ -345,7 +345,7 @@ class WarcWriterThread(threading.Thread):
 
 
 if __name__ == '__main__':
-    logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, format='%(asctime)s %(process)d %(levelname)s %(funcName)s(%(filename)s:%(lineno)d) %(message)s')
+    logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, format='%(asctime)s %(process)d %(threadName)s %(levelname)s %(funcName)s(%(filename)s:%(lineno)d) %(message)s')
     proxy = None
     if not argv[1:]:
         proxy = AsyncMitmProxy()
