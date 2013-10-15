@@ -1,9 +1,13 @@
-#pymiproxy - Python Micro Interceptor Proxy
+#warcprox - WARC writing MITM HTTP/S proxy
+
+Based on the excellent pymiproxy. What follows is the pymiproxy readme.
+
+##pymiproxy - Python Micro Interceptor Proxy
 
 A small and sweet man-in-the-middle proxy capable of doing HTTP and HTTP over SSL.
 
 
-##Introduction
+###Introduction
 
 pymiproxy is a small, lightweight, man-in-the-middle proxy capable of performing HTTP and HTTPS (or SSL) inspection. The
 proxy provides a built-in certificate authority that is capable of generating certificates for SSL-based destinations.
@@ -11,14 +15,14 @@ Pymiproxy is also extensible and provides two methods for extending the proxy: m
 interface. It is ideal for situations where you're in dire need of a cool proxy to tamper with out- and/or in-bound HTTP
 data.
 
-##Installation Requirements
+###Installation Requirements
 
 The following modules are required:
 
 - pyOpenSSL
 
 
-##Installation
+###Installation
 
 Just run the following command at the command prompt:
 
@@ -26,7 +30,7 @@ Just run the following command at the command prompt:
 $ sudo python setup.py install
 ```
 
-##Usage
+###Usage
 
 The module offers a few examples in the code. In brief, pymiproxy can be run right-away by issuing the following command
 at the the command-prompt:
@@ -39,7 +43,7 @@ This will invoke pymiproxy with the ```DebugInterceptor``` plugin which simply o
 and response. The proxy runs on port 8080 and listens on all addresses. Go ahead and give it a try.
 
 
-##Extending or Implementing pymiproxy
+###Extending or Implementing pymiproxy
 
 There are two ways of extending the proxy:
 
@@ -51,7 +55,7 @@ There are two ways of extending the proxy:
 The decision on which method you choose to use is entirely dependant on whether or not you wish to push the data being
 intercepted through a set of interceptors or not.
 
-###Interceptor Plugins
+####Interceptor Plugins
 
 There are currently two types of interceptor plugins:
 
@@ -101,7 +105,7 @@ if __name__ == '__main__':
         proxy.server_close()
 ```
 
-###Method Overloading
+####Method Overloading
 
 The alternate approach to extending the proxy functionality is to subclass the ProxyHandler class and overload the
 ```mitm_request``` and ```mitm_response``` methods. The following is a quick example:
@@ -135,7 +139,7 @@ if __name__ == '__main__':
 Note: In both cases, the methods that process the data need to return the data back to the proxy handler. Otherwise,
 you'll get an exception.
 
-##Kudos
+###Kudos
 
 Thanks to the great documentation at python.org, GnuCitizen's PDP for the ideas, the pyOpenSSL group for making a great
 OpenSSL API.
