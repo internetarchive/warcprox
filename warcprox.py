@@ -2,12 +2,6 @@
 # vim:set sw=4 et:
 #
 
-# python3 imports
-# from http.server import HTTPServer, BaseHTTPRequestHandler
-# from urllib.parse import urlparse, urlunparse, ParseResult
-# from socketserver import ThreadingMixIn
-# from http.client import HTTPResponse
-
 import BaseHTTPServer, SocketServer
 import httplib
 import socket
@@ -20,31 +14,10 @@ from hanzo import warctools
 import uuid
 import hashlib
 from datetime import datetime
-import time
 import Queue
 import threading
-import os.path
+import os, os.path
 import argparse
-import os
-
-__author__ = 'Nadeem Douba'
-__copyright__ = 'Copyright 2012, PyMiProxy Project'
-__credits__ = ['Nadeem Douba']
-
-__license__ = 'GPL'
-__version__ = '0.1'
-__maintainer__ = 'Nadeem Douba'
-__email__ = 'ndouba@gmail.com'
-__status__ = 'Development'
-
-__all__ = [
-    'ProxyHandler',
-    'RequestInterceptorPlugin',
-    'ResponseInterceptorPlugin',
-    'MitmProxy',
-    'AsyncMitmProxy',
-    'InvalidInterceptorPluginException'
-]
 
 
 class UnsupportedSchemeException(Exception):
