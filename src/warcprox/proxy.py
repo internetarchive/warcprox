@@ -9,15 +9,9 @@
 # from http.client import HTTPResponse
 
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
-from urlparse import urlparse, urlunparse, ParseResult
 from SocketServer import ThreadingMixIn
 from httplib import HTTPResponse
-from tempfile import gettempdir
-from os import path, listdir
-from ssl import wrap_socket
 from socket import socket
-from sys import argv
-
 import OpenSSL.crypto
 import OpenSSL.SSL
 import logging
@@ -32,6 +26,7 @@ import time
 import Queue
 import threading
 import os.path
+import argparse
 
 __author__ = 'Nadeem Douba'
 __copyright__ = 'Copyright 2012, PyMiProxy Project'
@@ -92,11 +87,11 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
         # Wrap socket if SSL is required
         if self.is_connect:
-            self._proxy_sock = wrap_socket(self._proxy_sock)
+            self._proxy_sock = ssl.wrap_socket(self._proxy_sock)
 
 
     def _transition_to_ssl(self):
-        self.request = wrap_socket(self.request, server_side=True, certfile=self.server.certfile)
+        self.request = ssl.wrap_socket(self.request, server_side=True, certfile=self.server.certfile)
 
 
     def do_CONNECT(self):
@@ -167,19 +162,32 @@ class ProxyHandler(BaseHTTPRequestHandler):
         # Relay the message
         self.request.sendall(self.mitm_response(res))
 
+
     def mitm_request(self, data):
         for p in self.server._req_plugins:
             data = p(self.server, self).do_request(data)
         return data
+
 
     def mitm_response(self, data):
         for p in self.server._res_plugins:
             data = p(self.server, self).do_response(data)
         return data
 
+
     def __getattr__(self, item):
         if item.startswith('do_'):
             return self.do_COMMAND
+
+
+    def log_error(self, format, *args):
+        logging.error("{0} - - [{1}] {2}".format(self.address_string(), 
+            self.log_date_time_string(), format % args))
+
+
+    def log_message(self, format, *args):
+        logging.info("{0} - - [{1}] {2}".format(self.address_string(), 
+            self.log_date_time_string(), format % args))
 
 
 class InterceptorPlugin(object):
@@ -207,8 +215,8 @@ class InvalidInterceptorPluginException(Exception):
 
 class MitmProxy(HTTPServer):
 
-    def __init__(self, server_address=('', 8080), RequestHandlerClass=ProxyHandler, bind_and_activate=True, certfile='warcprox.pem'):
-        HTTPServer.__init__(self, server_address, RequestHandlerClass, bind_and_activate)
+    def __init__(self, server_address, req_handler_class=ProxyHandler, bind_and_activate=True, certfile='warcprox.pem'):
+        HTTPServer.__init__(self, server_address, req_handler_class, bind_and_activate)
         self._res_plugins = []
         self._req_plugins = []
         self.certfile = certfile
@@ -321,9 +329,6 @@ class WarcRecordQueuer(RequestInterceptorPlugin, ResponseInterceptorPlugin):
 
 class WarcWriterThread(threading.Thread):
 
-    # def __init__(self, group=None, target=None, name=None, args=(), kwargs=None, verbose=None):
-    #     Thread.__init__(self, group=group, target=target, name=name, args=args, kwargs=args
-
     def __init__(self, warc_record_in_queue):
         threading.Thread.__init__(self, name='WarcWriterThread')
         self.warc_record_in_queue = warc_record_in_queue
@@ -346,12 +351,22 @@ class WarcWriterThread(threading.Thread):
 
 if __name__ == '__main__':
     logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, format='%(asctime)s %(process)d %(threadName)s %(levelname)s %(funcName)s(%(filename)s:%(lineno)d) %(message)s')
-    proxy = None
-    if not argv[1:]:
-        proxy = AsyncMitmProxy()
-    else:
-        proxy = AsyncMitmProxy(ca_file=argv[1])
 
+    arg_parser = argparse.ArgumentParser(description='warcprox - WARC writing MITM HTTP/S proxy')
+    arg_parser.add_argument('-p', '--port', dest='port', default='8080', help='port to listen on')
+    arg_parser.add_argument('-b', '--address', dest='address', default='localhost', help='address to listen on')
+    arg_parser.add_argument('-d', '--dir', dest='dir', default='warcs', help='where to write warcs')
+    arg_parser.add_argument('-z', '--gzip', dest='gzip', action='store_true', help='write gzip-compressed warc records')
+    arg_parser.add_argument('-n', '--prefix', dest='prefix', default='WARCPROX', help='WARC filename prefix')
+    arg_parser.add_argument('-c', '--certfile', dest='certfile', default='warcprox.pem', help="SSL certificate file; if file does not exist, it will be created")
+    # --max-file-size=maxArcFileSize]
+    # [--ispartof=warcinfo ispartof]
+    # [--description=warcinfo description]
+    # [--operator=warcinfo operator]
+    # [--httpheader=warcinfo httpheader]
+    args = arg_parser.parse_args()
+
+    proxy = AsyncMitmProxy(server_address=(args.bind, int(args.port)), certfile=args.certfile)
     proxy.register_interceptor(WarcRecordQueuer)
 
     warc_writer = WarcWriterThread(WarcRecordQueuer.warc_record_out_queue)
