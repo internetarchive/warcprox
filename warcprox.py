@@ -6,7 +6,7 @@ import BaseHTTPServer, SocketServer
 import httplib
 import socket
 import urlparse
-import OpenSSL.crypto, OpenSSL.crypto
+import OpenSSL
 import ssl
 import logging
 import sys
@@ -274,20 +274,22 @@ class WarcRecordQueuer(RequestInterceptorPlugin, ResponseInterceptorPlugin):
         return data
 
 
-    def make_warc_uuid(self, text):
+    @staticmethod
+    def make_warc_uuid(text):
         return "<urn:uuid:{0}>".format(uuid.UUID(hashlib.sha1(text).hexdigest()[0:32]))
 
 
     def do_response(self, data):
         logging.info('{0} << {1}'.format(self.url, repr(data[:100])))
 
-        warc_record_id = self.make_warc_uuid("{0} {1}".format(self.url, datetime.now().isoformat()))
+        warc_record_date = warctools.warc.warc_datetime_str(datetime.now())
+        warc_record_id = WarcRecordQueuer.make_warc_uuid("{0} {1}".format(self.url, warc_record_date))
         logging.info('{0}: {1}'.format(warctools.WarcRecord.ID, warc_record_id))
 
         headers = []
         headers.append((warctools.WarcRecord.ID, warc_record_id))
         headers.append((warctools.WarcRecord.URL, self.url))
-        headers.append((warctools.WarcRecord.DATE, warctools.warc.warc_datetime_str(datetime.now())))
+        headers.append((warctools.WarcRecord.DATE, warc_record_date))
         # headers.append((warctools.WarcRecord.IP_ADDRESS, ip))
         headers.append((warctools.WarcRecord.TYPE, warctools.WarcRecord.RESPONSE))
 
@@ -329,13 +331,57 @@ class WarcWriterThread(threading.Thread):
 
 
     def _close_writer(self):
-        final_name = self._fpath[:-5]
-        logging.info('closing {0}'.format(final_name))
-        self._f.close()
-        os.rename(self._fpath, final_name)
+        if self._fpath:
+            final_name = self._fpath[:-5]
+            logging.info('closing {0}'.format(final_name))
+            self._f.close()
+            os.rename(self._fpath, final_name)
 
-        self._fpath = None
-        self._f = None
+            self._fpath = None
+            self._f = None
+
+    # WARC/1.0
+    # WARC-Type: warcinfo
+    # WARC-Date: 2013-10-15T22:11:29Z
+    # WARC-Filename: ARCHIVEIT-3714-WEEKLY-14487-20131015221129606-00000-wbgrp-crawl105.us.archive.org-6442.warc.gz
+    # WARC-Record-ID: <urn:uuid:8c5d5d7d-11df-4a83-9999-8d6c8244316b>
+    # Content-Type: application/warc-fields
+    # Content-Length: 713
+    # 
+    # software: Heritrix/3.1.2-SNAPSHOT-20131011-0101 http://crawler.archive.org
+    # ip: 207.241.226.68
+    # hostname: wbgrp-crawl105.us.archive.org
+    # format: WARC File Format 1.0
+    # conformsTo: http://bibnum.bnf.fr/WARC/WARC_ISO_28500_version1_latestdraft.pdf
+    # isPartOf: 3714-20131015221121926
+    # description: recurrence=WEEKLY, maxDuration=259200, maxDocumentCount=null, isTestCrawl=false, isPatchCrawl=false, oneTimeSubtype=null, seedCount=1, accountId
+    # robots: obey
+    # http-header-user-agent: Mozilla/5.0 (compatible; archive.org_bot; Archive-It; +http://archive-it.org/files/site-owners.html)
+    def _make_warcinfo_record(self, filename):
+        warc_record_date = warctools.warc.warc_datetime_str(datetime.now())
+        warc_record_id = WarcRecordQueuer.make_warc_uuid("{0} {1}".format(filename, warc_record_date))
+
+        headers = []
+        headers.append((warctools.WarcRecord.ID, warc_record_id))
+        headers.append((warctools.WarcRecord.TYPE, warctools.WarcRecord.WARCINFO))
+        headers.append((warctools.WarcRecord.FILENAME, filename))
+        headers.append((warctools.WarcRecord.DATE, warc_record_date))
+        # headers.append((warctools.WarcRecord.IP_ADDRESS, ip))
+
+        warcinfo_fields = []
+        warcinfo_fields.append('software: warcprox.py https://github.com/nlevitt/warcprox')
+        hostname = socket.gethostname()
+        warcinfo_fields.append('hostname: {0}'.format(hostname))
+        warcinfo_fields.append('ip: {0}'.format(socket.gethostbyname(hostname)))
+        warcinfo_fields.append('format: WARC File Format 1.0')
+        warcinfo_fields.append('robots: ignore')   # XXX implement robots support
+        # warcinfo_fields.append('description: {0}'.format(self.description))   
+        # warcinfo_fields.append('isPartOf: {0}'.format(self.is_part_of))   
+        data = '\r\n'.join(warcinfo_fields) + '\r\n'
+
+        warcrecord = warctools.WarcRecord(headers=headers, content=('application/warc-fields', data))
+
+        return warcrecord
 
 
     # <!-- <property name="template" value="${prefix}-${timestamp17}-${serialno}-${heritrix.pid}~${heritrix.hostname}~${heritrix.port}" /> -->
@@ -344,9 +390,15 @@ class WarcWriterThread(threading.Thread):
             self._close_writer()
 
         if self._f == None:
-            self._fpath = '{0}/{1}-{2}-{3:05d}-{4}-{5}-{6}.warc{7}.open'.format(
-                    self.directory, self.prefix, self.timestamp17(), self._serial, os.getpid(), socket.gethostname(), self.port,  '.gz' if self.gzip else '')
+            filename = '{}-{}-{:05d}-{}-{}-{}.warc{}'.format(
+                    self.prefix, self.timestamp17(), self._serial, os.getpid(),
+                    socket.gethostname(), self.port, '.gz' if self.gzip else '')
+            self._fpath = '{0}/{1}.open'.format(self.directory, filename)
             self._f = open(self._fpath, 'wb')
+
+            warcinfo_record = self._make_warcinfo_record(filename)
+            warcinfo_record.write_to(self._f, gzip=self.gzip)
+
             self._serial += 1
 
         return self._f
