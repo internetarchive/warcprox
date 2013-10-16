@@ -85,10 +85,10 @@ class ProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         # Reload!
         self.setup()
         try:
-            logging.info("host={} port={} path={} calling self.handle_one_request()".format(self.hostname, self.port, self.path))
+            logging.debug("host={} port={} path={} calling self.handle_one_request()".format(self.hostname, self.port, self.path))
             self.handle_one_request()
         except ssl.SSLError, e:
-            logging.error("host={} port={} path={} caught SSLError {}".format(self.host, self.port, self.path, e))
+            logging.error("host={} port={} path={} caught SSLError {}".format(self.hostname, self.port, self.path, e))
             pass
 
 
@@ -193,7 +193,7 @@ class MitmProxy(BaseHTTPServer.HTTPServer):
         self.certfile = certfile
 
         if not os.path.exists(certfile):
-           self._generate_cert(certfile)
+            self._generate_cert(certfile)
     
 
     def _generate_cert(self, certfile):
