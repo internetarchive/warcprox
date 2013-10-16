@@ -19,6 +19,88 @@ import threading
 import os
 import argparse
 import random
+import tempfile
+
+class CertificateAuthority(object):
+
+    def __init__(self, ca_file='warcprox-ca.pem', certs_dir='./warcprox-ca'):
+        self.ca_file = ca_file
+        self.certs_dir = certs_dir
+
+        if not os.path.exists(ca_file):
+            self._generate_ca()
+        else:
+            self._read_ca(ca_file)
+
+        if not os.path.exists(certs_dir):
+            logging.info("directory for generated certs {} doesn't exist, creating it".format(certs_dir))
+            os.mkdir(certs_dir)
+
+
+    def _generate_ca(self):
+        # Generate key
+        self.key = OpenSSL.crypto.PKey()
+        self.key.generate_key(OpenSSL.crypto.TYPE_RSA, 2048)
+
+        # Generate certificate
+        self.cert = OpenSSL.crypto.X509()
+        self.cert.set_version(3)
+        # avoid sec_error_reused_issuer_and_serial
+        self.cert.set_serial_number(random.randint(0,2**64-1))
+        self.cert.get_subject().CN = 'CA for warcprox MITM archiving proxy'
+        self.cert.gmtime_adj_notBefore(0)                # now
+        self.cert.gmtime_adj_notAfter(100*365*24*60*60)  # 100 yrs in future
+        self.cert.set_issuer(self.cert.get_subject())
+        self.cert.set_pubkey(self.key)
+        self.cert.add_extensions([
+            OpenSSL.crypto.X509Extension("basicConstraints", True, "CA:TRUE, pathlen:0"),
+            OpenSSL.crypto.X509Extension("keyUsage", True, "keyCertSign, cRLSign"),
+            OpenSSL.crypto.X509Extension("subjectKeyIdentifier", False, "hash", subject=self.cert),
+            ])
+        self.cert.sign(self.key, "sha1")
+
+        with open(self.ca_file, 'wb+') as f:
+            f.write(OpenSSL.crypto.dump_privatekey(OpenSSL.SSL.FILETYPE_PEM, self.key))
+            f.write(OpenSSL.crypto.dump_certificate(OpenSSL.SSL.FILETYPE_PEM, self.cert))
+
+        logging.info('generated CA key+cert and wrote to {}'.format(self.ca_file))
+
+
+    def _read_ca(self, file):
+        self.cert = OpenSSL.crypto.load_certificate(OpenSSL.SSL.FILETYPE_PEM, open(file).read())
+        self.key = OpenSSL.crypto.load_privatekey(OpenSSL.SSL.FILETYPE_PEM, open(file).read())
+        logging.info('read CA key+cert from {}'.format(self.ca_file))
+
+    def __getitem__(self, cn):
+        cnp = os.path.sep.join([self.certs_dir, '%s.pem' % cn])
+        if not os.path.exists(cnp):
+            # create certificate
+            key = OpenSSL.crypto.PKey()
+            key.generate_key(OpenSSL.crypto.TYPE_RSA, 2048)
+
+            # Generate CSR
+            req = OpenSSL.crypto.X509Req()
+            req.get_subject().CN = cn
+            req.set_pubkey(key)
+            req.sign(key, 'sha1')
+
+            # Sign CSR
+            cert = OpenSSL.crypto.X509()
+            cert.set_subject(req.get_subject())
+            cert.set_serial_number(random.randint(0,2**64-1))
+            cert.gmtime_adj_notBefore(0)
+            cert.gmtime_adj_notAfter(10*365*24*60*60)
+            cert.set_issuer(self.cert.get_subject())
+            cert.set_pubkey(req.get_pubkey())
+            cert.sign(self.key, 'sha1')
+
+            with open(cnp, 'wb+') as f:
+                f.write(OpenSSL.crypto.dump_privatekey(OpenSSL.SSL.FILETYPE_PEM, key))
+                f.write(OpenSSL.crypto.dump_certificate(OpenSSL.SSL.FILETYPE_PEM, cert))
+
+            logging.info('wrote generated key+cert to {}'.format(cnp))
+
+        return cnp
 
 
 class UnsupportedSchemeException(Exception):
@@ -64,7 +146,7 @@ class ProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
 
     def _transition_to_ssl(self):
-        self.request = ssl.wrap_socket(self.request, server_side=True, certfile=self.server.certfile)
+        self.request = ssl.wrap_socket(self.request, server_side=True, certfile=self.server.ca[self.hostname])
 
 
     def do_CONNECT(self):
@@ -187,33 +269,10 @@ class InvalidInterceptorPluginException(Exception):
 
 class MitmProxy(BaseHTTPServer.HTTPServer):
 
-    def __init__(self, server_address, req_handler_class=ProxyHandler, bind_and_activate=True, certfile='warcprox.pem'):
+    def __init__(self, server_address, req_handler_class=ProxyHandler, bind_and_activate=True, ca_file='warcprox-ca.pem'):
         BaseHTTPServer.HTTPServer.__init__(self, server_address, req_handler_class, bind_and_activate)
         self._interceptors = []
-        self.certfile = certfile
-
-        if not os.path.exists(certfile):
-            self._generate_cert(certfile)
-    
-
-    def _generate_cert(self, certfile):
-        key = OpenSSL.crypto.PKey()
-        key.generate_key(OpenSSL.crypto.TYPE_RSA, 2048)
-
-        cert = OpenSSL.crypto.X509()
-        cert.set_version(3)
-        # avoid sec_error_reused_issuer_and_serial
-        cert.set_serial_number(random.randint(0,2**64-1))
-        cert.get_subject().CN = 'warcprox man-in-the-middle archiving http/s proxy'
-        cert.gmtime_adj_notBefore(0)               # now
-        cert.gmtime_adj_notAfter(100*365*24*60*60) # 100 yrs in future
-        cert.set_issuer(cert.get_subject())
-        cert.set_pubkey(key)
-        cert.sign(key, "sha1")
- 
-        with open(certfile, 'wb+') as f:
-             f.write(OpenSSL.crypto.dump_privatekey(OpenSSL.SSL.FILETYPE_PEM, key))
-             f.write(OpenSSL.crypto.dump_certificate(OpenSSL.SSL.FILETYPE_PEM, cert))
+        self.ca = CertificateAuthority(ca_file)
 
 
     def register_interceptor(self, interceptor_class):
@@ -421,7 +480,8 @@ class WarcWriterThread(threading.Thread):
             filename = '{}-{}-{:05d}-{}-{}-{}.warc{}'.format(
                     self.prefix, self.timestamp17(), self._serial, os.getpid(),
                     socket.gethostname(), self.port, '.gz' if self.gzip else '')
-            self._fpath = '{0}/{1}.open'.format(self.directory, filename)
+            self._fpath = os.path.sep.join([self.directory, filename + '.open'])
+
             self._f = open(self._fpath, 'wb')
 
             warcinfo_record = self._make_warcinfo_record(filename)
@@ -457,8 +517,8 @@ if __name__ == '__main__':
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     arg_parser.add_argument('-p', '--port', dest='port', default='8080', help='port to listen on')
     arg_parser.add_argument('-b', '--address', dest='address', default='localhost', help='address to listen on')
-    arg_parser.add_argument('-c', '--certfile', dest='certfile', default='warcprox.pem', help='SSL certificate file; if file does not exist, it will be created')
-    arg_parser.add_argument('-d', '--dir', dest='directory', default='warcs', help='where to write warcs')
+    arg_parser.add_argument('-c', '--cacert', dest='cacert', default='./warcprox-ca.pem', help='CA certificate file; if file does not exist, it will be created')
+    arg_parser.add_argument('-d', '--dir', dest='directory', default='./warcs', help='where to write warcs')
     arg_parser.add_argument('-z', '--gzip', dest='gzip', action='store_true', help='write gzip-compressed warc records')
     arg_parser.add_argument('-n', '--prefix', dest='prefix', default='WARCPROX', help='WARC filename prefix')
     arg_parser.add_argument('-s', '--size', dest='size', default=1000*1000*1000, help='WARC file rollover size threshold in bytes')
@@ -468,7 +528,7 @@ if __name__ == '__main__':
     # [--httpheader=warcinfo httpheader]
     args = arg_parser.parse_args()
 
-    proxy = AsyncMitmProxy(server_address=(args.address, int(args.port)), certfile=args.certfile)
+    proxy = AsyncMitmProxy(server_address=(args.address, int(args.port)), ca_file=args.cacert)
     proxy.register_interceptor(WarcRecordQueuer)
 
     warc_writer = WarcWriterThread(WarcRecordQueuer.warc_record_group_queue, directory=args.directory, gzip=args.gzip, prefix=args.prefix, size=int(args.size), port=int(args.port))
