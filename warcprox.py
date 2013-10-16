@@ -16,8 +16,9 @@ import hashlib
 from datetime import datetime
 import Queue
 import threading
-import os, os.path
+import os
 import argparse
+import random
 
 
 class UnsupportedSchemeException(Exception):
@@ -83,11 +84,12 @@ class ProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         # Reload!
         self.setup()
-        self.handle_one_request()
-#         try:
-#         except ssl.SSLError, e:
-#             logging.warn("caught SSLError {0}".format(e))
-#             pass
+        try:
+            logging.info("host={} port={} path={} calling self.handle_one_request()".format(self.hostname, self.port, self.path))
+            self.handle_one_request()
+        except ssl.SSLError, e:
+            logging.error("host={} port={} path={} caught SSLError {}".format(self.host, self.port, self.path, e))
+            pass
 
 
     def do_COMMAND(self):
@@ -200,7 +202,8 @@ class MitmProxy(BaseHTTPServer.HTTPServer):
 
         cert = OpenSSL.crypto.X509()
         cert.set_version(3)
-        cert.set_serial_number(1)
+        # avoid sec_error_reused_issuer_and_serial
+        cert.set_serial_number(random.randint(0,2**64-1))
         cert.get_subject().CN = 'warcprox man-in-the-middle archiving http/s proxy'
         cert.gmtime_adj_notBefore(0)               # now
         cert.gmtime_adj_notAfter(100*365*24*60*60) # 100 yrs in future
@@ -436,7 +439,7 @@ class WarcWriterThread(threading.Thread):
         while not self.stop.is_set():
             try:
                 warc_record_group = self.warc_record_group_queue.get(block=True, timeout=0.5)
-                logging.info('got warc record group to write from the queue: {0}'.format(warc_record_group))
+                logging.debug('got warc record group to write from the queue: {0}'.format(warc_record_group))
                 for record in warc_record_group:
                     record.write_to(self._writer(), gzip=self.gzip)
                 self._f.flush()
