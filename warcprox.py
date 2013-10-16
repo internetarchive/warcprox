@@ -269,10 +269,10 @@ class InvalidInterceptorPluginException(Exception):
 
 class MitmProxy(BaseHTTPServer.HTTPServer):
 
-    def __init__(self, server_address, req_handler_class=ProxyHandler, bind_and_activate=True, ca_file='warcprox-ca.pem'):
+    def __init__(self, server_address, req_handler_class=ProxyHandler, bind_and_activate=True, ca_file='./warcprox-ca.pem', certs_dir='./warcprox-ca'):
         BaseHTTPServer.HTTPServer.__init__(self, server_address, req_handler_class, bind_and_activate)
         self._interceptors = []
-        self.ca = CertificateAuthority(ca_file)
+        self.ca = CertificateAuthority(ca_file, certs_dir)
 
 
     def register_interceptor(self, interceptor_class):
@@ -518,6 +518,7 @@ if __name__ == '__main__':
     arg_parser.add_argument('-p', '--port', dest='port', default='8080', help='port to listen on')
     arg_parser.add_argument('-b', '--address', dest='address', default='localhost', help='address to listen on')
     arg_parser.add_argument('-c', '--cacert', dest='cacert', default='./warcprox-ca.pem', help='CA certificate file; if file does not exist, it will be created')
+    arg_parser.add_argument('--certs-dir', dest='certs_dir', default='./warcprox-ca', help='where to store and load generated certificates')
     arg_parser.add_argument('-d', '--dir', dest='directory', default='./warcs', help='where to write warcs')
     arg_parser.add_argument('-z', '--gzip', dest='gzip', action='store_true', help='write gzip-compressed warc records')
     arg_parser.add_argument('-n', '--prefix', dest='prefix', default='WARCPROX', help='WARC filename prefix')
@@ -528,7 +529,7 @@ if __name__ == '__main__':
     # [--httpheader=warcinfo httpheader]
     args = arg_parser.parse_args()
 
-    proxy = AsyncMitmProxy(server_address=(args.address, int(args.port)), ca_file=args.cacert)
+    proxy = AsyncMitmProxy(server_address=(args.address, int(args.port)), ca_file=args.cacert, certs_dir=args.certs_dir)
     proxy.register_interceptor(WarcRecordQueuer)
 
     warc_writer = WarcWriterThread(WarcRecordQueuer.warc_record_group_queue, directory=args.directory, gzip=args.gzip, prefix=args.prefix, size=int(args.size), port=int(args.port))
