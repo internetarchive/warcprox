@@ -13,3 +13,10 @@ as a trusted cert in your browser. If you don't do that, you will get the
 warning when you visit each new site. But worse, any embedded https content on
 a different server will simply fail to load, because the browser will reject
 the certificate without telling you. 
+
+###Dependencies
+
+Currently depends on tweaks branch of my fork of warctools.
+https://github.com/nlevitt/warctools/tree/tweaks
+Hopefully the changes in that branch, or something equivalent, will be
+incorporated into warctools mainline.
