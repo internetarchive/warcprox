@@ -109,66 +109,68 @@ class UnsupportedSchemeException(Exception):
     pass
 
 
-class Recorder:
+# This class intercepts the raw bytes, so it's the easiest place to hook in to
+# send the raw bytes on to the proxy destination.
+class ProxyingRecorder:
 
-    def __init__(self, fp):
+    def __init__(self, fp, proxy_dest):
         self.fp = fp
         self.data = bytearray('')
         self.block_sha1 = hashlib.sha1()
         self.payload_sha1 = None
+        self.proxy_dest = proxy_dest
 
-
-    def _update(self, chunk):
+    def _update(self, hunk):
         if self.payload_sha1 is None:
             # convoluted handling of two newlines crossing chunks
             # XXX write tests for this
             if self.data.endswith('\n'):
-                if chunk.startswith('\n'):
+                if hunk.startswith('\n'):
                     self.payload_sha1 = hashlib.sha1()
-                    self.payload_sha1.update(chunk[1:])
-                elif chunk.startswith('\r\n'):
+                    self.payload_sha1.update(hunk[1:])
+                elif hunk.startswith('\r\n'):
                     self.payload_sha1 = hashlib.sha1()
-                    self.payload_sha1.update(chunk[2:])
+                    self.payload_sha1.update(hunk[2:])
             elif self.data.endswith('\n\r'):
-                if chunk.startswith('\n'):
+                if hunk.startswith('\n'):
                     self.payload_sha1 = hashlib.sha1()
-                    self.payload_sha1.update(chunk[1:])
+                    self.payload_sha1.update(hunk[1:])
             else:
-                m = re.search(r'\n\r?\n', chunk)
+                m = re.search(r'\n\r?\n', hunk)
                 if m is not None:
                     self.payload_sha1 = hashlib.sha1()
-                    self.payload_sha1.update(chunk[m.end():])
+                    self.payload_sha1.update(hunk[m.end():])
         else:
-            self.payload_sha1.update(chunk)
+            self.payload_sha1.update(hunk)
 
-        self.block_sha1.update(chunk)
-        self.data.extend(chunk)
+        self.block_sha1.update(hunk)
+
+        self.data.extend(hunk)
+        self.proxy_dest.sendall(hunk)
 
     def read(self, size=-1):
-        chunk = self.fp.read(size=size)
-        self._update(chunk)
-        return chunk
-
+        hunk = self.fp.read(size=size)
+        self._update(hunk)
+        return hunk
 
     def readline(self, size=-1):
         # XXX does not call self.read(); if it ever did this would break
-        chunk = self.fp.readline(size=size)
-        self._update(chunk)
-        return chunk
-
+        hunk = self.fp.readline(size=size)
+        self._update(hunk)
+        return hunk
 
     def close(self):
         return self.fp.close()
 
 
-class RecordingHTTPResponse(httplib.HTTPResponse):
+class ProxyingRecordingHTTPResponse(httplib.HTTPResponse):
 
-    def __init__(self, sock, debuglevel=0, strict=0, method=None, buffering=False):
+    def __init__(self, sock, debuglevel=0, strict=0, method=None, buffering=False, proxy_dest=None):
         httplib.HTTPResponse.__init__(self, sock, debuglevel=debuglevel, strict=strict, method=method, buffering=buffering)
 
         # Keep around extra reference to self.fp because HTTPResponse sets
         # self.fp=None after it finishes reading, but we still need it
-        self.recorder = Recorder(self.fp)
+        self.recorder = ProxyingRecorder(self.fp, proxy_dest)
         self.fp = self.recorder
 
     def recorded(self):
@@ -264,35 +266,32 @@ class ProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         # Append message body if present to the request
         if 'Content-Length' in self.headers:
             req += self.rfile.read(int(self.headers['Content-Length']))
-
-        warc_record_queuer.do_request(req)
-
+            
         # Send it down the pipe!
         self._proxy_sock.sendall(req)
 
-        # Parse response
-        h = RecordingHTTPResponse(self._proxy_sock)
+        # We want HTTPResponse's smarts about http and handling of
+        # non-compliant servers. But HTTPResponse.read() doesn't return the raw
+        # bytes read from the server, it unchunks them if they're chunked, and
+        # might do other stuff. We want to send the raw bytes back to the
+        # client. So we ignore the values returned by h.read() below. Instead
+        # the ProxyingRecordingHTTPResponse takes care of sending the raw bytes
+        # to the proxy client.
+        
+        # Proxy and record the response
+        h = ProxyingRecordingHTTPResponse(self._proxy_sock, proxy_dest=self.request)
         h.begin()
-
-        # Get rid of the pesky header
-        del h.msg['Transfer-Encoding']
-
-        # Time to relay the message across
-        headers = '%s %s %s\r\n' % (self.request_version, h.status, h.reason)
-        headers += '%s\r\n' % h.msg
-        self.request.sendall(headers)
-
+        
         buf = h.read(4096) 
         while buf != '':
-            self.request.sendall(buf)
             buf = h.read(4096) 
-
-        warc_record_queuer.do_response(h.recorder)
 
         # Let's close off the remote end
         h.close()
         self._proxy_sock.close()
 
+        warc_record_queuer.do_request(req)
+        warc_record_queuer.do_response(h.recorder)
 
     def __getattr__(self, item):
         if item.startswith('do_'):
