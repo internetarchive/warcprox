@@ -547,8 +547,6 @@ class WarcWriterThread(threading.Thread):
 
 
 if __name__ == '__main__':
-    logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, format='%(asctime)s %(process)d %(threadName)s %(levelname)s %(funcName)s(%(filename)s:%(lineno)d) %(message)s')
-
     arg_parser = argparse.ArgumentParser(description='warcprox - WARC writing MITM HTTP/S proxy',
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     arg_parser.add_argument('-p', '--port', dest='port', default='8080', help='port to listen on')
@@ -559,11 +557,22 @@ if __name__ == '__main__':
     arg_parser.add_argument('-z', '--gzip', dest='gzip', action='store_true', help='write gzip-compressed warc records')
     arg_parser.add_argument('-n', '--prefix', dest='prefix', default='WARCPROX', help='WARC filename prefix')
     arg_parser.add_argument('-s', '--size', dest='size', default=1000*1000*1000, help='WARC file rollover size threshold in bytes')
+    arg_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true')
+    arg_parser.add_argument('-q', '--quiet', dest='quiet', action='store_true')
     # [--ispartof=warcinfo ispartof]
     # [--description=warcinfo description]
     # [--operator=warcinfo operator]
     # [--httpheader=warcinfo httpheader]
     args = arg_parser.parse_args()
+
+    if args.verbose:
+        loglevel = logging.DEBUG
+    elif args.quiet:
+        loglevel = logging.WARNING
+    else:
+        loglevel = logging.INFO
+
+    logging.basicConfig(stream=sys.stdout, level=loglevel, format='%(asctime)s %(process)d %(threadName)s %(levelname)s %(funcName)s(%(filename)s:%(lineno)d) %(message)s')
 
     proxy = AsyncMitmProxy(server_address=(args.address, int(args.port)),
             ca_file=args.cacert, certs_dir=args.certs_dir)
