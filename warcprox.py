@@ -20,6 +20,8 @@ import argparse
 import random
 import httplib
 import re
+import signal
+import time
 
 class CertificateAuthority(object):
 
@@ -250,7 +252,6 @@ class ProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_error(500, str(e))
                 return
-            # Extract path
 
         warc_record_queuer = WarcRecordQueuer(self.server, self)
 
@@ -330,7 +331,6 @@ class MitmProxy(BaseHTTPServer.HTTPServer):
 class AsyncMitmProxy(SocketServer.ThreadingMixIn, MitmProxy):
     pass
 
-
 # assumes do_request happens before do_response
 class WarcRecordQueuer:
 
@@ -408,7 +408,7 @@ class WarcRecordQueuer:
         headers.append((warctools.WarcRecord.DATE, self._warc_date()))
         headers.append((warctools.WarcRecord.BLOCK_DIGEST, 'sha1:{}'.format(recorder.block_sha1.hexdigest())))
         if recorder.payload_sha1 is not None:
-            headers.append(('WARC-Payload-Digest', 'sha1:{}'.format(recorder.block_sha1.hexdigest())))
+            headers.append((warctools.WarcRecord.PAYLOAD_DIGEST, 'sha1:{}'.format(recorder.payload_sha1.hexdigest())))
         # headers.append((warctools.WarcRecord.IP_ADDRESS, ip))
 
         content_tuple = ("application/http;msgtype=response", recorder.data)
@@ -536,8 +536,9 @@ class WarcWriterThread(threading.Thread):
             try:
                 warc_record_group = self.warc_record_group_queue.get(block=True, timeout=0.5)
                 logging.debug('got warc record group to write from the queue: {0}'.format(warc_record_group))
+                writer = self._writer()
                 for record in warc_record_group:
-                    record.write_to(self._writer(), gzip=self.gzip)
+                    record.write_to(writer, gzip=self.gzip)
                 self._f.flush()
             except Queue.Empty:
                 pass
@@ -571,13 +572,21 @@ if __name__ == '__main__':
     warc_writer = WarcWriterThread(WarcRecordQueuer.warc_record_group_queue,
             directory=args.directory, gzip=args.gzip, prefix=args.prefix,
             size=int(args.size), port=int(args.port))
+
+    proxy_thread = threading.Thread(target=proxy.serve_forever, name='ProxyThread')
+    proxy_thread.start()
     warc_writer.start()
 
+    stop = threading.Event()
+    signal.signal(signal.SIGTERM, stop.set)
+
     try:
-        proxy.serve_forever()
-    except KeyboardInterrupt:
+        while not stop.is_set():
+            time.sleep(0.5)
+    except:
         pass
     finally:
+        proxy.shutdown()
         warc_writer.stop.set()
         proxy.server_close()
 
