@@ -3,7 +3,6 @@
 #
 
 import BaseHTTPServer, SocketServer
-import httplib
 import socket
 import urlparse
 import OpenSSL
@@ -19,7 +18,7 @@ import threading
 import os
 import argparse
 import random
-import tempfile
+import httplib
 
 class CertificateAuthority(object):
 
@@ -105,6 +104,38 @@ class CertificateAuthority(object):
 
 class UnsupportedSchemeException(Exception):
     pass
+
+
+class Recorder:
+
+    def __init__(self, fp):
+        self.fp = fp
+        self.recorded = bytearray('')
+
+    def read(self, size=-1):
+        result = self.fp.read(size=size)
+        self.recorded.extend(result)
+        return result
+
+    def readline(self, size=-1):
+        return self.fp.readline(size=size)
+
+    def close(self):
+        return self.fp.close()
+
+
+class RecordingHTTPResponse(httplib.HTTPResponse):
+
+    def __init__(self, sock, debuglevel=0, strict=0, method=None, buffering=False):
+        httplib.HTTPResponse.__init__(self, sock, debuglevel=debuglevel, strict=strict, method=method, buffering=buffering)
+
+        # Keep around extra reference to self.fp because HTTPResponse sets
+        # self.fp=None after it finishes reading, but we still need it
+        self.recorder = Recorder(self.fp)
+        self.fp = self.recorder
+
+    def recorded(self):
+        return self.recorder.recorded
 
 
 class ProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
@@ -202,23 +233,27 @@ class ProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self._proxy_sock.sendall(self.mitm_request(req, interceptors))
 
         # Parse response
-        h = httplib.HTTPResponse(self._proxy_sock)
+        h = RecordingHTTPResponse(self._proxy_sock)
         h.begin()
 
         # Get rid of the pesky header
         del h.msg['Transfer-Encoding']
 
         # Time to relay the message across
-        res = '%s %s %s\r\n' % (self.request_version, h.status, h.reason)
-        res += '%s\r\n' % h.msg
-        res += h.read()
+        headers = '%s %s %s\r\n' % (self.request_version, h.status, h.reason)
+        headers += '%s\r\n' % h.msg
+        self.request.sendall(headers)
+
+        buf = h.read(4096) 
+        while buf != '':
+            self.request.sendall(buf)
+            buf = h.read(4096) 
+
+        self.mitm_response(h.recorded(), interceptors)
 
         # Let's close off the remote end
         h.close()
         self._proxy_sock.close()
-
-        # Relay the message
-        self.request.sendall(self.mitm_response(res, interceptors))
 
 
     def mitm_request(self, data, interceptors):
