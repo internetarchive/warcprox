@@ -225,8 +225,8 @@ class WarcProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
 
     def _transition_to_ssl(self):
-        self.connection = ssl.wrap_socket(self.connection, server_side=True,
-                certfile=self.server.ca[self.hostname])
+        self.request = self.connection = ssl.wrap_socket(self.connection, 
+                server_side=True, certfile=self.server.ca[self.hostname])
 
 
     def do_CONNECT(self):
@@ -279,7 +279,7 @@ class WarcProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 self.send_error(500, str(e))
                 return
         else:
-            self.url = _construct_tunneled_url()
+            self.url = self._construct_tunneled_url()
 
         # Build request
         req = '%s %s %s\r\n' % (self.command, self.path, self.request_version)
@@ -506,8 +506,13 @@ class WarcWriterThread(threading.Thread):
                 writer = self._writer()
 
                 for record in recordset:
+                    offset = writer.tell()
                     record.write_to(writer, gzip=self.gzip)
-                    logging.info('wrote warc record {}'.format(record))
+                    logging.info('wrote warc record: warc_type={} content_length={} url={} warc={} offset={}'.format(
+                            record.get_header(warctools.WarcRecord.TYPE),
+                            record.get_header(warctools.WarcRecord.CONTENT_LENGTH),
+                            record.get_header(warctools.WarcRecord.URL),
+                            self._fpath, offset))
 
                     if record.content_file:
                         # XXX now we know we're done with this... messy to
