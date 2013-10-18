@@ -49,3 +49,16 @@ incorporated into warctools mainline.
                             1000000000)
       -v, --verbose
       -q, --quiet
+
+###To do
+
+- politeness, i.e. throttle requests per server
+- fetch and obey robots.txt
+- url-agnostic deduplication
+- alter user-agent, maybe insert something like "warcprox mitm archiving proxy; +http://archive.org/details/archive.org_bot"
+- unchunk and/or ungzip before storing payload, or alter request to discourage server from chunking/gzipping
+- check suppressed certs from proxied website, like browser does, and present browser-like warning if appropriate
+- write cdx while crawling?
+- keep statistics, produce reports
+- performance testing
+- etc...
