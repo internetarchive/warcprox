@@ -20,3 +20,32 @@ Currently depends on tweaks branch of my fork of warctools.
 https://github.com/nlevitt/warctools/tree/tweaks
 Hopefully the changes in that branch, or something equivalent, will be
 incorporated into warctools mainline.
+
+###Usage
+
+    usage: warcprox.py [-h] [-p PORT] [-b ADDRESS] [-c CACERT]
+                       [--certs-dir CERTS_DIR] [-d DIRECTORY] [-z] [-n PREFIX]
+                       [-s SIZE] [-v] [-q]
+    
+    warcprox - WARC writing MITM HTTP/S proxy
+    
+    optional arguments:
+      -h, --help            show this help message and exit
+      -p PORT, --port PORT  port to listen on (default: 8080)
+      -b ADDRESS, --address ADDRESS
+                            address to listen on (default: localhost)
+      -c CACERT, --cacert CACERT
+                            CA certificate file; if file does not exist, it will
+                            be created (default: ./warcprox-ca.pem)
+      --certs-dir CERTS_DIR
+                            where to store and load generated certificates
+                            (default: ./warcprox-ca)
+      -d DIRECTORY, --dir DIRECTORY
+                            where to write warcs (default: ./warcs)
+      -z, --gzip            write gzip-compressed warc records (default: False)
+      -n PREFIX, --prefix PREFIX
+                            WARC filename prefix (default: WARCPROX)
+      -s SIZE, --size SIZE  WARC file rollover size threshold in bytes (default:
+                            1000000000)
+      -v, --verbose
+      -q, --quiet
