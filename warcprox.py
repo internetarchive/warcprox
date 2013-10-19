@@ -310,11 +310,13 @@ class WarcProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         while buf != '':
             buf = h.read(8192) 
 
+        remote_ip = self._proxy_sock.getpeername()[0]
+
         # Let's close off the remote end
         h.close()
         self._proxy_sock.close()
 
-        self.server.recordset_q.create_and_queue(self.url, req, h.recorder)
+        self.server.recordset_q.create_and_queue(self.url, req, h.recorder, remote_ip)
 
 
     def __getattr__(self, item):
@@ -352,13 +354,14 @@ class WarcProxy(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
 # consecutively in the same warc.
 class WarcRecordsetQueue(Queue.Queue):
 
-    def create_and_queue(self, url, request_data, response_recorder):
+    def create_and_queue(self, url, request_data, response_recorder, remote_ip):
         warc_date = warctools.warc.warc_datetime_str(datetime.now())
 
         response_record, response_record_id = self.make_record(url=url,
                 warc_date=warc_date, recorder=response_recorder, 
-                warc_type=warctools.WarcRecord.RESPONSE, 
-                content_type="application/http;msgtype=response")
+                warc_type=warctools.WarcRecord.RESPONSE,
+                content_type="application/http;msgtype=response",
+                remote_ip=remote_ip)
 
         request_record, request_record_id = self.make_record(url=url,
                 warc_date=warc_date, data=request_data, 
@@ -372,7 +375,7 @@ class WarcRecordsetQueue(Queue.Queue):
 
     @staticmethod
     def make_record(url, warc_date=None, recorder=None, data=None,
-        concurrent_to=None, warc_type=None, content_type=None):
+        concurrent_to=None, warc_type=None, content_type=None, remote_ip=None):
 
         if warc_date is None:
             warc_date = warctools.warc.warc_datetime_str(datetime.now())
@@ -380,12 +383,13 @@ class WarcRecordsetQueue(Queue.Queue):
         record_id = warctools.WarcRecord.random_warc_uuid()
 
         headers = []
+        if warc_type is not None:
+            headers.append((warctools.WarcRecord.TYPE, warc_type))
         headers.append((warctools.WarcRecord.ID, record_id))
         headers.append((warctools.WarcRecord.DATE, warc_date))
         headers.append((warctools.WarcRecord.URL, url))
-        # headers.append((warctools.WarcRecord.IP_ADDRESS, ip))
-        if warc_type is not None:
-            headers.append((warctools.WarcRecord.TYPE, warc_type))
+        if remote_ip is not None:
+            headers.append((warctools.WarcRecord.IP_ADDRESS, remote_ip))
         if concurrent_to is not None:
             headers.append((warctools.WarcRecord.CONCURRENT_TO, concurrent_to))
         if content_type is not None:
@@ -457,7 +461,6 @@ class WarcWriterThread(threading.Thread):
         headers.append((warctools.WarcRecord.TYPE, warctools.WarcRecord.WARCINFO))
         headers.append((warctools.WarcRecord.FILENAME, filename))
         headers.append((warctools.WarcRecord.DATE, warc_record_date))
-        # headers.append((warctools.WarcRecord.IP_ADDRESS, ip))
 
         warcinfo_fields = []
         warcinfo_fields.append('software: warcprox.py https://github.com/nlevitt/warcprox')
