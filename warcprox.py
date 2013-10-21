@@ -580,7 +580,7 @@ if __name__ == '__main__':
     except:
         pass
     finally:
-        proxy.shutdown()
         warc_writer.stop.set()
+        proxy.shutdown()
         proxy.server_close()
 
