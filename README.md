@@ -49,3 +49,32 @@ incorporated into warctools mainline.
                             1000000000)
       -v, --verbose
       -q, --quiet
+
+###To do
+
+- integration tests, unit tests
+- url-agnostic deduplication
+- unchunk and/or ungzip before storing payload, or alter request to discourage server from chunking/gzipping
+- check certs from proxied website, like browser does, and present browser-like warning if appropriate
+- keep statistics, produce reports
+- write cdx while crawling?
+- performance testing
+- base32 sha1 like heritrix?
+- configurable timeouts and stuff
+- evaluate ipv6 support
+- more explicit handling of connection closed exception during transfer? other error cases?
+- dns cache?? the system already does a fine job I'm thinking
+- keepalive with remote servers?
+- python3
+
+#### To not do
+
+The features below could also be part of warcprox. But maybe they don't belong
+here, since this is a proxy, not a crawler/robot. It can be used by a human
+with a browser, or by something automated, i.e. a robot. My feeling is that
+it's more appropriate to implement these in the robot.
+
+- politeness, i.e. throttle requests per server
+- fetch and obey robots.txt
+- alter user-agent, maybe insert something like "warcprox mitm archiving proxy; +http://archive.org/details/archive.org_bot"
+
