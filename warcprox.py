@@ -50,7 +50,7 @@ class CertificateAuthority(object):
         self.cert.set_version(3)
         # avoid sec_error_reused_issuer_and_serial
         self.cert.set_serial_number(random.randint(0,2**64-1))
-        self.cert.get_subject().CN = 'CA for warcprox MITM archiving proxy'
+        self.cert.get_subject().CN = 'warcprox certificate authority on {}'.format(socket.gethostname())
         self.cert.gmtime_adj_notBefore(0)                # now
         self.cert.gmtime_adj_notAfter(100*365*24*60*60)  # 100 yrs in future
         self.cert.set_issuer(self.cert.get_subject())
@@ -556,10 +556,10 @@ if __name__ == '__main__':
     arg_parser.add_argument('-b', '--address', dest='address', 
             default='localhost', help='address to listen on')
     arg_parser.add_argument('-c', '--cacert', dest='cacert', 
-            default='./warcprox-ca.pem', 
+            default='./{0}-warcprox-ca.pem'.format(socket.gethostname()), 
             help='CA certificate file; if file does not exist, it will be created')
     arg_parser.add_argument('--certs-dir', dest='certs_dir', 
-            default='./warcprox-ca', 
+            default='./{0}-warcprox-ca'.format(socket.gethostname()), 
             help='where to store and load generated certificates')
     arg_parser.add_argument('-d', '--dir', dest='directory', 
             default='./warcs', help='where to write warcs')
