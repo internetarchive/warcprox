@@ -600,7 +600,7 @@ if __name__ == '__main__':
     warc_writer = WarcWriterThread(recordset_q=recordset_q,
             directory=args.directory, gzip=args.gzip, prefix=args.prefix,
             port=int(args.port), rollover_size=int(args.size), 
-            rollover_idle_time=int(args.rollover_idle_time))
+            rollover_idle_time=int(args.rollover_idle_time) if args.rollover_idle_time is not None else None)
 
     proxy_thread = threading.Thread(target=proxy.serve_forever, name='ProxyThread')
     proxy_thread.start()
