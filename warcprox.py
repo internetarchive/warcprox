@@ -23,6 +23,7 @@ import re
 import signal
 import time
 import tempfile
+import base64
 
 class CertificateAuthority(object):
 
@@ -354,6 +355,11 @@ class WarcProxy(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
 # consecutively in the same warc.
 class WarcRecordsetQueue(Queue.Queue):
 
+    def __init__(self, base32=False):
+        Queue.Queue.__init__(self)
+        self.base32 = base32
+
+
     def create_and_queue(self, url, request_data, response_recorder, remote_ip):
         warc_date = warctools.warc.warc_datetime_str(datetime.now())
 
@@ -373,8 +379,14 @@ class WarcRecordsetQueue(Queue.Queue):
         self.put(record_group)
 
 
-    @staticmethod
-    def make_record(url, warc_date=None, recorder=None, data=None,
+    def digest_str(self, hash_obj):
+        if self.base32:
+            return base64.b32encode(hash_obj.digest())
+        else:
+            return hash_obj.hexdigest()
+
+
+    def make_record(self, url, warc_date=None, recorder=None, data=None,
         concurrent_to=None, warc_type=None, content_type=None, remote_ip=None):
 
         if warc_date is None:
@@ -397,16 +409,19 @@ class WarcRecordsetQueue(Queue.Queue):
 
         if recorder is not None:
             headers.append((warctools.WarcRecord.CONTENT_LENGTH, str(len(recorder))))
-            headers.append((warctools.WarcRecord.BLOCK_DIGEST, 'sha1:{}'.format(recorder.block_sha1.hexdigest())))
+            headers.append((warctools.WarcRecord.BLOCK_DIGEST, 
+                'sha1:{}'.format(self.digest_str(recorder.block_sha1))))
             if recorder.payload_sha1 is not None:
-                headers.append((warctools.WarcRecord.PAYLOAD_DIGEST, 'sha1:{}'.format(recorder.payload_sha1.hexdigest())))
+                headers.append((warctools.WarcRecord.PAYLOAD_DIGEST, 
+                    'sha1:{}'.format(self.digest_str(recorder.payload_sha1))))
 
             recorder.tempfile.seek(0)
             record = warctools.WarcRecord(headers=headers, content_file=recorder.tempfile)
 
         else:
             headers.append((warctools.WarcRecord.CONTENT_LENGTH, str(len(data))))
-            headers.append((warctools.WarcRecord.BLOCK_DIGEST, 'sha1:{}'.format(hashlib.sha1(data).hexdigest())))
+            headers.append((warctools.WarcRecord.BLOCK_DIGEST, 
+                'sha1:{}'.format(self.digest_str(hashlib.sha1(data)))))
 
             content_tuple = content_type, data
             record = warctools.WarcRecord(headers=headers, content=content_tuple)
@@ -573,6 +588,8 @@ if __name__ == '__main__':
     arg_parser.add_argument('--rollover-idle-time', 
             dest='rollover_idle_time', default=None, 
             help="WARC file rollover idle time threshold in seconds (so that Friday's last open WARC doesn't sit there all weekend waiting for more data)")
+    arg_parser.add_argument('--base32', dest='base32', action='store_true',
+            default=False, help='write SHA1 digests in Base32 instead of hex')
     arg_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true')
     arg_parser.add_argument('-q', '--quiet', dest='quiet', action='store_true')
     # [--ispartof=warcinfo ispartof]
@@ -591,7 +608,7 @@ if __name__ == '__main__':
     logging.basicConfig(stream=sys.stdout, level=loglevel, 
             format='%(asctime)s %(process)d %(threadName)s %(levelname)s %(funcName)s(%(filename)s:%(lineno)d) %(message)s')
 
-    recordset_q = WarcRecordsetQueue()
+    recordset_q = WarcRecordsetQueue(base32=args.base32)
 
     proxy = WarcProxy(server_address=(args.address, int(args.port)),
             ca_file=args.cacert, certs_dir=args.certs_dir,

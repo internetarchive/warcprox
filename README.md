@@ -25,7 +25,8 @@ incorporated into warctools mainline.
 
     usage: warcprox.py [-h] [-p PORT] [-b ADDRESS] [-c CACERT]
                        [--certs-dir CERTS_DIR] [-d DIRECTORY] [-z] [-n PREFIX]
-                       [-s SIZE] [-v] [-q]
+                       [-s SIZE] [--rollover-idle-time ROLLOVER_IDLE_TIME]
+                       [--base32] [-v] [-q]
     
     warcprox - WARC writing MITM HTTP/S proxy
     
@@ -36,10 +37,11 @@ incorporated into warctools mainline.
                             address to listen on (default: localhost)
       -c CACERT, --cacert CACERT
                             CA certificate file; if file does not exist, it will
-                            be created (default: ./warcprox-ca.pem)
+                            be created (default: ./desktop-nlevitt-warcprox-
+                            ca.pem)
       --certs-dir CERTS_DIR
                             where to store and load generated certificates
-                            (default: ./warcprox-ca)
+                            (default: ./desktop-nlevitt-warcprox-ca)
       -d DIRECTORY, --dir DIRECTORY
                             where to write warcs (default: ./warcs)
       -z, --gzip            write gzip-compressed warc records (default: False)
@@ -47,6 +49,12 @@ incorporated into warctools mainline.
                             WARC filename prefix (default: WARCPROX)
       -s SIZE, --size SIZE  WARC file rollover size threshold in bytes (default:
                             1000000000)
+      --rollover-idle-time ROLLOVER_IDLE_TIME
+                            WARC file rollover idle time threshold in seconds (so
+                            that Friday's last open WARC doesn't sit there all
+                            weekend waiting for more data) (default: None)
+      --base32              write SHA1 digests in Base32 instead of hex (default:
+                            False)
       -v, --verbose
       -q, --quiet
 
@@ -59,7 +67,7 @@ incorporated into warctools mainline.
 - keep statistics, produce reports
 - write cdx while crawling?
 - performance testing
-- base32 sha1 like heritrix?
+- ~~base32 sha1 like heritrix?~~
 - configurable timeouts and stuff
 - evaluate ipv6 support
 - more explicit handling of connection closed exception during transfer? other error cases?
