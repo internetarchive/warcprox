@@ -342,7 +342,9 @@ class WarcProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         
         buf = h.read(8192) 
         while buf != '':
-            buf = h.read(8192) 
+            buf = h.read(8192)
+
+        self.log_request(h.status, h.recorder.len)
 
         remote_ip = self._proxy_sock.getpeername()[0]
 
