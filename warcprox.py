@@ -1,6 +1,11 @@
 #!/usr/bin/python
 # vim:set sw=4 et:
 #
+"""
+WARC writing MITM HTTP/S proxy
+
+See README.md or https://github.com/internetarchive/warcprox
+"""
 
 import BaseHTTPServer, SocketServer
 import socket
@@ -112,9 +117,11 @@ class UnsupportedSchemeException(Exception):
     pass
 
 
-# This class intercepts the raw bytes, so it's the easiest place to hook in to
-# send the raw bytes on to the proxy destination.
 class ProxyingRecorder:
+    """
+    Wraps a socket._fileobject, recording the bytes as they are read,
+    calculating digests, and sending them on to the proxy client.
+    """
 
     def __init__(self, fp, proxy_dest, digest_algorithm='sha1'):
         self.fp = fp
@@ -125,6 +132,7 @@ class ProxyingRecorder:
         self.payload_offset = None
         self.payload_digest = None
         self.proxy_dest = proxy_dest
+        self._proxy_dest_conn_open = True
         self._prev_hunk_last_two_bytes = ''
         self.len = 0
 
@@ -162,7 +170,15 @@ class ProxyingRecorder:
         self.block_digest.update(hunk)
 
         self.tempfile.write(hunk)
-        self.proxy_dest.sendall(hunk)
+
+        if self._proxy_dest_conn_open:
+            try:
+                self.proxy_dest.sendall(hunk)
+            except BaseException as e:
+                self._proxy_dest_conn_open = False
+                logging.warn('{} sending data to proxy client'.format(e))
+                logging.info('will continue downloading from remote server without sending to client')
+
         self.len += len(hunk)
 
 
@@ -404,7 +420,7 @@ class DedupDb:
         json_value = json.dumps(py_value, separators=(',',':'))
 
         self.db[key] = json_value
-        logging.info('dedup db saved {}={}'.format(key, json_value))
+        logging.info('dedup db saved {}:{}'.format(key, json_value))
 
 
     def lookup(self, key):

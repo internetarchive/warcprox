@@ -83,8 +83,8 @@ incorporated into warctools mainline.
 - dns cache?? the system already does a fine job I'm thinking
 - keepalive with remote servers?
 - python3
-- special handling for 304 not-modified (either write revisit record, or modify
-  request so server never responds with 304)
+- special handling for 304 not-modified (write nothing or write revisit
+  record... and/or modify request so server never responds with 304)
 
 #### To not do
 
