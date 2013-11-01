@@ -70,7 +70,7 @@ incorporated into warctools mainline.
 ###To do
 
 - integration tests, unit tests
-- url-agnostic deduplication
+- ~~url-agnostic deduplication~~
 - unchunk and/or ungzip before storing payload, or alter request to discourage server from chunking/gzipping
 - check certs from proxied website, like browser does, and present browser-like warning if appropriate
 - keep statistics, produce reports
@@ -79,12 +79,17 @@ incorporated into warctools mainline.
 - ~~base32 sha1 like heritrix?~~
 - configurable timeouts and stuff
 - evaluate ipv6 support
-- more explicit handling of connection closed exception during transfer? other error cases?
+- ~~more explicit handling of connection closed exception during transfer? other error cases?~~
 - dns cache?? the system already does a fine job I'm thinking
 - keepalive with remote servers?
 - python3
 - special handling for 304 not-modified (write nothing or write revisit
   record... and/or modify request so server never responds with 304)
+- instant playback on a second proxy port
+- browser plugin for warcprox mode
+  * accept warcprox CA cert only when in warcprox mode
+  * separate temporary cookie store, like incognito
+  * "careful! your activity is being archived" banner
 
 #### To not do
 
