@@ -26,24 +26,24 @@ incorporated into warctools mainline.
     usage: warcprox.py [-h] [-p PORT] [-b ADDRESS] [-c CACERT]
                        [--certs-dir CERTS_DIR] [-d DIRECTORY] [-z] [-n PREFIX]
                        [-s SIZE] [--rollover-idle-time ROLLOVER_IDLE_TIME]
-                       [-g DIGEST_ALGORITHM] [--base32] [-j DEDUP_DB_FILE] [-v]
-                       [-q]
+                       [-g DIGEST_ALGORITHM] [--base32] [-j DEDUP_DB_FILE]
+                       [-P PLAYBACK_PORT]
+                       [--playback-index-db-file PLAYBACK_INDEX_DB_FILE] [-v] [-q]
     
     warcprox - WARC writing MITM HTTP/S proxy
     
     optional arguments:
       -h, --help            show this help message and exit
-      -p PORT, --port PORT  port to listen on (default: 8080)
+      -p PORT, --port PORT  port to listen on (default: 8000)
       -b ADDRESS, --address ADDRESS
                             address to listen on (default: localhost)
       -c CACERT, --cacert CACERT
                             CA certificate file; if file does not exist, it will
-                            be created (default: ./Noah-Levitts-MacBook-Pro.local-
-                            warcprox-ca.pem)
+                            be created (default: ./desktop-nlevitt-warcprox-
+                            ca.pem)
       --certs-dir CERTS_DIR
                             where to store and load generated certificates
-                            (default: ./Noah-Levitts-MacBook-Pro.local-warcprox-
-                            ca)
+                            (default: ./desktop-nlevitt-warcprox-ca)
       -d DIRECTORY, --dir DIRECTORY
                             where to write warcs (default: ./warcs)
       -z, --gzip            write gzip-compressed warc records (default: False)
@@ -58,12 +58,18 @@ incorporated into warctools mainline.
       -g DIGEST_ALGORITHM, --digest-algorithm DIGEST_ALGORITHM
                             digest algorithm, one of md5, sha1, sha224, sha256,
                             sha384, sha512 (default: sha1)
-      --base32              write SHA1 digests in Base32 instead of hex (default:
+      --base32              write digests in Base32 instead of hex (default:
                             False)
       -j DEDUP_DB_FILE, --dedup-db-file DEDUP_DB_FILE
                             persistent deduplication database file; empty string
                             or /dev/null disables deduplication (default:
                             ./warcprox-dedup.db)
+      -P PLAYBACK_PORT, --playback-port PLAYBACK_PORT
+                            port to listen on for instant playback (default: None)
+      --playback-index-db-file PLAYBACK_INDEX_DB_FILE
+                            playback index database file (only used if --playback-
+                            port is specified) (default: ./warcprox-playback-
+                            index.db)
       -v, --verbose
       -q, --quiet
 
@@ -86,6 +92,8 @@ incorporated into warctools mainline.
 - special handling for 304 not-modified (write nothing or write revisit
   record... and/or modify request so server never responds with 304)
 - ~~instant playback on a second proxy port~~
+- special url for downloading ca cert e.g. http(s)://warcprox./ca.pem
+- special url for other stuff, some status info or something?
 - browser plugin for warcprox mode
   * accept warcprox CA cert only when in warcprox mode
   * separate temporary cookie store, like incognito
