@@ -85,11 +85,12 @@ incorporated into warctools mainline.
 - python3
 - special handling for 304 not-modified (write nothing or write revisit
   record... and/or modify request so server never responds with 304)
-- instant playback on a second proxy port
+- ~~instant playback on a second proxy port~~
 - browser plugin for warcprox mode
   * accept warcprox CA cert only when in warcprox mode
   * separate temporary cookie store, like incognito
   * "careful! your activity is being archived" banner
+  * easy switch between archiving and instant playback proxy port
 
 #### To not do
 

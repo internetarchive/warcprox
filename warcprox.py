@@ -14,7 +14,7 @@ import OpenSSL
 import ssl
 import logging
 import sys
-from hanzo import warctools
+from hanzo import warctools, httptools
 import hashlib
 from datetime import datetime
 import Queue
@@ -30,7 +30,7 @@ import tempfile
 import base64
 import anydbm
 import json
-import contextlib
+import traceback
 
 class CertificateAuthority(object):
 
@@ -247,6 +247,7 @@ class MitmProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 )
             )
 
+
     def _connect_to_host(self):
         # Connect to destination
         self._proxy_sock = socket.socket()
@@ -322,7 +323,6 @@ class MitmProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
     def _proxy_request(self):
         raise Exception('_proxy_request() not implemented in MitmProxyHandler, must be implemented in subclass!')
-
 
     def __getattr__(self, item):
         if item.startswith('do_'):
@@ -423,20 +423,30 @@ class PlaybackProxyHandler(MitmProxyHandler):
         date, location = self.server.playback_index_db.lookup_latest(self.url)
         logging.info('lookup_latest returned {}:{}'.format(date, location))
 
-        response = None
         if location is not None:
-            response = self.gather_response(location['f'], location['o'])
-
-        if response is None:
+            try:
+                response = self.gather_response(location['f'], location['o'])
+            except:
+                logging.error('PlaybackProxyHandler problem playing back {}'.format(self.url), exc_info=1)
+                payload = '500 Warcprox Error\n\n{}\n'.format(traceback.format_exc())
+                response = ('HTTP/1.1 500 Internal Server Error\r\n'
+                        +   'Content-Type: text/plain\r\n'
+                        +   'Content-Length: {}\r\n'
+                        +   '\r\n'
+                        +   '{}').format(len(payload), payload)
+        else:
             response = ('HTTP/1.1 404 Not Found\r\n'
                     +   'Content-Type: text/plain\r\n'
-                    +   'Content-Length: 15\r\n'
+                    +   'Content-Length: 19\r\n'
                     +   '\r\n'
-                    +   'not in archive\n')
+                    +   '404 Not in Archive\n')
 
         self.connection.sendall(response)
 
-    def gather_response(self, warcfilename, offset):
+
+    def open_warc_at_offset(self, warcfilename, offset):
+        logging.debug('opening {} at offset {}'.format(warcfilename, offset))
+
         warcpath = None
         for p in (os.path.sep.join([self.server.warcs_dir, warcfilename]),
                 os.path.sep.join([self.server.warcs_dir, '{}.open'.format(warcfilename)])):
@@ -444,27 +454,72 @@ class PlaybackProxyHandler(MitmProxyHandler):
                 warcpath = p
 
         if warcpath is None:
-            logging.error('{} not found'.format(warcfilename))
-            return None
+            raise Exception('{} not found'.format(warcfilename))
 
-        fh = warctools.warc.WarcRecord.open_archive(filename=warcpath, mode='rb', offset=offset)
-        with contextlib.closing(fh):
+        return warctools.warc.WarcRecord.open_archive(filename=warcpath, mode='rb', offset=offset)
+
+
+    # returns payload starting after http headers
+    def warc_record_http_payload(self, warcfilename, offset):
+        fh = self.open_warc_at_offset(warcfilename, offset)
+        try:
             for (offset, record, errors) in fh.read_records(limit=1, offsets=True):
                 pass
 
-            logging.info('record_stream.read_records() returned {}'.format((offset,record,errors)))
+            if errors:
+                raise Exception('warc errors at {}:{} -- {}'.format(warcfilename, offset, errors))
 
-            if record:
-                content_type, content = record.content
-                return content
-                # if record.type == WarcRecord.RESPONSE and content_type.startswith('application/http'):
-                #     content = parse_http_response(record)
-            elif errors:
-                logging.error('warc errors at {}:{} -- {}'.format(warcpath, offset, errors))
-                return None
+            warc_type = record.get_header(warctools.WarcRecord.TYPE)
+            if warc_type != warctools.WarcRecord.RESPONSE:
+                raise Exception('invalid attempt to retrieve http payload of "{}" record'.format(warc_type))
 
-        logging.error('warctools reader returned no warc record and no errors??')
-        return None
+            m = re.search(r'\n\r?\n', record.content[1])
+            if m is None:
+                raise Exception('end of http headers not found in record at {} offset {}'.format(warcfilename, offset))
+            return record.content[1][m.end():]
+
+        finally:
+            fh.close()
+
+
+    def gather_response(self, warcfilename, offset):
+        fh = self.open_warc_at_offset(warcfilename, offset)
+        try:
+            for (offset, record, errors) in fh.read_records(limit=1, offsets=True):
+                pass
+
+            if errors:
+                raise Exception('warc errors at {}:{} -- {}'.format(warcfilename, offset, errors))
+                
+            warc_type = record.get_header(warctools.WarcRecord.TYPE)
+
+            if warc_type == warctools.WarcRecord.RESPONSE:
+                return record.content[1]
+
+            elif warc_type == warctools.WarcRecord.REVISIT:
+                # response consists of http headers from revisit record and
+                # payload from the referenced record
+                warc_profile = record.get_header(warctools.WarcRecord.PROFILE)
+                if warc_profile != warctools.WarcRecord.PROFILE_IDENTICAL_PAYLOAD_DIGEST:
+                    raise Exception('unknown revisit record profile {}'.format(warc_profile))
+
+                refers_to_target_uri = record.get_header(warctools.WarcRecord.REFERS_TO_TARGET_URI)
+                refers_to_date = record.get_header(warctools.WarcRecord.REFERS_TO_DATE)
+
+                logging.debug('revisit record references {} capture of {}'.format(refers_to_date, refers_to_target_uri))
+                location = self.server.playback_index_db.lookup_exact(refers_to_target_uri, refers_to_date)
+                logging.debug('loading http payload from {}'.format(location))
+                http_payload = self.warc_record_http_payload(location['f'], location['o'])
+
+                return record.content[1] + http_payload
+
+            else:
+                raise Exception('unknown warc record type {}'.format(warc_type))
+
+        finally:
+            fh.close()
+
+        raise Exception('should not reach this point')
 
 
 class PlaybackProxy(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
@@ -514,7 +569,7 @@ class DedupDb:
         json_value = json.dumps(py_value, separators=(',',':'))
 
         self.db[key] = json_value
-        logging.info('dedup db saved {}:{}'.format(key, json_value))
+        logging.debug('dedup db saved {}:{}'.format(key, json_value))
 
 
     def lookup(self, key):
@@ -589,23 +644,22 @@ class WarcWriterThread(threading.Thread):
                     refers_to_target_uri=dedup_info['u'],
                     refers_to_date=dedup_info['d'],
                     profile=warctools.WarcRecord.PROFILE_IDENTICAL_PAYLOAD_DIGEST,
-                    content_type=warctools.WarcRecord.HTTP_RESPONSE_MIMETYPE,
+                    content_type=httptools.ResponseMessage.CONTENT_TYPE,
                     remote_ip=recorded_url.remote_ip)
-
         else:
             # response record
             principal_record, principal_record_id = self.build_warc_record(
                     url=recorded_url.url, warc_date=warc_date, 
                     recorder=recorded_url.response_recorder, 
                     warc_type=warctools.WarcRecord.RESPONSE,
-                    content_type=warctools.WarcRecord.HTTP_RESPONSE_MIMETYPE,
+                    content_type=httptools.ResponseMessage.CONTENT_TYPE,
                     remote_ip=recorded_url.remote_ip)
 
         request_record, request_record_id = self.build_warc_record(
                 url=recorded_url.url, warc_date=warc_date, 
                 data=recorded_url.request_data, 
                 warc_type=warctools.WarcRecord.REQUEST, 
-                content_type=warctools.WarcRecord.HTTP_REQUEST_MIMETYPE,
+                content_type=httptools.RequestMessage.CONTENT_TYPE,
                 concurrent_to=principal_record_id)
 
         return principal_record, request_record
@@ -635,7 +689,7 @@ class WarcWriterThread(threading.Thread):
         if remote_ip is not None:
             headers.append((warctools.WarcRecord.IP_ADDRESS, remote_ip))
         if profile is not None:
-            headers.append((warctools.WarcRecord.TYPE, profile))
+            headers.append((warctools.WarcRecord.PROFILE, profile))
         if refers_to is not None:
             headers.append((warctools.WarcRecord.REFERS_TO, refers_to))
         if refers_to_target_uri is not None:
@@ -764,7 +818,7 @@ class WarcWriterThread(threading.Thread):
                 for record in recordset:
                     offset = writer.tell()
                     record.write_to(writer, gzip=self.gzip)
-                    logging.info('wrote warc record: warc_type={} content_length={} url={} warc={} offset={}'.format(
+                    logging.debug('wrote warc record: warc_type={} content_length={} url={} warc={} offset={}'.format(
                             record.get_header(warctools.WarcRecord.TYPE),
                             record.get_header(warctools.WarcRecord.CONTENT_LENGTH),
                             record.get_header(warctools.WarcRecord.URL),
@@ -779,7 +833,7 @@ class WarcWriterThread(threading.Thread):
                         and self.rollover_idle_time is not None 
                         and self.rollover_idle_time > 0
                         and time.time() - self._last_activity > self.rollover_idle_time):
-                    logging.info('rolling over warc file after {} seconds idle'.format(time.time() - self._last_activity))
+                    logging.debug('rolling over warc file after {} seconds idle'.format(time.time() - self._last_activity))
                     self._close_writer()
 
                 if time.time() - self._last_sync > 60:
@@ -814,7 +868,7 @@ class PlaybackIndexDb:
 
     def save(self, warcfile, recordset, offset):
         response_record = recordset[0]
-        # XXX canonicalize url
+        # XXX canonicalize url?
         url = response_record.get_header(warctools.WarcRecord.URL)
         date = response_record.get_header(warctools.WarcRecord.DATE)
 
@@ -831,7 +885,7 @@ class PlaybackIndexDb:
 
         self.db[url] = json_value
 
-        logging.info('playback index saved: {}:{}'.format(url, json_value))
+        logging.debug('playback index saved: {}:{}'.format(url, json_value))
 
 
     def lookup_latest(self, url):
@@ -844,12 +898,26 @@ class PlaybackIndexDb:
         latest_date = max(py_value)
         return latest_date, py_value[latest_date]
 
+
+    def lookup_exact(self, url, warc_date):
+        if url not in self.db:
+            return None
+
+        json_value = self.db[url]
+        py_value = json.loads(json_value)
+
+        if warc_date in py_value:
+            return py_value[warc_date]
+        else:
+            return None
+
+
 if __name__ == '__main__':
 
     arg_parser = argparse.ArgumentParser(
             description='warcprox - WARC writing MITM HTTP/S proxy',
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    arg_parser.add_argument('-p', '--port', dest='port', default='8080', 
+    arg_parser.add_argument('-p', '--port', dest='port', default='8000', 
             help='port to listen on')
     arg_parser.add_argument('-b', '--address', dest='address', 
             default='localhost', help='address to listen on')

@@ -5,7 +5,7 @@
 """
 Dump contents of database to stdout. Database can be any file that the anydbm
 module can read. Included with warcprox because it's useful for inspecting a
-deduplication database, but it is a generic tool.
+deduplication database or a playback index database, but it is a generic tool.
 """
 
 import anydbm
