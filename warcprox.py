@@ -333,8 +333,8 @@ class MitmProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             self.log_date_time_string(), fmt % args))
 
     def log_message(self, fmt, *args):
-        logging.info("{0} - - [{1}] {2}".format(self.address_string(), 
-            self.log_date_time_string(), fmt % args))
+        logging.info("{} {} - - [{}] {}".format(self.__class__.__name__,
+            self.address_string(), self.log_date_time_string(), fmt % args))
 
 
 class WarcProxyHandler(MitmProxyHandler):
@@ -418,15 +418,15 @@ class PlaybackProxyHandler(MitmProxyHandler):
         pass
 
     def _proxy_request(self):
-        logging.info('PlaybackProxyHandler handling request for {}'.format(self.url))
-
         date, location = self.server.playback_index_db.lookup_latest(self.url)
-        logging.info('lookup_latest returned {}:{}'.format(date, location))
+        logging.debug('lookup_latest returned {}:{}'.format(date, location))
 
+        status = None
         if location is not None:
             try:
                 response = self.gather_response(location['f'], location['o'])
             except:
+                status = 500
                 logging.error('PlaybackProxyHandler problem playing back {}'.format(self.url), exc_info=1)
                 payload = '500 Warcprox Error\n\n{}\n'.format(traceback.format_exc())
                 response = ('HTTP/1.1 500 Internal Server Error\r\n'
@@ -435,6 +435,7 @@ class PlaybackProxyHandler(MitmProxyHandler):
                         +   '\r\n'
                         +   '{}').format(len(payload), payload)
         else:
+            status = 404
             response = ('HTTP/1.1 404 Not Found\r\n'
                     +   'Content-Type: text/plain\r\n'
                     +   'Content-Length: 19\r\n'
@@ -442,6 +443,8 @@ class PlaybackProxyHandler(MitmProxyHandler):
                     +   '404 Not in Archive\n')
 
         self.connection.sendall(response)
+
+        self.log_request(status, len(response))
 
 
     def open_warc_at_offset(self, warcfilename, offset):
