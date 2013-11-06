@@ -16,7 +16,11 @@ if __name__ == "__main__":
         sys.stderr.write("usage: {} DBM_FILE\n".format(sys.argv[0]))
         exit(1)
 
-    db = anydbm.open(sys.argv[1])
-    for key in db:
-        print("{}:{}".format(key, db[key]))
+    # import whichdb
+    # which = whichdb.whichdb(sys.argv[1])
+    # print('{} is a {} db'.format(sys.argv[1], which))
 
+    db = anydbm.open(sys.argv[1])
+
+    for key in db.keys():
+        print("{}:{}".format(key, db[key]))

@@ -28,9 +28,9 @@ import signal
 import time
 import tempfile
 import base64
-import anydbm
 import json
 import traceback
+import gdbm
 
 class CertificateAuthority(object):
 
@@ -552,16 +552,13 @@ class DedupDb:
         else:
             logging.info('creating new deduplication database {}'.format(dbm_file))
 
-        self.db = anydbm.open(dbm_file, 'c')
-
+        self.db = gdbm.open(dbm_file, 'c')
 
     def close(self):
         self.db.close()
 
     def sync(self):
-        # XXX depends on db impl?
         self.db.sync()
-
 
     def save(self, key, response_record, offset):
         record_id = response_record.get_header(warctools.WarcRecord.ID)
@@ -858,16 +855,14 @@ class PlaybackIndexDb:
         else:
             logging.info('creating new playback index database {}'.format(dbm_file))
 
-        self.db = anydbm.open(dbm_file, 'c')
+        self.db = gdbm.open(dbm_file, 'c')
 
 
     def close(self):
         self.db.close()
 
     def sync(self):
-        # XXX depends on db impl?
         self.db.sync()
-
 
     def save(self, warcfile, recordset, offset):
         response_record = recordset[0]
