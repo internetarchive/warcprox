@@ -31,6 +31,7 @@ import base64
 import json
 import traceback
 import gdbm
+from StringIO import StringIO
 
 class CertificateAuthority(object):
 
@@ -114,11 +115,7 @@ class CertificateAuthority(object):
         return cnp
 
 
-class UnsupportedSchemeException(Exception):
-    pass
-
-
-class ProxyingRecorder:
+class ProxyingRecorder(object):
     """
     Wraps a socket._fileobject, recording the bytes as they are read,
     calculating digests, and sending them on to the proxy client.
@@ -233,7 +230,7 @@ class MitmProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             self.url = self.path
             u = urlparse.urlparse(self.url)
             if u.scheme != 'http':
-                raise UnsupportedSchemeException('Unknown scheme %s' % repr(u.scheme))
+                raise Exception('Unknown scheme %s' % repr(u.scheme))
             self.hostname = u.hostname
             self.port = u.port or 80
             self.path = urlparse.urlunparse(
@@ -384,7 +381,7 @@ class WarcProxyHandler(MitmProxyHandler):
         self.server.recorded_url_q.put(recorded_url)
 
 
-class RecordedUrl:
+class RecordedUrl(object):
     def __init__(self, url, request_data, response_recorder, remote_ip):
         self.url = url
         self.request_data = request_data
@@ -413,10 +410,13 @@ class WarcProxy(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
 
 class PlaybackProxyHandler(MitmProxyHandler):
 
+    # @Override
     def _connect_to_host(self):
         # don't connect to host!
         pass
 
+
+    # @Override
     def _proxy_request(self):
         date, location = self.server.playback_index_db.lookup_latest(self.url)
         logging.debug('lookup_latest returned {}:{}'.format(date, location))
@@ -424,30 +424,34 @@ class PlaybackProxyHandler(MitmProxyHandler):
         status = None
         if location is not None:
             try:
-                response = self.gather_response(location['f'], location['o'])
+                status, sz = self._send_response_from_warc(location[b'f'], location[b'o'])
             except:
                 status = 500
                 logging.error('PlaybackProxyHandler problem playing back {}'.format(self.url), exc_info=1)
                 payload = '500 Warcprox Error\n\n{}\n'.format(traceback.format_exc())
-                response = ('HTTP/1.1 500 Internal Server Error\r\n'
-                        +   'Content-Type: text/plain\r\n'
-                        +   'Content-Length: {}\r\n'
-                        +   '\r\n'
-                        +   '{}').format(len(payload), payload)
+                headers = ('HTTP/1.1 500 Internal Server Error\r\n'
+                        +  'Content-Type: text/plain\r\n'
+                        +  'Content-Length: {}\r\n'
+                        +  '\r\n').format(len(payload))
+                self.connection.sendall(headers)
+                self.connection.sendall(payload)
+                sz = len(headers) + len(payload)
         else:
             status = 404
-            response = ('HTTP/1.1 404 Not Found\r\n'
-                    +   'Content-Type: text/plain\r\n'
-                    +   'Content-Length: 19\r\n'
-                    +   '\r\n'
-                    +   '404 Not in Archive\n')
+            payload = '404 Not in Archive\n'
+            headers = ('HTTP/1.1 404 Not Found\r\n'
+                    +  'Content-Type: text/plain\r\n'
+                    +  'Content-Length: {}\r\n'
+                    +  '\r\n').format(len(payload))
+            self.connection.sendall(headers)
+            self.connection.sendall(payload)
+            sz = len(headers) + len(payload)
 
-        self.connection.sendall(response)
+        self.log_message('"%s" %s %s %s',
+                         self.requestline, str(status), str(sz), repr(location) if location else '-')
 
-        self.log_request(status, len(response))
 
-
-    def open_warc_at_offset(self, warcfilename, offset):
+    def _open_warc_at_offset(self, warcfilename, offset):
         logging.debug('opening {} at offset {}'.format(warcfilename, offset))
 
         warcpath = None
@@ -462,9 +466,29 @@ class PlaybackProxyHandler(MitmProxyHandler):
         return warctools.warc.WarcRecord.open_archive(filename=warcpath, mode='rb', offset=offset)
 
 
-    # returns payload starting after http headers
-    def warc_record_http_payload(self, warcfilename, offset):
-        fh = self.open_warc_at_offset(warcfilename, offset)
+    def _send_response(self, headers, payload_fh):
+        status = '-'
+        m = re.match(br'^HTTP/\d\.\d (\d{3})', headers)
+        if m is not None:
+            status = m.group(1)
+
+        self.connection.sendall(headers)
+        sz = len(headers)
+
+        while True:
+            buf = payload_fh.read(8192) 
+            if buf == '': break
+            self.connection.sendall(buf)
+            sz += len(buf)
+
+        return status, sz
+
+
+    def _send_headers_and_refd_payload(self, headers, refers_to_target_uri, refers_to_date):
+        location = self.server.playback_index_db.lookup_exact(refers_to_target_uri, refers_to_date)
+        logging.debug('loading http payload from {}'.format(location))
+
+        fh = self._open_warc_at_offset(location['f'], location['o'])
         try:
             for (offset, record, errors) in fh.read_records(limit=1, offsets=True):
                 pass
@@ -476,17 +500,20 @@ class PlaybackProxyHandler(MitmProxyHandler):
             if warc_type != warctools.WarcRecord.RESPONSE:
                 raise Exception('invalid attempt to retrieve http payload of "{}" record'.format(warc_type))
 
-            m = re.search(r'\n\r?\n', record.content[1])
-            if m is None:
-                raise Exception('end of http headers not found in record at {} offset {}'.format(warcfilename, offset))
-            return record.content[1][m.end():]
+            # find end of headers
+            while True:
+                line = record.content_file.readline()
+                if line == '' or re.match('^\r?\n$', line):
+                    break
+
+            return self._send_response(headers, record.content_file)
 
         finally:
             fh.close()
 
 
-    def gather_response(self, warcfilename, offset):
-        fh = self.open_warc_at_offset(warcfilename, offset)
+    def _send_response_from_warc(self, warcfilename, offset):
+        fh = self._open_warc_at_offset(warcfilename, offset)
         try:
             for (offset, record, errors) in fh.read_records(limit=1, offsets=True):
                 pass
@@ -497,7 +524,14 @@ class PlaybackProxyHandler(MitmProxyHandler):
             warc_type = record.get_header(warctools.WarcRecord.TYPE)
 
             if warc_type == warctools.WarcRecord.RESPONSE:
-                return record.content[1]
+                headers_buf = bytearray()
+                while True:
+                    line = record.content_file.readline()
+                    headers_buf.extend(line)
+                    if line == '' or re.match('^\r?\n$', line):
+                        break
+
+                return self._send_response(headers_buf, record.content_file)
 
             elif warc_type == warctools.WarcRecord.REVISIT:
                 # response consists of http headers from revisit record and
@@ -510,11 +544,7 @@ class PlaybackProxyHandler(MitmProxyHandler):
                 refers_to_date = record.get_header(warctools.WarcRecord.REFERS_TO_DATE)
 
                 logging.debug('revisit record references {} capture of {}'.format(refers_to_date, refers_to_target_uri))
-                location = self.server.playback_index_db.lookup_exact(refers_to_target_uri, refers_to_date)
-                logging.debug('loading http payload from {}'.format(location))
-                http_payload = self.warc_record_http_payload(location['f'], location['o'])
-
-                return record.content[1] + http_payload
+                return self._send_headers_and_refd_payload(record.content[1], refers_to_target_uri, refers_to_date)
 
             else:
                 raise Exception('unknown warc record type {}'.format(warc_type))
@@ -544,7 +574,7 @@ class PlaybackProxy(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
         BaseHTTPServer.HTTPServer.server_close(self)
 
 
-class DedupDb:
+class DedupDb(object):
 
     def __init__(self, dbm_file='./warcprox-dedup.db'):
         if os.path.exists(dbm_file):
@@ -636,7 +666,7 @@ class WarcWriterThread(threading.Thread):
             else:
                 response_header_block = recorded_url.response_recorder.tempfile.read()
 
-            principal_record, principal_record_id = self.build_warc_record(
+            principal_record = self.build_warc_record(
                     url=recorded_url.url, warc_date=warc_date,
                     data=response_header_block,
                     warc_type=warctools.WarcRecord.REVISIT,
@@ -648,19 +678,19 @@ class WarcWriterThread(threading.Thread):
                     remote_ip=recorded_url.remote_ip)
         else:
             # response record
-            principal_record, principal_record_id = self.build_warc_record(
+            principal_record = self.build_warc_record(
                     url=recorded_url.url, warc_date=warc_date, 
                     recorder=recorded_url.response_recorder, 
                     warc_type=warctools.WarcRecord.RESPONSE,
                     content_type=httptools.ResponseMessage.CONTENT_TYPE,
                     remote_ip=recorded_url.remote_ip)
 
-        request_record, request_record_id = self.build_warc_record(
+        request_record = self.build_warc_record(
                 url=recorded_url.url, warc_date=warc_date, 
                 data=recorded_url.request_data, 
                 warc_type=warctools.WarcRecord.REQUEST, 
                 content_type=httptools.RequestMessage.CONTENT_TYPE,
-                concurrent_to=principal_record_id)
+                concurrent_to=principal_record.id)
 
         return principal_record, request_record
 
@@ -721,7 +751,7 @@ class WarcWriterThread(threading.Thread):
             content_tuple = content_type, data
             record = warctools.WarcRecord(headers=headers, content=content_tuple)
 
-        return record, record_id
+        return record
 
 
     def timestamp17(self):
@@ -847,7 +877,7 @@ class WarcWriterThread(threading.Thread):
         self._close_writer();
 
 
-class PlaybackIndexDb:
+class PlaybackIndexDb(object):
 
     def __init__(self, dbm_file='./warcprox-playback-index.db'):
         if os.path.exists(dbm_file):
