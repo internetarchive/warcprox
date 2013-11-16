@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 # vim:set sw=4 et:
 #
 """
@@ -940,9 +940,33 @@ class PlaybackIndexDb(object):
             return None
 
 
-if __name__ == '__main__':
+def run_until_shutdown(proxy, warc_writer, dedup_db, playback_proxy, playback_index_db):
+    stop = threading.Event()
+    signal.signal(signal.SIGTERM, stop.set)
 
-    arg_parser = argparse.ArgumentParser(
+    try:
+        while not stop.is_set():
+            time.sleep(0.5)
+    except:
+        pass
+    finally:
+        warc_writer.stop.set()
+        proxy.shutdown()
+        proxy.server_close()
+
+        if playback_proxy is not None:
+            playback_proxy.shutdown()
+            playback_proxy.server_close()
+
+        if dedup_db is not None:
+            dedup_db.close()
+
+        if playback_index_db is not None:
+            playback_index_db.close()
+
+
+def _build_arg_parser(prog=sys.argv[0]):
+    arg_parser = argparse.ArgumentParser(prog=prog,
             description='warcprox - WARC writing MITM HTTP/S proxy',
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     arg_parser.add_argument('-p', '--port', dest='port', default='8000', 
@@ -984,7 +1008,13 @@ if __name__ == '__main__':
     # [--description=warcinfo description]
     # [--operator=warcinfo operator]
     # [--httpheader=warcinfo httpheader]
-    args = arg_parser.parse_args()
+
+    return arg_parser
+
+
+def main(argv=sys.argv):
+    arg_parser = _build_arg_parser(prog=argv[0])
+    args = arg_parser.parse_args(args=argv[1:])
 
     if args.verbose:
         loglevel = logging.DEBUG
@@ -1040,26 +1070,8 @@ if __name__ == '__main__':
     proxy_thread.start()
     warc_writer.start()
 
-    stop = threading.Event()
-    signal.signal(signal.SIGTERM, stop.set)
+    run_until_shutdown(proxy, warc_writer, dedup_db, playback_proxy, playback_index_db)
 
-    try:
-        while not stop.is_set():
-            time.sleep(0.5)
-    except:
-        pass
-    finally:
-        warc_writer.stop.set()
-        proxy.shutdown()
-        proxy.server_close()
 
-        if playback_proxy is not None:
-            playback_proxy.shutdown()
-            playback_proxy.server_close()
-
-        if dedup_db is not None:
-            dedup_db.close()
-
-        if playback_index_db is not None:
-            playback_index_db.close()
-
+if __name__ == '__main__':
+    main()
