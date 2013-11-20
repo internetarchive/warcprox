@@ -674,9 +674,9 @@ class WarcWriterThread(threading.Thread):
         warc_date = warctools.warc.warc_datetime_str(datetime.now())
 
         dedup_info = None
-        if dedup_db is not None and recorded_url.response_recorder.payload_digest is not None:
+        if self.dedup_db is not None and recorded_url.response_recorder.payload_digest is not None:
             key = self.digest_str(recorded_url.response_recorder.payload_digest)
-            dedup_info = dedup_db.lookup(key)
+            dedup_info = self.dedup_db.lookup(key)
 
         if dedup_info is not None:
             # revisit record
@@ -843,7 +843,7 @@ class WarcWriterThread(threading.Thread):
             self.dedup_db.save(key, recordset[0], recordset_offset)
 
         if self.playback_index_db is not None:
-            playback_index_db.save(self._f_finalname, recordset, recordset_offset)
+            self.playback_index_db.save(self._f_finalname, recordset, recordset_offset)
 
         recorded_url.response_recorder.tempfile.close()
 
@@ -1135,7 +1135,6 @@ def main(argv=sys.argv):
             digest_algorithm=args.digest_algorithm,
             playback_index_db=playback_index_db)
 
-    # run_warcprox(proxy, warc_writer, playback_proxy)
     warcprox = WarcproxController(proxy, warc_writer, playback_proxy)
     warcprox.run_until_shutdown()
 
