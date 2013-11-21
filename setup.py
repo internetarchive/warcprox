@@ -13,7 +13,8 @@ setuptools.setup(name='warcprox',
         license='GPL',
         packages=['warcprox'],
         install_requires=['pyopenssl', 'warctools'],  # gdbm/dbhash?
-        tests_require=['requests'],
+        # >=2.0.1 for https://github.com/kennethreitz/requests/pull/1636
+        tests_require=['requests>=2.0.1'],  
         scripts=['bin/dump-anydbm', 'bin/warcprox'],
         zip_safe=False,
         test_suite='warcprox.tests')
