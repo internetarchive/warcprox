@@ -179,7 +179,7 @@ class WarcproxTest(unittest.TestCase):
                 os.unlink(f)
 
 
-    def test_httpds_no_proxy(self):
+    def _test_httpds_no_proxy(self):
         url = 'http://localhost:{}/'.format(self.http_daemon.server_port)
         response = requests.get(url)
         self.assertEqual(response.status_code, 404)
@@ -203,20 +203,7 @@ class WarcproxTest(unittest.TestCase):
         self.assertEqual(response.content, 'I am the warcprox test payload! dddddddddd!\n')
 
 
-        ### # maybe useful checks, but arduous to include this much detail, will rely on the integration tests instead
-        ### playback_index_lookup = self.warcprox.playback_proxy.playback_index_db.lookup_latest(url)
-        ### self.assertEqual(playback_index_lookup, (None,None))
-        ### playback_index_lookup = self.warcprox.playback_proxy.playback_index_db.lookup_latest(url)
-        ### self.assertIsNotNone(playback_index_lookup[0])
-        ### self.assertIsNotNone(playback_index_lookup[1])
-        ### self.assertTrue(re.match(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$', playback_index_lookup[0]))
-        ### self.assertEqual(type(playback_index_lookup[1]), dict)
-        ### self.assertEqual(type(playback_index_lookup[1]['o']), int)
-        ### self.assertTrue(re.match(r'^WARCPROX-\d{17}-00000-\d+-.*-\d+\.warc$', playback_index_lookup[1]['f']))
-        ### dedup_db_lookup = self.warcprox.warc_writer.dedup_db.lookup('sha1:2d7f13181b90a256ce5e5ebfd6e9c9826ece9079')
-        ### assertEqual(dedup_db_lookup['u'], url)
-
-    def test_archive_and_playback_http_url(self):
+    def _test_archive_and_playback_http_url(self):
         url = 'http://localhost:{}/a/b'.format(self.http_daemon.server_port)
 
         # ensure playback fails before archiving
@@ -230,12 +217,50 @@ class WarcproxTest(unittest.TestCase):
         self.assertEqual(response.headers['warcprox-test-header'], 'a!')
         self.assertEqual(response.content, 'I am the warcprox test payload! bbbbbbbbbb!\n')
 
-        # check playback
-        response = requests.get(url, proxies=self.playback_proxies)
+        # check playback (warc writing is asynchronous, give it up to 10 sec)
+        for i in xrange(0,20):
+            response = requests.get(url, proxies=self.playback_proxies)
+            if response.status_code != 404:
+                break
+            time.sleep(0.5)
+
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers['warcprox-test-header'], 'a!')
         self.assertEqual(response.content, 'I am the warcprox test payload! bbbbbbbbbb!\n')
 
+
+    def _test_archive_and_playback_https_url(self):
+        url = 'https://localhost:{}/c/d'.format(self.https_daemon.server_port)
+
+        # ensure playback fails before archiving
+        response = requests.get(url, proxies=self.playback_proxies, verify=False)
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.content, '404 Not in Archive\n')
+
+        # archive
+        response = requests.get(url, proxies=self.archiving_proxies, verify=False)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers['warcprox-test-header'], 'c!')
+        self.assertEqual(response.content, 'I am the warcprox test payload! dddddddddd!\n')
+
+        # check playback (warc writing is asynchronous, give it up to 10 sec)
+        for i in xrange(0,20):
+            response = requests.get(url, proxies=self.playback_proxies, verify=False)
+            if response.status_code != 404:
+                break
+            time.sleep(0.5)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers['warcprox-test-header'], 'c!')
+        self.assertEqual(response.content, 'I am the warcprox test payload! dddddddddd!\n')
+
+
+    # run everything from here, otherwise it wants to setUp() and tearDown
+    # around each test
+    def runTest(self):
+        self._test_httpds_no_proxy()
+        self._test_archive_and_playback_http_url()
+        self._test_archive_and_playback_https_url()
 
 
 if __name__ == '__main__':
