@@ -7,3 +7,5 @@
 *.egg-info
 *.swp
 warcs
+build
+dist
