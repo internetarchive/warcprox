@@ -9,7 +9,7 @@ setuptools.setup(name='warcprox',
         url='https://github.com/internetarchive/warcprox',
         author='Noah Levitt',
         author_email='nlevitt@archive.org',
-        long_description=open('README.md').read(),
+        long_description=open('README.rst').read(),
         license='GPL',
         packages=['warcprox'],
         install_requires=['pyopenssl', 'warctools>=4.8.2'],  # gdbm/dbhash?
