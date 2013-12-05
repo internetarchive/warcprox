@@ -82,33 +82,33 @@ Usage
 To do
 ~~~~~
 
--  integration tests, unit tests
--  [STRIKEOUT:url-agnostic deduplication]
--  unchunk and/or ungzip before storing payload, or alter request to
-   discourage server from chunking/gzipping
--  check certs from proxied website, like browser does, and present
-   browser-like warning if appropriate
--  keep statistics, produce reports
--  write cdx while crawling?
--  performance testing
--  [STRIKEOUT:base32 sha1 like heritrix?]
--  configurable timeouts and stuff
--  evaluate ipv6 support
--  [STRIKEOUT:more explicit handling of connection closed exception
-   during transfer? other error cases?]
--  dns cache?? the system already does a fine job I'm thinking
--  keepalive with remote servers?
--  python3
--  special handling for 304 not-modified (write nothing or write revisit
-   record... and/or modify request so server never responds with 304)
--  [STRIKEOUT:instant playback on a second proxy port]
--  special url for downloading ca cert e.g. http(s)://warcprox./ca.pem
--  special url for other stuff, some status info or something?
--  browser plugin for warcprox mode
--  accept warcprox CA cert only when in warcprox mode
--  separate temporary cookie store, like incognito
--  "careful! your activity is being archived" banner
--  easy switch between archiving and instant playback proxy port
+* (partly done) integration tests, unit tests
+* (done) url-agnostic deduplication
+* unchunk and/or ungzip before storing payload, or alter request to
+  discourage server from chunking/gzipping
+* check certs from proxied website, like browser does, and present
+  browser-like warning if appropriate
+* keep statistics, produce reports
+* write cdx while crawling?
+* performance testing
+* (done) base32 sha1 like heritrix?
+* configurable timeouts and stuff
+* evaluate ipv6 support
+* (done) more explicit handling of connection closed exception
+  during transfer
+* dns cache?? the system already does a fine job I'm thinking
+* keepalive with remote servers?
+* (done) python3
+* special handling for 304 not-modified (write nothing or write revisit
+  record... and/or modify request so server never responds with 304)
+* (done) instant playback on a second proxy port
+* special url for downloading ca cert e.g. http(s)://warcprox./ca.pem
+* special url for other stuff, some status info or something?
+* browser plugin for warcprox mode
+  -  accept warcprox CA cert only when in warcprox mode
+  -  separate temporary cookie store, like incognito
+  -  "careful! your activity is being archived" banner
+  -  easy switch between archiving and instant playback proxy port
 
 To not do
 ^^^^^^^^^
@@ -118,8 +118,8 @@ belong here, since this is a proxy, not a crawler/robot. It can be used
 by a human with a browser, or by something automated, i.e. a robot. My
 feeling is that it's more appropriate to implement these in the robot.
 
--  politeness, i.e. throttle requests per server
--  fetch and obey robots.txt
--  alter user-agent, maybe insert something like "warcprox mitm
+*  politeness, i.e. throttle requests per server
+*  fetch and obey robots.txt
+*  alter user-agent, maybe insert something like "warcprox mitm
    archiving proxy; +http://archive.org/details/archive.org\_bot"
 
