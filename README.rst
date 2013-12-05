@@ -105,6 +105,7 @@ To do
 * special url for downloading ca cert e.g. http(s)://warcprox./ca.pem
 * special url for other stuff, some status info or something?
 * browser plugin for warcprox mode
+
   -  accept warcprox CA cert only when in warcprox mode
   -  separate temporary cookie store, like incognito
   -  "careful! your activity is being archived" banner
