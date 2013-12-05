@@ -4,12 +4,55 @@
 """
 WARC writing MITM HTTP/S proxy
 
-See README.md or https://github.com/internetarchive/warcprox
+See README.rst or https://github.com/internetarchive/warcprox
 """
 
-import BaseHTTPServer, SocketServer
+try:
+    import http.server
+    http_server = http.server
+except ImportError:
+    import BaseHTTPServer
+    http_server = BaseHTTPServer
+
+try:
+    import socketserver
+except ImportError:
+    import SocketServer
+    socketserver = SocketServer
+
+try:
+    import urllib.parse
+    urllib_parse = urllib.parse
+except ImportError:
+    import urlparse
+    urllib_parse = urlparse
+
+try:
+    import queue
+except ImportError:
+    import Queue
+    queue = Queue
+
+try:
+    import http.client
+    http_client = http.client
+except ImportError:
+    import httplib
+    http_client = httplib
+
+try:
+    import dbm.gnu
+    dbm_gnu = dbm.gnu
+except ImportError:
+    import gdbm
+    dbm_gnu = gdbm
+
+try:
+    from io import StringIO
+except ImportError:
+    from StringIO import StringIO
+
 import socket
-import urlparse
 import OpenSSL
 import ssl
 import logging
@@ -17,12 +60,10 @@ import sys
 from hanzo import warctools, httptools
 import hashlib
 from datetime import datetime
-import Queue
 import threading
 import os
 import argparse
 import random
-import httplib
 import re
 import signal
 import time
@@ -30,8 +71,6 @@ import tempfile
 import base64
 import json
 import traceback
-import gdbm
-from StringIO import StringIO
 
 class CertificateAuthority(object):
     logger = logging.getLogger('warcprox.CertificateAuthority')
@@ -66,9 +105,9 @@ class CertificateAuthority(object):
         self.cert.set_issuer(self.cert.get_subject())
         self.cert.set_pubkey(self.key)
         self.cert.add_extensions([
-            OpenSSL.crypto.X509Extension("basicConstraints", True, "CA:TRUE, pathlen:0"),
-            OpenSSL.crypto.X509Extension("keyUsage", True, "keyCertSign, cRLSign"),
-            OpenSSL.crypto.X509Extension("subjectKeyIdentifier", False, "hash", subject=self.cert),
+            OpenSSL.crypto.X509Extension(b"basicConstraints", True, b"CA:TRUE, pathlen:0"),
+            OpenSSL.crypto.X509Extension(b"keyUsage", True, b"keyCertSign, cRLSign"),
+            OpenSSL.crypto.X509Extension(b"subjectKeyIdentifier", False, b"hash", subject=self.cert),
             ])
         self.cert.sign(self.key, "sha1")
 
@@ -134,29 +173,29 @@ class ProxyingRecorder(object):
         self.payload_digest = None
         self.proxy_dest = proxy_dest
         self._proxy_dest_conn_open = True
-        self._prev_hunk_last_two_bytes = ''
+        self._prev_hunk_last_two_bytes = b''
         self.len = 0
 
     def _update(self, hunk):
         if self.payload_digest is None:
             # convoluted handling of two newlines crossing hunks
             # XXX write tests for this
-            if self._prev_hunk_last_two_bytes.endswith('\n'):
-                if hunk.startswith('\n'):
+            if self._prev_hunk_last_two_bytes.endswith(b'\n'):
+                if hunk.startswith(b'\n'):
                     self.payload_digest = hashlib.new(self.digest_algorithm)
                     self.payload_digest.update(hunk[1:])
                     self.payload_offset = self.len + 1
-                elif hunk.startswith('\r\n'):
+                elif hunk.startswith(b'\r\n'):
                     self.payload_digest = hashlib.new(self.digest_algorithm)
                     self.payload_digest.update(hunk[2:])
                     self.payload_offset = self.len + 2
-            elif self._prev_hunk_last_two_bytes == '\n\r':
-                if hunk.startswith('\n'):
+            elif self._prev_hunk_last_two_bytes == b'\n\r':
+                if hunk.startswith(b'\n'):
                     self.payload_digest = hashlib.new(self.digest_algorithm)
                     self.payload_digest.update(hunk[1:])
                     self.payload_offset = self.len + 1
             else:
-                m = re.search(r'\n\r?\n', hunk)
+                m = re.search(br'\n\r?\n', hunk)
                 if m is not None:
                     self.payload_digest = hashlib.new(self.digest_algorithm)
                     self.payload_digest.update(hunk[m.end():])
@@ -184,14 +223,14 @@ class ProxyingRecorder(object):
 
 
     def read(self, size=-1):
-        hunk = self.fp.read(size=size)
+        hunk = self.fp.read(size)
         self._update(hunk)
         return hunk
 
     def readline(self, size=-1):
         # XXX depends on implementation details of self.fp.readline(), in
         # particular that it doesn't call self.fp.read()
-        hunk = self.fp.readline(size=size)
+        hunk = self.fp.readline(size)
         self._update(hunk)
         return hunk
 
@@ -208,10 +247,10 @@ class ProxyingRecorder(object):
             return 0
 
 
-class ProxyingRecordingHTTPResponse(httplib.HTTPResponse):
+class ProxyingRecordingHTTPResponse(http_client.HTTPResponse):
 
-    def __init__(self, sock, debuglevel=0, strict=0, method=None, buffering=False, proxy_dest=None, digest_algorithm='sha1'):
-        httplib.HTTPResponse.__init__(self, sock, debuglevel=debuglevel, strict=strict, method=method, buffering=buffering)
+    def __init__(self, sock, debuglevel=0, method=None, proxy_dest=None, digest_algorithm='sha1'):
+        http_client.HTTPResponse.__init__(self, sock, debuglevel=debuglevel, method=method)
 
         # Keep around extra reference to self.fp because HTTPResponse sets
         # self.fp=None after it finishes reading, but we still need it
@@ -219,12 +258,22 @@ class ProxyingRecordingHTTPResponse(httplib.HTTPResponse):
         self.fp = self.recorder
 
 
-class MitmProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
     logger = logging.getLogger('warcprox.MitmProxyHandler')
 
     def __init__(self, request, client_address, server):
         self.is_connect = False
-        BaseHTTPServer.BaseHTTPRequestHandler.__init__(self, request, client_address, server)
+
+        ## XXX hack around bizarre bug on my mac python 3.2 in http.server
+        ## where hasattr returns true in the code snippet below, but
+        ## self._headers_buffer is None
+        #
+        # if not hasattr(self, '_headers_buffer'):
+        #     self._headers_buffer = []
+        # self._headers_buffer.append(
+        self._headers_buffer = []
+
+        http_server.BaseHTTPRequestHandler.__init__(self, request, client_address, server)
 
     def _determine_host_port(self):
         # Get hostname and port to connect to
@@ -232,13 +281,13 @@ class MitmProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             self.hostname, self.port = self.path.split(':')
         else:
             self.url = self.path
-            u = urlparse.urlparse(self.url)
+            u = urllib_parse.urlparse(self.url)
             if u.scheme != 'http':
                 raise Exception('Unknown scheme %s' % repr(u.scheme))
             self.hostname = u.hostname
             self.port = u.port or 80
-            self.path = urlparse.urlunparse(
-                urlparse.ParseResult(
+            self.path = urllib_parse.urlunparse(
+                urllib_parse.ParseResult(
                     scheme='',
                     netloc='',
                     params=u.params,
@@ -291,8 +340,8 @@ class MitmProxyHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         else:
             netloc = '{}:{}'.format(self.hostname, self.port)
 
-        result = urlparse.urlunparse(
-            urlparse.ParseResult(
+        result = urllib_parse.urlunparse(
+            urllib_parse.ParseResult(
                 scheme='https',
                 netloc=netloc,
                 params='',
@@ -344,10 +393,10 @@ class WarcProxyHandler(MitmProxyHandler):
 
     def _proxy_request(self):
         # Build request
-        req = '%s %s %s\r\n' % (self.command, self.path, self.request_version)
+        req = '{} {} {}\r\n'.format(self.command, self.path, self.request_version).encode('utf-8')
 
         # Add headers to the request
-        req += '%s\r\n' % self.headers
+        req += str(self.headers).encode('utf-8') + b'\r\n'
 
         # Append message body if present to the request
         if 'Content-Length' in self.headers:
@@ -371,7 +420,7 @@ class WarcProxyHandler(MitmProxyHandler):
         h.begin()
 
         buf = h.read(8192)
-        while buf != '':
+        while buf != b'':
             buf = h.read(8192)
 
         self.log_request(h.status, h.recorder.len)
@@ -389,19 +438,29 @@ class WarcProxyHandler(MitmProxyHandler):
 
 class RecordedUrl(object):
     def __init__(self, url, request_data, response_recorder, remote_ip):
-        self.url = url
+        # XXX should test what happens with non-ascii url (when does
+        # url-encoding happen?)
+        if type(url) is not bytes:
+            self.url = url.encode('ascii')
+        else:
+            self.url = url
+
+        if type(remote_ip) is not bytes:
+            self.remote_ip = remote_ip.encode('ascii')
+        else:
+            self.remote_ip = remote_ip
+
         self.request_data = request_data
         self.response_recorder = response_recorder
-        self.remote_ip = remote_ip
 
 
-class WarcProxy(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
+class WarcProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
     logger = logging.getLogger('warcprox.WarcProxy')
 
     def __init__(self, server_address=('localhost', 8000),
             req_handler_class=WarcProxyHandler, bind_and_activate=True,
             ca=None, recorded_url_q=None, digest_algorithm='sha1'):
-        BaseHTTPServer.HTTPServer.__init__(self, server_address, req_handler_class, bind_and_activate)
+        http_server.HTTPServer.__init__(self, server_address, req_handler_class, bind_and_activate)
 
         self.digest_algorithm = digest_algorithm
 
@@ -413,15 +472,15 @@ class WarcProxy(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
         if recorded_url_q is not None:
             self.recorded_url_q = recorded_url_q
         else:
-            self.recorded_url_q = Queue.Queue()
+            self.recorded_url_q = queue.Queue()
 
     def server_activate(self):
-        BaseHTTPServer.HTTPServer.server_activate(self)
+        http_server.HTTPServer.server_activate(self)
         self.logger.info('WarcProxy listening on {0}:{1}'.format(self.server_address[0], self.server_address[1]))
 
     def server_close(self):
         self.logger.info('WarcProxy shutting down')
-        BaseHTTPServer.HTTPServer.server_close(self)
+        http_server.HTTPServer.server_close(self)
 
 
 class PlaybackProxyHandler(MitmProxyHandler):
@@ -435,31 +494,31 @@ class PlaybackProxyHandler(MitmProxyHandler):
 
     # @Override
     def _proxy_request(self):
-        date, location = self.server.playback_index_db.lookup_latest(self.url)
+        date, location = self.server.playback_index_db.lookup_latest(self.url.encode('utf-8'))
         self.logger.debug('lookup_latest returned {}:{}'.format(date, location))
 
         status = None
         if location is not None:
             try:
-                status, sz = self._send_response_from_warc(location[b'f'], location[b'o'])
+                status, sz = self._send_response_from_warc(location['f'], location['o'])
             except:
                 status = 500
                 self.logger.error('PlaybackProxyHandler problem playing back {}'.format(self.url), exc_info=1)
-                payload = '500 Warcprox Error\n\n{}\n'.format(traceback.format_exc())
-                headers = ('HTTP/1.1 500 Internal Server Error\r\n'
-                        +  'Content-Type: text/plain\r\n'
-                        +  'Content-Length: {}\r\n'
-                        +  '\r\n').format(len(payload))
+                payload = b'500 Warcprox Error\n\n{}\n'.format(traceback.format_exc()).encode('utf-8')
+                headers = (b'HTTP/1.1 500 Internal Server Error\r\n'
+                        +  b'Content-Type: text/plain;charset=utf-8\r\n'
+                        +  b'Content-Length: ' + len(payload) + b'\r\n'
+                        +  b'\r\n')
                 self.connection.sendall(headers)
                 self.connection.sendall(payload)
                 sz = len(headers) + len(payload)
         else:
             status = 404
-            payload = '404 Not in Archive\n'
-            headers = ('HTTP/1.1 404 Not Found\r\n'
-                    +  'Content-Type: text/plain\r\n'
-                    +  'Content-Length: {}\r\n'
-                    +  '\r\n').format(len(payload))
+            payload = b'404 Not in Archive\n'
+            headers = (b'HTTP/1.1 404 Not Found\r\n'
+                    +  b'Content-Type: text/plain;charset=utf-8\r\n'
+                    +  b'Content-Length: ' + str(len(payload)).encode('ascii') + b'\r\n'
+                    +  b'\r\n')
             self.connection.sendall(headers)
             self.connection.sendall(payload)
             sz = len(headers) + len(payload)
@@ -494,7 +553,7 @@ class PlaybackProxyHandler(MitmProxyHandler):
 
         while True:
             buf = payload_fh.read(8192)
-            if buf == '': break
+            if buf == b'': break
             self.connection.sendall(buf)
             sz += len(buf)
 
@@ -520,7 +579,7 @@ class PlaybackProxyHandler(MitmProxyHandler):
             # find end of headers
             while True:
                 line = record.content_file.readline()
-                if line == '' or re.match('^\r?\n$', line):
+                if line == b'' or re.match(br'^\r?\n$', line):
                     break
 
             return self._send_response(headers, record.content_file)
@@ -545,7 +604,7 @@ class PlaybackProxyHandler(MitmProxyHandler):
                 while True:
                     line = record.content_file.readline()
                     headers_buf.extend(line)
-                    if line == '' or re.match('^\r?\n$', line):
+                    if line == b'' or re.match(b'^\r?\n$', line):
                         break
 
                 return self._send_response(headers_buf, record.content_file)
@@ -573,24 +632,24 @@ class PlaybackProxyHandler(MitmProxyHandler):
         raise Exception('should not reach this point')
 
 
-class PlaybackProxy(SocketServer.ThreadingMixIn, BaseHTTPServer.HTTPServer):
+class PlaybackProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
     logger = logging.getLogger('warcprox.PlaybackProxy')
 
     def __init__(self, server_address, req_handler_class=PlaybackProxyHandler,
             bind_and_activate=True, ca=None, playback_index_db=None,
             warcs_dir=None):
-        BaseHTTPServer.HTTPServer.__init__(self, server_address, req_handler_class, bind_and_activate)
+        http_server.HTTPServer.__init__(self, server_address, req_handler_class, bind_and_activate)
         self.ca = ca
         self.playback_index_db = playback_index_db
         self.warcs_dir = warcs_dir
 
     def server_activate(self):
-        BaseHTTPServer.HTTPServer.server_activate(self)
+        http_server.HTTPServer.server_activate(self)
         self.logger.info('PlaybackProxy listening on {0}:{1}'.format(self.server_address[0], self.server_address[1]))
 
     def server_close(self):
         self.logger.info('PlaybackProxy shutting down')
-        BaseHTTPServer.HTTPServer.server_close(self)
+        http_server.HTTPServer.server_close(self)
 
 
 class DedupDb(object):
@@ -602,7 +661,7 @@ class DedupDb(object):
         else:
             self.logger.info('creating new deduplication database {}'.format(dbm_file))
 
-        self.db = gdbm.open(dbm_file, 'c')
+        self.db = dbm_gnu.open(dbm_file, 'c')
 
     def close(self):
         self.db.close()
@@ -611,21 +670,24 @@ class DedupDb(object):
         self.db.sync()
 
     def save(self, key, response_record, offset):
-        record_id = response_record.get_header(warctools.WarcRecord.ID)
-        url = response_record.get_header(warctools.WarcRecord.URL)
-        date = response_record.get_header(warctools.WarcRecord.DATE)
+        record_id = response_record.get_header(warctools.WarcRecord.ID).decode('latin1')
+        url = response_record.get_header(warctools.WarcRecord.URL).decode('latin1')
+        date = response_record.get_header(warctools.WarcRecord.DATE).decode('latin1')
 
         py_value = {'i':record_id, 'u':url, 'd':date}
         json_value = json.dumps(py_value, separators=(',',':'))
 
-        self.db[key] = json_value
+        self.db[key] = json_value.encode('utf-8')
         self.logger.debug('dedup db saved {}:{}'.format(key, json_value))
 
 
     def lookup(self, key):
         if key in self.db:
             json_result = self.db[key]
-            result = json.loads(json_result)
+            result = json.loads(json_result.decode('utf-8'))
+            result['i'] = result['i'].encode('latin1')
+            result['u'] = result['u'].encode('latin1')
+            result['d'] = result['d'].encode('latin1')
             return result
         else:
             return None
@@ -717,8 +779,7 @@ class WarcWriterThread(threading.Thread):
 
 
     def digest_str(self, hash_obj):
-        return '{}:{}'.format(hash_obj.name,
-                base64.b32encode(hash_obj.digest()) if self.base32 else hash_obj.hexdigest())
+        return hash_obj.name.encode('utf-8') + b':' + (base64.b32encode(hash_obj.digest()) if self.base32 else hash_obj.hexdigest().encode('ascii'))
 
 
     def build_warc_record(self, url, warc_date=None, recorder=None, data=None,
@@ -753,7 +814,7 @@ class WarcWriterThread(threading.Thread):
             headers.append((warctools.WarcRecord.CONTENT_TYPE, content_type))
 
         if recorder is not None:
-            headers.append((warctools.WarcRecord.CONTENT_LENGTH, str(len(recorder))))
+            headers.append((warctools.WarcRecord.CONTENT_LENGTH, str(len(recorder)).encode('latin1')))
             headers.append((warctools.WarcRecord.BLOCK_DIGEST,
                 self.digest_str(recorder.block_digest)))
             if recorder.payload_digest is not None:
@@ -764,7 +825,7 @@ class WarcWriterThread(threading.Thread):
             record = warctools.WarcRecord(headers=headers, content_file=recorder.tempfile)
 
         else:
-            headers.append((warctools.WarcRecord.CONTENT_LENGTH, str(len(data))))
+            headers.append((warctools.WarcRecord.CONTENT_LENGTH, str(len(data)).encode('latin1')))
             block_digest = hashlib.new(self.digest_algorithm, data)
             headers.append((warctools.WarcRecord.BLOCK_DIGEST,
                 self.digest_str(block_digest)))
@@ -796,21 +857,21 @@ class WarcWriterThread(threading.Thread):
         headers = []
         headers.append((warctools.WarcRecord.ID, record_id))
         headers.append((warctools.WarcRecord.TYPE, warctools.WarcRecord.WARCINFO))
-        headers.append((warctools.WarcRecord.FILENAME, filename))
+        headers.append((warctools.WarcRecord.FILENAME, filename.encode('latin1')))
         headers.append((warctools.WarcRecord.DATE, warc_record_date))
 
         warcinfo_fields = []
-        warcinfo_fields.append('software: warcprox.py https://github.com/internetarchive/warcprox')
+        warcinfo_fields.append(b'software: warcprox.py https://github.com/internetarchive/warcprox')
         hostname = socket.gethostname()
-        warcinfo_fields.append('hostname: {0}'.format(hostname))
-        warcinfo_fields.append('ip: {0}'.format(socket.gethostbyname(hostname)))
-        warcinfo_fields.append('format: WARC File Format 1.0')
+        warcinfo_fields.append('hostname: {}'.format(hostname).encode('latin1'))
+        warcinfo_fields.append('ip: {0}'.format(socket.gethostbyname(hostname)).encode('latin1'))
+        warcinfo_fields.append(b'format: WARC File Format 1.0')
         # warcinfo_fields.append('robots: ignore')
         # warcinfo_fields.append('description: {0}'.format(self.description))
         # warcinfo_fields.append('isPartOf: {0}'.format(self.is_part_of))
-        data = '\r\n'.join(warcinfo_fields) + '\r\n'
+        data = b'\r\n'.join(warcinfo_fields) + b'\r\n'
 
-        record = warctools.WarcRecord(headers=headers, content=('application/warc-fields', data))
+        record = warctools.WarcRecord(headers=headers, content=(b'application/warc-fields', data))
 
         return record
 
@@ -879,7 +940,7 @@ class WarcWriterThread(threading.Thread):
 
                 self._final_tasks(recorded_url, recordset, recordset_offset)
 
-            except Queue.Empty:
+            except queue.Empty:
                 if (self._fpath is not None
                         and self.rollover_idle_time is not None
                         and self.rollover_idle_time > 0
@@ -907,7 +968,7 @@ class PlaybackIndexDb(object):
         else:
             self.logger.info('creating new playback index database {}'.format(dbm_file))
 
-        self.db = gdbm.open(dbm_file, 'c')
+        self.db = dbm_gnu.open(dbm_file, 'c')
 
 
     def close(self):
@@ -922,27 +983,27 @@ class PlaybackIndexDb(object):
         response_record = recordset[0]
         # XXX canonicalize url?
         url = response_record.get_header(warctools.WarcRecord.URL)
-        date = response_record.get_header(warctools.WarcRecord.DATE)
-        record_id = response_record.get_header(warctools.WarcRecord.ID)
+        date_str = response_record.get_header(warctools.WarcRecord.DATE).decode('latin1')
+        record_id_str = response_record.get_header(warctools.WarcRecord.ID).decode('latin1')
 
         # there could be two visits of same url in the same second, and WARC-Date is
         # prescribed as YYYY-MM-DDThh:mm:ssZ, so we have to handle it :-\
 
         # url:{date1:[record1={'f':warcfile,'o':response_offset,'q':request_offset,'i':record_id},record2,...],date2:[{...}],...}
         if url in self.db:
-            existing_json_value = self.db[url]
+            existing_json_value = self.db[url].decode('utf-8')
             py_value = json.loads(existing_json_value)
         else:
             py_value = {}
 
-        if date in py_value:
-            py_value[date].append({'f':warcfile, 'o':offset, 'i':record_id})
+        if date_str in py_value:
+            py_value[date_str].append({'f':warcfile, 'o':offset, 'i':record_id_str})
         else:
-            py_value[date] = [{'f':warcfile, 'o':offset, 'i':record_id}]
+            py_value[date_str] = [{'f':warcfile, 'o':offset, 'i':record_id_str}]
 
         json_value = json.dumps(py_value, separators=(',',':'))
 
-        self.db[url] = json_value
+        self.db[url] = json_value.encode('utf-8')
 
         self.logger.debug('playback index saved: {}:{}'.format(url, json_value))
 
@@ -951,31 +1012,36 @@ class PlaybackIndexDb(object):
         if url not in self.db:
             return None, None
 
-        json_value = self.db[url]
-        self.logger.debug("'{}':{}".format(url, json_value))
+        json_value = self.db[url].decode('utf-8')
+        self.logger.debug("{}:{}".format(repr(url), repr(json_value)))
         py_value = json.loads(json_value)
 
         latest_date = max(py_value)
-        return latest_date, py_value[latest_date][0]
+        result = py_value[latest_date][0]
+        result['i'] = result['i'].encode('ascii')
+        return latest_date, result
 
 
+    # in python3 params are bytes
     def lookup_exact(self, url, warc_date, record_id):
         if url not in self.db:
             return None
 
-        json_value = self.db[url]
-        self.logger.debug("'{}':{}".format(url, json_value))
+        json_value = self.db[url].decode('utf-8')
+        self.logger.debug("{}:{}".format(repr(url), repr(json_value)))
         py_value = json.loads(json_value)
 
-        if warc_date in py_value:
-            for record in py_value[warc_date]:
-                if record['i'] == record_id:
+        warc_date_str = warc_date.decode('ascii')
+
+        if warc_date_str in py_value:
+            for record in py_value[warc_date_str]:
+                if record['i'].encode('ascii') == record_id:
                     self.logger.debug("found exact match for ({},{},{})".format(repr(warc_date), repr(record_id), repr(url)))
+                    record['i'] = record['i'].encode('ascii')
                     return record
         else:
             self.logger.info("match not found for ({},{},{})".format(repr(warc_date), repr(record_id), repr(url)))
             return None
-
 
 
 class WarcproxController(object):
@@ -1126,7 +1192,7 @@ def main(argv=sys.argv):
     else:
         dedup_db = DedupDb(args.dedup_db_file)
 
-    recorded_url_q = Queue.Queue()
+    recorded_url_q = queue.Queue()
 
     ca = CertificateAuthority(args.cacert, args.certs_dir)
 

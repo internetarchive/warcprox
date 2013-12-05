@@ -4,6 +4,7 @@
 *.pem
 *.db
 *.diff
+*.egg
 *.egg-info
 *.swp
 warcs

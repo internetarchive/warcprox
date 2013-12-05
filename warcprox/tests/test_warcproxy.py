@@ -3,7 +3,6 @@
 
 from warcprox import warcprox
 import unittest
-import BaseHTTPServer
 import threading
 import time
 import logging
@@ -14,10 +13,23 @@ import tempfile
 import OpenSSL
 import os
 import shutil
-import Queue
 import requests
 
-class TestHttpRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+try:
+    import http.server
+    http_server = http.server
+except ImportError:
+    import BaseHTTPServer
+    http_server = BaseHTTPServer
+
+try:
+    import queue
+except ImportError:
+    import Queue
+    queue = Queue
+
+
+class TestHttpRequestHandler(http_server.BaseHTTPRequestHandler):
     logger = logging.getLogger('TestHttpRequestHandler')
 
     def do_GET(self):
@@ -25,19 +37,19 @@ class TestHttpRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         m = re.match(r'^/([^/]+)/([^/]+)$', self.path)
         if m is not None:
-            special_header = 'warcprox-test-header: {}!'.format(m.group(1))
-            payload = 'I am the warcprox test payload! {}!\n'.format(10*m.group(2))
-            headers = ('HTTP/1.1 200 OK\r\n'
-                     +  'Content-Type: text/plain\r\n'
-                     +  '{}\r\n'
-                     +  'Content-Length: {}\r\n'
-                     +  '\r\n').format(special_header, len(payload))
+            special_header = 'warcprox-test-header: {}!'.format(m.group(1)).encode('utf-8')
+            payload = 'I am the warcprox test payload! {}!\n'.format(10*m.group(2)).encode('utf-8')
+            headers = (b'HTTP/1.1 200 OK\r\n'
+                    +  b'Content-Type: text/plain\r\n'
+                    +  special_header + b'\r\n'
+                    +  b'Content-Length: ' + str(len(payload)).encode('ascii') + b'\r\n'
+                    +  b'\r\n')
         else:
-            payload = '404 Not Found\n'
-            headers = ('HTTP/1.1 404 Not Found\r\n'
-                     +  'Content-Type: text/plain\r\n'
-                     +  'Content-Length: {}\r\n'
-                     +  '\r\n').format(len(payload))
+            payload = b'404 Not Found\n'
+            headers = (b'HTTP/1.1 404 Not Found\r\n'
+                    +  b'Content-Type: text/plain\r\n'
+                    +  b'Content-Length: ' + str(len(payload)).encode('ascii') + b'\r\n'
+                    +  b'\r\n')
 
         self.connection.sendall(headers)
         self.connection.sendall(payload)
@@ -82,7 +94,7 @@ class WarcproxTest(unittest.TestCase):
 
 
     def _start_http_servers(self):
-        self.http_daemon = BaseHTTPServer.HTTPServer(('localhost', 0),
+        self.http_daemon = http_server.HTTPServer(('localhost', 0),
                 RequestHandlerClass=TestHttpRequestHandler)
         self.logger.info('starting http://{}:{}'.format(self.http_daemon.server_address[0], self.http_daemon.server_address[1]))
         self.http_daemon_thread = threading.Thread(name='HttpdThread',
@@ -90,7 +102,7 @@ class WarcproxTest(unittest.TestCase):
         self.http_daemon_thread.start()
 
         # http://www.piware.de/2011/01/creating-an-https-server-in-python/
-        self.https_daemon = BaseHTTPServer.HTTPServer(('localhost', 0),
+        self.https_daemon = http_server.HTTPServer(('localhost', 0),
                 RequestHandlerClass=TestHttpRequestHandler)
         # self.https_daemon.socket = ssl.wrap_socket(httpd.socket, certfile='path/to/localhost.pem', server_side=True)
         self.https_daemon.socket = ssl.wrap_socket(self.https_daemon.socket, certfile=self._cert, server_side=True)
@@ -107,7 +119,7 @@ class WarcproxTest(unittest.TestCase):
         self._ca_dir = tempfile.mkdtemp(prefix='warcprox-test-', suffix='-ca')
         ca = warcprox.CertificateAuthority(self._ca_file, self._ca_dir)
 
-        recorded_url_q = Queue.Queue()
+        recorded_url_q = queue.Queue()
 
         proxy = warcprox.WarcProxy(server_address=('localhost', 0), ca=ca,
                 recorded_url_q=recorded_url_q)
@@ -183,24 +195,24 @@ class WarcproxTest(unittest.TestCase):
         url = 'http://localhost:{}/'.format(self.http_daemon.server_port)
         response = requests.get(url)
         self.assertEqual(response.status_code, 404)
-        self.assertEqual(response.content, '404 Not Found\n')
+        self.assertEqual(response.content, b'404 Not Found\n')
 
         url = 'https://localhost:{}/'.format(self.https_daemon.server_port)
         response = requests.get(url, verify=False)
         self.assertEqual(response.status_code, 404)
-        self.assertEqual(response.content, '404 Not Found\n')
+        self.assertEqual(response.content, b'404 Not Found\n')
 
         url = 'http://localhost:{}/a/b'.format(self.http_daemon.server_port)
         response = requests.get(url)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers['warcprox-test-header'], 'a!')
-        self.assertEqual(response.content, 'I am the warcprox test payload! bbbbbbbbbb!\n')
+        self.assertEqual(response.content, b'I am the warcprox test payload! bbbbbbbbbb!\n')
 
         url = 'https://localhost:{}/c/d'.format(self.https_daemon.server_port)
         response = requests.get(url, verify=False)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers['warcprox-test-header'], 'c!')
-        self.assertEqual(response.content, 'I am the warcprox test payload! dddddddddd!\n')
+        self.assertEqual(response.content, b'I am the warcprox test payload! dddddddddd!\n')
 
 
     def poll_playback_until(self, url, status, timeout_sec):
@@ -221,18 +233,18 @@ class WarcproxTest(unittest.TestCase):
         # ensure playback fails before archiving
         response = requests.get(url, proxies=self.playback_proxies)
         self.assertEqual(response.status_code, 404)
-        self.assertEqual(response.content, '404 Not in Archive\n')
+        self.assertEqual(response.content, b'404 Not in Archive\n')
 
         # archive
         response = requests.get(url, proxies=self.archiving_proxies)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers['warcprox-test-header'], 'a!')
-        self.assertEqual(response.content, 'I am the warcprox test payload! bbbbbbbbbb!\n')
+        self.assertEqual(response.content, b'I am the warcprox test payload! bbbbbbbbbb!\n')
 
         response = self.poll_playback_until(url, status=200, timeout_sec=10)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers['warcprox-test-header'], 'a!')
-        self.assertEqual(response.content, 'I am the warcprox test payload! bbbbbbbbbb!\n')
+        self.assertEqual(response.content, b'I am the warcprox test payload! bbbbbbbbbb!\n')
 
 
     def _test_archive_and_playback_https_url(self):
@@ -241,19 +253,19 @@ class WarcproxTest(unittest.TestCase):
         # ensure playback fails before archiving
         response = requests.get(url, proxies=self.playback_proxies, verify=False)
         self.assertEqual(response.status_code, 404)
-        self.assertEqual(response.content, '404 Not in Archive\n')
+        self.assertEqual(response.content, b'404 Not in Archive\n')
 
         # fetch & archive response
         response = requests.get(url, proxies=self.archiving_proxies, verify=False)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers['warcprox-test-header'], 'c!')
-        self.assertEqual(response.content, 'I am the warcprox test payload! dddddddddd!\n')
+        self.assertEqual(response.content, b'I am the warcprox test payload! dddddddddd!\n')
 
         # test playback
         response = self.poll_playback_until(url, status=200, timeout_sec=10)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers['warcprox-test-header'], 'c!')
-        self.assertEqual(response.content, 'I am the warcprox test payload! dddddddddd!\n')
+        self.assertEqual(response.content, b'I am the warcprox test payload! dddddddddd!\n')
 
 
     # test dedup of same http url with same payload
@@ -263,30 +275,30 @@ class WarcproxTest(unittest.TestCase):
         # ensure playback fails before archiving
         response = requests.get(url, proxies=self.playback_proxies, verify=False)
         self.assertEqual(response.status_code, 404)
-        self.assertEqual(response.content, '404 Not in Archive\n')
+        self.assertEqual(response.content, b'404 Not in Archive\n')
 
         # check not in dedup db
-        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup('sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
+        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup(b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
         self.assertIsNone(dedup_lookup)
 
         # archive
         response = requests.get(url, proxies=self.archiving_proxies, verify=False)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers['warcprox-test-header'], 'e!')
-        self.assertEqual(response.content, 'I am the warcprox test payload! ffffffffff!\n')
+        self.assertEqual(response.content, b'I am the warcprox test payload! ffffffffff!\n')
 
         # test playback
         response = self.poll_playback_until(url, status=200, timeout_sec=10)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers['warcprox-test-header'], 'e!')
-        self.assertEqual(response.content, 'I am the warcprox test payload! ffffffffff!\n')
+        self.assertEqual(response.content, b'I am the warcprox test payload! ffffffffff!\n')
 
         # check in dedup db
         # {u'i': u'<urn:uuid:e691dc0f-4bb9-4ad8-9afb-2af836aa05e4>', u'u': u'https://localhost:62841/c/d', u'd': u'2013-11-22T00:14:37Z'}
-        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup('sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
-        self.assertEquals(dedup_lookup['u'], url)
-        self.assertRegexpMatches(dedup_lookup['i'], r'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$')
-        self.assertRegexpMatches(dedup_lookup['d'], r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$')
+        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup(b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
+        self.assertEqual(dedup_lookup['u'], url.encode('ascii'))
+        self.assertRegexpMatches(dedup_lookup['i'], br'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$')
+        self.assertRegexpMatches(dedup_lookup['d'], br'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$')
         record_id = dedup_lookup['i']
         dedup_date = dedup_lookup['d']
 
@@ -298,23 +310,23 @@ class WarcproxTest(unittest.TestCase):
         response = requests.get(url, proxies=self.archiving_proxies, verify=False)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers['warcprox-test-header'], 'e!')
-        self.assertEqual(response.content, 'I am the warcprox test payload! ffffffffff!\n')
+        self.assertEqual(response.content, b'I am the warcprox test payload! ffffffffff!\n')
 
         # XXX need to give warc writer thread a chance, and we don't have any change to poll for :-\
         time.sleep(2.0)
 
         # check in dedup db (no change from prev)
-        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup('sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
-        self.assertEquals(dedup_lookup['u'], url)
-        self.assertEquals(dedup_lookup['i'], record_id)
-        self.assertEquals(dedup_lookup['d'], dedup_date)
+        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup(b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
+        self.assertEqual(dedup_lookup['u'], url.encode('ascii'))
+        self.assertEqual(dedup_lookup['i'], record_id)
+        self.assertEqual(dedup_lookup['d'], dedup_date)
 
         # test playback
         self.logger.debug('testing playback of revisit of {}'.format(url))
         response = self.poll_playback_until(url, status=200, timeout_sec=10)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers['warcprox-test-header'], 'e!')
-        self.assertEqual(response.content, 'I am the warcprox test payload! ffffffffff!\n')
+        self.assertEqual(response.content, b'I am the warcprox test payload! ffffffffff!\n')
         # XXX how to check dedup was used?
 
 
@@ -325,30 +337,30 @@ class WarcproxTest(unittest.TestCase):
         # ensure playback fails before archiving
         response = requests.get(url, proxies=self.playback_proxies, verify=False)
         self.assertEqual(response.status_code, 404)
-        self.assertEqual(response.content, '404 Not in Archive\n')
+        self.assertEqual(response.content, b'404 Not in Archive\n')
 
         # check not in dedup db
-        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup('sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
+        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup(b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
         self.assertIsNone(dedup_lookup)
 
         # archive
         response = requests.get(url, proxies=self.archiving_proxies, verify=False)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers['warcprox-test-header'], 'g!')
-        self.assertEqual(response.content, 'I am the warcprox test payload! hhhhhhhhhh!\n')
+        self.assertEqual(response.content, b'I am the warcprox test payload! hhhhhhhhhh!\n')
 
         # test playback
         response = self.poll_playback_until(url, status=200, timeout_sec=10)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers['warcprox-test-header'], 'g!')
-        self.assertEqual(response.content, 'I am the warcprox test payload! hhhhhhhhhh!\n')
+        self.assertEqual(response.content, b'I am the warcprox test payload! hhhhhhhhhh!\n')
 
         # check in dedup db
         # {u'i': u'<urn:uuid:e691dc0f-4bb9-4ad8-9afb-2af836aa05e4>', u'u': u'https://localhost:62841/c/d', u'd': u'2013-11-22T00:14:37Z'}
-        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup('sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
-        self.assertEquals(dedup_lookup['u'], url)
-        self.assertRegexpMatches(dedup_lookup['i'], r'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$')
-        self.assertRegexpMatches(dedup_lookup['d'], r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$')
+        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup(b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
+        self.assertEqual(dedup_lookup['u'], url.encode('ascii'))
+        self.assertRegexpMatches(dedup_lookup['i'], br'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$')
+        self.assertRegexpMatches(dedup_lookup['d'], br'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$')
         record_id = dedup_lookup['i']
         dedup_date = dedup_lookup['d']
 
@@ -360,23 +372,23 @@ class WarcproxTest(unittest.TestCase):
         response = requests.get(url, proxies=self.archiving_proxies, verify=False)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers['warcprox-test-header'], 'g!')
-        self.assertEqual(response.content, 'I am the warcprox test payload! hhhhhhhhhh!\n')
+        self.assertEqual(response.content, b'I am the warcprox test payload! hhhhhhhhhh!\n')
 
         # XXX need to give warc writer thread a chance, and we don't have any change to poll for :-\
         time.sleep(2.0)
 
         # check in dedup db (no change from prev)
-        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup('sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
-        self.assertEquals(dedup_lookup['u'], url)
-        self.assertEquals(dedup_lookup['i'], record_id)
-        self.assertEquals(dedup_lookup['d'], dedup_date)
+        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup(b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
+        self.assertEqual(dedup_lookup['u'], url.encode('ascii'))
+        self.assertEqual(dedup_lookup['i'], record_id)
+        self.assertEqual(dedup_lookup['d'], dedup_date)
 
         # test playback
         self.logger.debug('testing playback of revisit of {}'.format(url))
         response = self.poll_playback_until(url, status=200, timeout_sec=10)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers['warcprox-test-header'], 'g!')
-        self.assertEqual(response.content, 'I am the warcprox test payload! hhhhhhhhhh!\n')
+        self.assertEqual(response.content, b'I am the warcprox test payload! hhhhhhhhhh!\n')
         # XXX how to check dedup was used?
 
 
