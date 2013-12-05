@@ -1,0 +1,10 @@
+# vim: set sw=4 et:
+#
+
+language: python
+python:
+    - "2.7"
+    - "3.2"
+    - "3.3"
+script: python setup.py test
+

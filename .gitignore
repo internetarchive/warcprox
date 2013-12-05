@@ -10,3 +10,4 @@
 warcs
 build
 dist
+.tox
