@@ -227,6 +227,11 @@ class ProxyingRecorder(object):
         self._update(hunk)
         return hunk
 
+    def readinto(self, b):
+        n = self.fp.readinto(b)
+        self._update(b[:n])
+        return n
+
     def readline(self, size=-1):
         # XXX depends on implementation details of self.fp.readline(), in
         # particular that it doesn't call self.fp.read()
