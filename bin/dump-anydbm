@@ -8,19 +8,31 @@ module can read. Included with warcprox because it's useful for inspecting a
 deduplication database or a playback index database, but it is a generic tool.
 """
 
-import anydbm
+try:
+    import dbm
+    whichdb = dbm.whichdb
+except:
+    import anydbm 
+    dbm = anydbm
+    from whichdb import whichdb
+
 import sys
+import os.path
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         sys.stderr.write("usage: {} DBM_FILE\n".format(sys.argv[0]))
         exit(1)
 
-    # import whichdb
-    # which = whichdb.whichdb(sys.argv[1])
-    # print('{} is a {} db'.format(sys.argv[1], which))
+    if not os.path.exists(sys.argv[1]):
+        sys.stderr.write('No such file {}\n\n'.format(sys.argv[1]))
+        sys.stderr.write("usage: {} DBM_FILE\n".format(sys.argv[0]))
+        exit(1)
 
-    db = anydbm.open(sys.argv[1])
+    which = whichdb(sys.argv[1])
+    print('{} is a {} db'.format(sys.argv[1], which))
+
+    db = dbm.open(sys.argv[1], 'r')
 
     for key in db.keys():
         print("{}:{}".format(key, db[key]))
