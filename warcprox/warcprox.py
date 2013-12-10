@@ -99,7 +99,7 @@ class CertificateAuthority(object):
         self.cert.set_version(3)
         # avoid sec_error_reused_issuer_and_serial
         self.cert.set_serial_number(random.randint(0,2**64-1))
-        self.cert.get_subject().CN = 'warcprox certificate authority on {}'.format(socket.gethostname())
+        self.cert.get_subject().CN = 'Warcprox CA on {}'.format(socket.gethostname())[:64]
         self.cert.gmtime_adj_notBefore(0)                # now
         self.cert.gmtime_adj_notAfter(100*365*24*60*60)  # 100 yrs in future
         self.cert.set_issuer(self.cert.get_subject())
@@ -895,6 +895,7 @@ class WarcWriterThread(threading.Thread):
             self._f = open(self._fpath, 'wb')
 
             warcinfo_record = self._build_warcinfo_record(self._f_finalname)
+            self.logger.debug('warcinfo_record.headers={}'.format(warcinfo_record.headers))
             warcinfo_record.write_to(self._f, gzip=self.gzip)
 
             self._serial += 1
