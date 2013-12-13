@@ -13,7 +13,7 @@ setuptools.setup(name='warcprox',
         license='GPL',
         packages=['warcprox'],
         install_requires=['pyopenssl', 'warctools>=4.8.3'],  # gdbm not in pip :(
-        dependency_links=['git+https://github.com/internetarchive/warctools.git'],
+        dependency_links=['git+https://github.com/internetarchive/warctools.git#egg=warctools-4.8.3'],
         tests_require=['requests>=2.0.1'],  # >=2.0.1 for https://github.com/kennethreitz/requests/pull/1636
         test_suite='warcprox.tests',
         scripts=['bin/dump-anydbm', 'bin/warcprox'],
