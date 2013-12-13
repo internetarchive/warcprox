@@ -1151,8 +1151,12 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
     arg_parser.add_argument('--rollover-idle-time',
             dest='rollover_idle_time', default=None,
             help="WARC file rollover idle time threshold in seconds (so that Friday's last open WARC doesn't sit there all weekend waiting for more data)")
+    try:
+        hash_algos = hashlib.algorithms_guaranteed
+    except AttributeError:
+        hash_algos = hashlib.algorithms
     arg_parser.add_argument('-g', '--digest-algorithm', dest='digest_algorithm',
-            default='sha1', help='digest algorithm, one of {}'.format(', '.join(hashlib.algorithms)))
+            default='sha1', help='digest algorithm, one of {}'.format(', '.join(hash_algos)))
     arg_parser.add_argument('--base32', dest='base32', action='store_true',
             default=False, help='write digests in Base32 instead of hex')
     arg_parser.add_argument('-j', '--dedup-db-file', dest='dedup_db_file',
