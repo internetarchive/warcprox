@@ -398,14 +398,19 @@ class WarcProxyHandler(MitmProxyHandler):
 
     def _proxy_request(self):
         # Build request
-        req = '{} {} {}\r\n'.format(self.command, self.path, self.request_version).encode('utf-8')
+        req_str = '{} {} {}\r\n'.format(self.command, self.path, self.request_version)
 
         # Add headers to the request
-        req += str(self.headers).encode('utf-8') + b'\r\n'
+        # XXX in at least python3.3 str(self.headers) uses \n not \r\n :(
+        req_str += '\r\n'.join('{}: {}'.format(k,v) for (k,v) in self.headers.items())
+
+        req = req_str.encode('utf-8') + b'\r\n\r\n'
 
         # Append message body if present to the request
         if 'Content-Length' in self.headers:
             req += self.rfile.read(int(self.headers['Content-Length']))
+
+        self.logger.debug('req={}'.format(repr(req)))
 
         # Send it down the pipe!
         self._proxy_sock.sendall(req)
