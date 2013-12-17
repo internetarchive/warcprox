@@ -3,6 +3,7 @@
 #from warcprox.bin import dump-anydbm
 import pytest
 import os
+import subprocess # to access the script from shell
 
 # will try as python 3 then default to python 2 modules
 try: 
@@ -70,6 +71,17 @@ def test_assert_reading_dumbdbm_correctly(make_dumbdbm_test_db):
 	assert len(db.keys()) == 2
 	assert db.has_key('very first key')
 	assert db['very first key'] == 'very first value'
+
+def test_dumpanydbm_identify_gbdm(make_gdbm_test_db):
+	print "running test_dumpanydbm_identify_gbdm"
+	output = subprocess.check_output(["dump-anydbm", make_gdbm_test_db])
+	output = output.split("/n")
+	
+	# split on space, then grab 4th word, which is db type
+	which = output[0].split(' ')[3]
+	print which
+	assert which == "gdbm" or "dbm.gdbm"
+
 
 
 
