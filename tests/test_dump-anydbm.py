@@ -16,5 +16,12 @@ except:
 	import dumbdbm as dumb
 	from whichdb import whichdb
 
-
-
+@pytest.fixture
+def make_gdbm_test_db():
+	db_name ="test_gdbm"
+	print "creating", db_name
+	test_db = gdbm.open(db_name, "n")
+	test_db['very first key'] = 'very first value'
+	test_db['second key'] = 'second value'
+	test_db.close()
+	return db_name
