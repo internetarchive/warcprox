@@ -37,3 +37,10 @@ def make_gdbm_test_db(request):
 def test_assert_gdbm_db_is_created_and_correctly_identified(make_gdbm_test_db):
 	print "runing assert_gdbm_db_is_created_and_correctly_identified with gdbm test file"
 	assert whichdb(make_gdbm_test_db) == "dbm.gdbm" or "gdbm"
+
+def test_assert_reading_gdbm_correctly(make_gdbm_test_db):
+	print "running assert_reading_gdbm_correctly with gdbm test db"
+	db = gdbm.open(make_gdbm_test_db, "r")
+	assert len(db.keys()) == 2
+	assert db.has_key('very first key')
+	assert db['very first key'] == 'very first value'
