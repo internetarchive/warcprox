@@ -2,6 +2,7 @@
 
 #from warcprox.bin import dump-anydbm
 import pytest
+import os
 
 # will try as python 3 then default to python 2 modules
 try: 
@@ -16,14 +17,21 @@ except:
 	import dumbdbm as dumb
 	from whichdb import whichdb
 
-@pytest.fixture
-def make_gdbm_test_db():
+@pytest.fixture(scope = "function")
+def make_gdbm_test_db(request):
 	db_name ="test_gdbm"
 	print "creating", db_name
 	test_db = gdbm.open(db_name, "n")
 	test_db['very first key'] = 'very first value'
 	test_db['second key'] = 'second value'
 	test_db.close()
+	def delete_test_dumbdbm():
+		print "deleting", db_name
+		os.remove(db_name+".dir")
+		os.remove(db_name+".bak")
+		os.remove(db_name+".dat")
+
+	request.addfinalizer(delete_test_dumbdbm)
 	return db_name
 
 def test_assert_gdbm_db_is_created_and_correctly_identified(make_gdbm_test_db):
