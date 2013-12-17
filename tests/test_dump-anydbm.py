@@ -27,10 +27,8 @@ def make_gdbm_test_db(request):
 	test_db.close()
 	def delete_test_dumbdbm():
 		print "deleting", db_name
-		os.remove(db_name+".dir")
-		os.remove(db_name+".bak")
-		os.remove(db_name+".dat")
-
+		os.remove(db_name)
+		
 	request.addfinalizer(delete_test_dumbdbm)
 	return db_name
 
