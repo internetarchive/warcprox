@@ -25,3 +25,7 @@ def make_gdbm_test_db():
 	test_db['second key'] = 'second value'
 	test_db.close()
 	return db_name
+
+def test_assert_gdbm_db_is_created_and_correctly_identified(make_gdbm_test_db):
+	print "runing assert_gdbm_db_is_created_and_correctly_identified with gdbm test file"
+	assert whichdb(make_gdbm_test_db) == "dbm.gdbm" or "gdbm"
