@@ -40,13 +40,13 @@ def make_gdbm_test_db(request):
 	db_name ="test_gdbm"
 	print "creating", db_name
 	test_db = gdbm.open(db_name, "n")
-	test_db['very first key'] = 'very first value'
-	test_db['second key'] = 'second value'
+	test_db[key1] = val1
+	test_db[key2] = val2
 	test_db.close()
 	def delete_test_dumbdbm():
 		print "deleting", db_name
 		os.remove(db_name)
-		
+
 	request.addfinalizer(delete_test_dumbdbm)
 	return db_name
 
@@ -93,8 +93,8 @@ def test_assert_reading_dumbdbm_correctly(make_dumbdbm_test_db):
 	assert db.has_key(key1)
 	assert db[key1] == val1
 
-def test_dumpanydbm_identify_gbdm(make_gdbm_test_db):
-	print "running test_dumpanydbm_identify_gbdm"
+def test_dumpanydbm_identify_gdbm(make_gdbm_test_db):
+	print "running test_dumpanydbm_identify_gdbm"
 	output = subprocess.check_output(["dump-anydbm", make_gdbm_test_db])
 	output = output.strip().split("\n")
 	assert len(output) == 3 # 2 keys plus whichdb line
@@ -113,8 +113,11 @@ def test_dumpanydbm_identify_gbdm(make_gdbm_test_db):
 	assert db_dump_second_pair[0] == key2
 	assert db_dump_second_pair[1] == val2
 
-
-
+def test_dumpanydbm_identify_dumbdbm(make_dumbdbm_test_db):
+	print "running test_dumpanydbm_identify_dumbdbm"
+	output = subprocess.call(["dump-anydbm", make_dumbdbm_test_db])
+	# output = output.strip().split("\n")
+	assert output != 0 # unable to read dumbdbm, so dump-anydbm exits with error
 
 
 
