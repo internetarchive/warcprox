@@ -24,15 +24,31 @@ if __name__ == "__main__":
         sys.stderr.write("usage: {} DBM_FILE\n".format(sys.argv[0]))
         exit(1)
 
-    if not os.path.exists(sys.argv[1]):
+    filename = sys.argv[1]
+    file_location = sys.argv[1]
+    which = whichdb(filename)
+
+    # if which returns none and the file does not exist, print usage line
+    if which == None and not os.path.exists(sys.argv[1]):
         sys.stderr.write('No such file {}\n\n'.format(sys.argv[1]))
         sys.stderr.write("usage: {} DBM_FILE\n".format(sys.argv[0]))
         exit(1)
 
-    which = whichdb(sys.argv[1])
-    print('{} is a {} db'.format(sys.argv[1], which))
+    # covers case where an ndbm is checked with its extension & identified incorrectly
+    elif 'bsd' in which:
+        correct_file = filename.split(".db")[0]
+        correct_which = whichdb(correct_file)
+        if correct_which == ('dbm' or 'dbm.ndbm'):
+            filename = correct_file
+            which = correct_which
 
-    db = dbm.open(sys.argv[1], 'r')
+    elif which == '':
+        sys.stderr.write("{} is an unrecognized database type\n".format(sys.argv[1]))
+        exit(1)
+
+    print('{} is a {} db'.format(filename, which))
+
+    db = dbm.open(filename, 'r')
 
     for key in db.keys():
         print("{}:{}".format(key, db[key]))
