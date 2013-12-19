@@ -54,17 +54,16 @@ def make_gdbm_test_db(request):
 def make_ndbm_test_db(request):
 	db_name = "test_ndbm"
 	print "creating", db_name
-	open(db_name+".db", 'a').close()
-	test_db = ndbm.open(db_name+".db", "n")
+	test_db = ndbm.open(db_name, "n")
 	test_db['very first key'] = 'very first value'
 	test_db['second key'] = 'second value'
 	test_db.close()
 	def delete_test_ndbm():
 		print "deleting", db_name
-		# os.remove(db_name+".db")
+		os.remove(db_name+".db")
 
 	request.addfinalizer(delete_test_ndbm)
-	return db_name+".db"
+	return db_name
 
 @pytest.fixture(scope = "function")
 def make_dumbdbm_test_db(request):
