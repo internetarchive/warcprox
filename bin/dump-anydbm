@@ -10,7 +10,9 @@ deduplication database or a playback index database, but it is a generic tool.
 
 try:
     import dbm
+    from dbm import ndbm
     whichdb = dbm.whichdb
+
 except:
     import anydbm 
     dbm = anydbm
@@ -25,7 +27,6 @@ if __name__ == "__main__":
         exit(1)
 
     filename = sys.argv[1]
-    file_location = sys.argv[1]
     which = whichdb(filename)
 
     # if which returns none and the file does not exist, print usage line
