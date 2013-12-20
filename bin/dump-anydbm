@@ -45,11 +45,17 @@ if __name__ == "__main__":
 
     elif which == '':
         sys.stderr.write("{} is an unrecognized database type\n".format(sys.argv[1]))
+        sys.stderr.write("Try the file again by removing the extension\n")
         exit(1)
 
-    print('{} is a {} db'.format(filename, which))
+    try:
+        out = sys.stdout.buffer
+
+    except AttributeError:
+        out = sys.stdout
+
+    out.write(filename.encode('UTF-8') + b' is a ' + which.encode('UTF-8') + b' db\n')
 
     db = dbm.open(filename, 'r')
-
     for key in db.keys():
-        print("{}:{}".format(key, db[key]))
+        out.write(key + b":" + db[key] + b"\n")
