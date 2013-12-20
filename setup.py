@@ -28,7 +28,7 @@ setuptools.setup(name='warcprox',
             'Programming Language :: Python :: 3.3',
             'Topic :: Internet :: Proxy Servers',
             'Topic :: Internet :: WWW/HTTP',
-            'Topic :: Software Development :: Libraries :: Python Modules'
+            'Topic :: Software Development :: Libraries :: Python Modules',
             'Topic :: System :: Archiving',
         ])
 
