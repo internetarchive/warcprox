@@ -2,8 +2,6 @@ warcprox - WARC writing MITM HTTP/S proxy
 -----------------------------------------
 .. image:: https://travis-ci.org/internetarchive/warcprox.png?branch=master   
         :target: https://travis-ci.org/internetarchive/warcprox
-.. image:: https://pypip.in/d/warcprox/badge.png
-        :target: https://pypi.python.org/pypi/warcprox
 
 Based on the excellent and simple pymiproxy by Nadeem Douba.
 https://github.com/allfro/pymiproxy
@@ -19,14 +17,6 @@ cert as a trusted cert in your browser. If you don't do that, you will
 get the warning when you visit each new site. But worse, any embedded
 https content on a different server will simply fail to load, because
 the browser will reject the certificate without telling you.
-
-Dependencies
-~~~~~~~~~~~~
-
-Currently depends on tweaks branch of my fork of warctools.
-https://github.com/nlevitt/warctools/tree/tweaks Hopefully the changes
-in that branch, or something equivalent, will be incorporated into
-warctools mainline.
 
 Usage
 ~~~~~
