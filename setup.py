@@ -17,5 +17,18 @@ setuptools.setup(name='warcprox',
         tests_require=['requests>=2.0.1'],  # >=2.0.1 for https://github.com/kennethreitz/requests/pull/1636
         test_suite='warcprox.tests',
         scripts=['bin/dump-anydbm', 'bin/warcprox'],
-        zip_safe=False)
+        zip_safe=False,
+        classifiers=[
+            'Development Status :: 5 - Production/Stable',
+            'Environment :: Console',
+            'License :: OSI Approved :: GNU General Public License (GPL)',
+            'Programming Language :: Python :: 2.7',
+            'Programming Language :: Python :: 3',
+            'Programming Language :: Python :: 3.2',
+            'Programming Language :: Python :: 3.3',
+            'Topic :: Internet :: Proxy Servers',
+            'Topic :: Internet :: WWW/HTTP',
+            'Topic :: Software Development :: Libraries :: Python Modules'
+            'Topic :: System :: Archiving',
+        ])
 
