@@ -92,63 +92,25 @@ def make_dumbdbm_test_db(request):
 def test_dumpanydbm_identify_gdbm(make_gdbm_test_db):
     print("running test_dumpanydbm_identify_gdbm")
     output = subprocess.check_output([dump_anydbm, make_gdbm_test_db])
-    output = output.decode(encoding='UTF-8').strip().split("\n")
-    assert len(output) == 3 # 2 keys plus whichdb line
+    print(b"script printout: \n" + output)
 
-    # split on space, then grab 4th word, which is db type
-    which = output[0].split(' ')[3]
-    print(which)
-    assert which == gdbm_type
-
-    #split remaining lines on ':' that separates key & value
-    db_dump_first_pair = output[1].split(':')
-    assert db_dump_first_pair[0] == key1
-    assert db_dump_first_pair[1] == val1
-
-    db_dump_second_pair = output[2].split(':')
-    assert db_dump_second_pair[0] == key2
-    assert db_dump_second_pair[1] == val2
+    assert (output == b'test_gdbm is a ' + gdbm_type.encode(encoding='UTF-8') + b' db\nvery first key:very first value\nsecond key:second value\n' or
+            output == b'test_gdbm is a ' + gdbm_type.encode(encoding='UTF-8') + b' db\nsecond key:second value\nvery first key:very first value\n')
 
 
 def test_dumpanydbm_identify_ndbm(make_ndbm_test_db):
     print("running test_dumpanydbm_identify_ndbm")
     output = subprocess.check_output([dump_anydbm, make_ndbm_test_db])
-    output = output.decode(encoding='UTF-8').strip().split("\n")
+    print(b"script printout: \n" + output)
 
-    assert len(output) == 3 # 2 keys plus whichdb line
-
-    # split on space, then grab 4th word, which is db type
-    which = output[0].split(' ')[3]
-    print(which)
-    assert which == ndbm_type
-
-    #split remaining lines on ':' that separates key & value
-    db_dump_first_pair = output[1].split(':')
-    assert db_dump_first_pair[0] == key1
-    assert db_dump_first_pair[1] == val1
-
-    db_dump_second_pair = output[2].split(':')
-    assert db_dump_second_pair[0] == key2
-    assert db_dump_second_pair[1] == val2
+    assert (output == b'test_ndbm is a ' + ndbm_type.encode(encoding='UTF-8') + b' db\nvery first key:very first value\nsecond key:second value\n' or
+            output == b'test_ndbm is a ' + ndbm_type.encode(encoding='UTF-8') + b' db\nsecond key:second value\nvery first key:very first value\n')
 
 
 def test_dumpanydbm_identify_dumbdbm(make_dumbdbm_test_db):
     print("running test_dumpanydbm_identify_dumbdbm")
     output = subprocess.check_output([dump_anydbm, make_dumbdbm_test_db])
-    output = output.decode(encoding='UTF-8').strip().split("\n")
-    assert len(output) == 3 # 2 keys plus whichdb line
-    print(output)
+    print(b"script printout: \n" + output)
 
-    # split on space, then grab 4th word, which is db type
-    which = output[0].split(' ')[3]
-    print(which)
-    assert which == dumb_type
-
-    #split remaining lines on ':' that separates key & value
-    db_dump_first_pair = output[1].split(':')
-    assert db_dump_first_pair[0] == key1
-    assert db_dump_first_pair[1] == val1
-
-    db_dump_second_pair = output[2].split(':')
-    assert db_dump_second_pair[0] == key2
-    assert db_dump_second_pair[1] == val2
+    assert (output == b'test_dumbdbm is a ' + dumb_type.encode(encoding='UTF-8') + b' db\nvery first key:very first value\nsecond key:second value\n' or
+            output == b'test_dumbdbm is a ' + dumb_type.encode(encoding='UTF-8') + b' db\nsecond key:second value\nvery first key:very first value\n')
