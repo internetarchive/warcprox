@@ -14,9 +14,9 @@ try:
 
     whichdb = dbm.whichdb
 
-    ndbm_type = "dbm.ndbm"
-    gdbm_type = "dbm.gnu"
-    dumb_type = "dbm.dumb"
+    ndbm_type = b"dbm.ndbm"
+    gdbm_type = b"dbm.gnu"
+    dumb_type = b"dbm.dumb"
 
 except:
     import dbm as ndbm
@@ -25,9 +25,9 @@ except:
 
     from whichdb import whichdb
 
-    ndbm_type = "dbm"
-    gdbm_type = "gdbm"
-    dumb_type = "dumbdbm"
+    ndbm_type = b"dbm"
+    gdbm_type = b"gdbm"
+    dumb_type = b"dumbdbm"
 
 #global settings
 key1 = 'very first key'
@@ -38,7 +38,7 @@ dump_anydbm = "dump-anydbm"
 
 
 @pytest.fixture(scope="function")
-def make_gdbm_test_db(request):
+def gdbm_test_db(request):
     print("creating test gdbm file")
     temp_file = tempfile.NamedTemporaryFile()
     test_db = gdbm.open(temp_file.name, "n")
@@ -46,16 +46,16 @@ def make_gdbm_test_db(request):
     test_db[key2] = val2
     test_db.close()
 
-    def delete_test_dumbdbm():
+    def delete_gdbm_test_db():
         print("deleting test gdbm file")
         temp_file.close()
 
-    request.addfinalizer(delete_test_dumbdbm)
+    request.addfinalizer(delete_gdbm_test_db)
     return temp_file.name
 
 
 @pytest.fixture(scope="function")
-def make_ndbm_test_db(request):
+def ndbm_test_db(request):
     print("creating test ndbm file")
     temp_file = tempfile.NamedTemporaryFile()
     test_db = ndbm.open(temp_file.name, "n")
@@ -73,7 +73,7 @@ def make_ndbm_test_db(request):
 
 
 @pytest.fixture(scope="function")
-def make_dumbdbm_test_db(request):
+def dumbdbm_test_db(request):
     print("creating test dumbdbm file")
     temp_file = tempfile.NamedTemporaryFile()
     test_db = dumb.open(temp_file.name, "n")
@@ -81,39 +81,39 @@ def make_dumbdbm_test_db(request):
     test_db[key2] = val2
     test_db.close()
 
-    def delete_test_dumbdbm():
+    def delete_dumbdbm_test_db():
         print("deleting test dumbdbm file")
         temp_file.close()
         os.remove(temp_file.name + ".dir")
         os.remove(temp_file.name + ".bak")
         os.remove(temp_file.name + ".dat")
 
-    request.addfinalizer(delete_test_dumbdbm)
+    request.addfinalizer(delete_dumbdbm_test_db)
     return temp_file.name
 
 
-def test_dumpanydbm_identify_gdbm(make_gdbm_test_db):
+def test_dumpanydbm_identify_gdbm(gdbm_test_db):
     print("running test_dumpanydbm_identify_gdbm")
-    output = subprocess.check_output([dump_anydbm, make_gdbm_test_db])
+    output = subprocess.check_output([dump_anydbm, gdbm_test_db])
     print(b"script printout: \n" + output)
 
-    assert (output == make_gdbm_test_db.encode(encoding='UTF-8') + b' is a ' + gdbm_type.encode(encoding='UTF-8') + b' db\nvery first key:very first value\nsecond key:second value\n' or
-            output == make_gdbm_test_db.encode(encoding='UTF-8') + b' is a ' + gdbm_type.encode(encoding='UTF-8') + b' db\nsecond key:second value\nvery first key:very first value\n')
+    assert (output == gdbm_test_db.encode(encoding='UTF-8') + b' is a ' + gdbm_type + b' db\nvery first key:very first value\nsecond key:second value\n' or
+            output == gdbm_test_db.encode(encoding='UTF-8') + b' is a ' + gdbm_type + b' db\nsecond key:second value\nvery first key:very first value\n')
 
 
-def test_dumpanydbm_identify_ndbm(make_ndbm_test_db):
+def test_dumpanydbm_identify_ndbm(ndbm_test_db):
     print("running test_dumpanydbm_identify_ndbm")
-    output = subprocess.check_output([dump_anydbm, make_ndbm_test_db])
+    output = subprocess.check_output([dump_anydbm, ndbm_test_db])
     print(b"script printout: \n" + output)
 
-    assert (output == make_ndbm_test_db.encode(encoding='UTF-8') + b' is a ' + ndbm_type.encode(encoding='UTF-8') + b' db\nvery first key:very first value\nsecond key:second value\n' or
-            output == make_ndbm_test_db.encode(encoding='UTF-8') + b' is a ' + ndbm_type.encode(encoding='UTF-8') + b' db\nsecond key:second value\nvery first key:very first value\n')
+    assert (output == ndbm_test_db.encode(encoding='UTF-8') + b' is a ' + ndbm_type + b' db\nvery first key:very first value\nsecond key:second value\n' or
+            output == ndbm_test_db.encode(encoding='UTF-8') + b' is a ' + ndbm_type + b' db\nsecond key:second value\nvery first key:very first value\n')
 
 
-def test_dumpanydbm_identify_dumbdbm(make_dumbdbm_test_db):
+def test_dumpanydbm_identify_dumbdbm(dumbdbm_test_db):
     print("running test_dumpanydbm_identify_dumbdbm")
-    output = subprocess.check_output([dump_anydbm, make_dumbdbm_test_db])
+    output = subprocess.check_output([dump_anydbm, dumbdbm_test_db])
     print(b"script printout: \n" + output)
 
-    assert (output == make_dumbdbm_test_db.encode(encoding='UTF-8') + b' is a ' + dumb_type.encode(encoding='UTF-8') + b' db\nvery first key:very first value\nsecond key:second value\n' or
-            output == make_dumbdbm_test_db.encode(encoding='UTF-8') + b' is a ' + dumb_type.encode(encoding='UTF-8') + b' db\nsecond key:second value\nvery first key:very first value\n')
+    assert (output == dumbdbm_test_db.encode(encoding='UTF-8') + b' is a ' + dumb_type + b' db\nvery first key:very first value\nsecond key:second value\n' or
+            output == dumbdbm_test_db.encode(encoding='UTF-8') + b' is a ' + dumb_type + b' db\nsecond key:second value\nvery first key:very first value\n')
