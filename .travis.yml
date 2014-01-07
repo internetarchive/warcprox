@@ -14,5 +14,8 @@ before_install:
 install:
     - "pip install ."
 
+before_install:
+    - "pip install 'requests>=2.0.1' py.test"
+
 script: py.test
 
