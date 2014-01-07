@@ -39,7 +39,7 @@ if __name__ == "__main__":
     elif 'bsd' in which:
         correct_file = filename.split(".db")[0]
         correct_which = whichdb(correct_file)
-        if correct_which == ('dbm' or 'dbm.ndbm'):
+        if correct_which in ('dbm', 'dbm.ndbm'):
             filename = correct_file
             which = correct_which
 
