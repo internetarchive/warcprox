@@ -6,10 +6,15 @@
   "version": "1.0",
 
   "browser_action": {
-    "default_icon": "icon.png",
-    "default_popup": "popup.html"
+    "default_icon": "ait-logo-black.png",
+    "default_title": "Archive-it Wayback Proxy \nClick to turn on proxy."
   },
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": false
+   },
   "permissions": [
-    "proxy"
+    "proxy",
+    "management"
   ]
 }
