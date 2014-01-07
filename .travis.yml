@@ -9,5 +9,5 @@ python:
 before_install:
     - sudo apt-get update
     - sudo apt-get -y install python-gdbm python3-gdbm python3.3-gdbm
-script: python setup.py test
+script: py.test
 
