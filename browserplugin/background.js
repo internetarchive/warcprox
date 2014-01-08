@@ -36,8 +36,3 @@ function check_state_and_toggle() {
 
 
 chrome.browserAction.onClicked.addListener( check_state_and_toggle );
-chrome.management.onDisabled.addListener( function(ext_info) {
-    // turn proxy settings off when extension disabled/turned off
-    console.log("disabling?");
-    chrome.proxy.settings.clear({'scope': 'regular'});
-});

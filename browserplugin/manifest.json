@@ -14,7 +14,6 @@
     "persistent": false
    },
   "permissions": [
-    "proxy",
-    "management"
+    "proxy"
   ]
 }
