@@ -31,6 +31,6 @@ document.addEventListener('DOMContentLoaded',
     function() { 
         // check_state_and_update_page();
         chrome.proxy.settings.clear({'scope': 'regular'});
-        document.getElementById("submit_settings").addEventListener("click", startWarprox); 
+        document.getElementById("submit_settings").addEventListener("click", startWarcprox); 
 
     });
