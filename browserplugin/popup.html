@@ -1,7 +1,7 @@
 <!doctype html>
 <html>
   <head>
-    <title>Internet Archive Proxy Mode Toggle</title>
+    <title>Archive-It Warcprox</title>
     <style>
       body {
         min-width: 357px;
@@ -11,7 +11,13 @@
     <script src="popup.js"></script>
   </head>
   <body>
-    <p>Turn Proxy Mode <button id="toggle_button" type="button">On</button></p>
+    <p>Please provide the host information to archive using Warcprox</p>
+    <form name="host_settings" action="" method="get">
+      Host: <input type="text" id="host"><br>
+      Port: <input type="text" id="port"><br>
+
+      <input id="submit_settings" type="button" value="Start Warcprox">
+    </form>
   </body>
 </html>
 
