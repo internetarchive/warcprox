@@ -4,23 +4,32 @@
  *
  */
 
+var proxy_used = "fixed_servers";
 
-var proxy_used = "system";
-
-chrome.tabs.onUpdated.addListener(
-    function(id, changeInfo, updatedTab) {
-        console.log("tab "+id+" status "+ JSON.stringify(changeInfo.status));  
+chrome.webNavigation.onCommitted.addListener(
+    function(details){
         chrome.proxy.settings.get( {}, 
             function(config) {
-                console.log(JSON.stringify(config.value.mode));
-                if(config.value.mode == proxy_used && changeInfo.status == "loading") {
-                    chrome.tabs.executeScript( id, {file: "page.js"}, function (result) {
+                console.log(JSON.stringify(config));
+                if(config.value.mode == proxy_used){
+                    chrome.tabs.executeScript( {file: "page.js"}, function (result) {
                         console.log("-loaded page.js");
                     });
-                    chrome.tabs.insertCSS( id, {file: "page.css"}, function (result) {
+                    chrome.tabs.insertCSS( {file: "page.css"}, function (result) {
                         console.log("-loaded page.css");
                     });
                 }
             });
-  
+    });
+
+
+chrome.proxy.onProxyError.addListener(
+    function(details) {
+        console.log("***ProxyError: "+JSON.stringify(details));
+        stopWarcprox("error");
+        chrome.proxy.settings.get( {}, 
+            function(config) {
+                console.log("Reverting back to system settings: "+JSON.stringify(config));
+            });
+
     });

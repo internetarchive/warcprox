@@ -9,14 +9,15 @@
       }
     </style>
     <script src="popup.js"></script>
+    <script src="globals.js"></script>
   </head>
   <body>
     <p>Please provide the host information to archive using Warcprox</p>
     <form name="host_settings" action="" method="get">
       Host: <input type="text" id="host"><br>
       Port: <input type="text" id="port"><br>
-
-      <input id="submit_settings" type="button" value="Start Warcprox">
+      <div id="proxyErrors"></div>
+      <input id="submit_settings" type="button" value="Start Warcprox"> <input id="stop_proxy" type="button" value="Stop Warcprox"> 
     </form>
   </body>
 </html>

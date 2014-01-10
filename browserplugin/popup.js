@@ -14,23 +14,31 @@ function startWarcprox() {
             // bypassList: ["foobar.com"]
         }
     };
-    // chrome.proxy.settings.set(
-    //         {value: proxy_config, scope: 'regular'},
-    //         function() {});
+    chrome.proxy.settings.set(
+            {value: proxy_config, scope: 'regular'},
+            function() {});
+
+    // add ajax test call to proxy.  if successful, continue, else alert user & stop
+
     chrome.browserAction.setBadgeText({ "text" : "ON"});
+    console.log("started proxy server at " + given_host + ":" + given_port);
+    chrome.proxy.onProxyError.addListener(
+        function(details) {
+            console.log("ProxyError: "+JSON.stringify(details)+"\nReverting back to system settings");
+            // document.getElementById("proxyErrors").innerHTML = "Proxy Settings produced and error. ";
+            stopWarcprox();
+
+        });
 
 }
 
-function stopWarcprox() {
-    chrome.proxy.settings.clear({'scope': 'regular'});
-    chrome.browserAction.setBadgeText({ "text" : ""});
-}
+
 
 
 document.addEventListener('DOMContentLoaded', 
     function() { 
-        // check_state_and_update_page();
         chrome.proxy.settings.clear({'scope': 'regular'});
         document.getElementById("submit_settings").addEventListener("click", startWarcprox); 
+        document.getElementById("stop_proxy").addEventListener("click", stopWarcprox);
 
     });
