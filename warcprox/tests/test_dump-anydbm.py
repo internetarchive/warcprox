@@ -36,7 +36,7 @@ key2 = 'second key'
 val1 = 'very first value'
 val2 = 'second value'
 
-py_version = "python"+str(sys.version_info.major)+"."+str(sys.version_info.minor)
+py = sys.executable
 dump_anydbm_loc = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "bin/dump-anydbm")
 
 @pytest.fixture(scope="function")
@@ -96,7 +96,7 @@ def dumbdbm_test_db(request):
 
 def test_dumpanydbm_identify_gdbm(gdbm_test_db):
     print("running test_dumpanydbm_identify_gdbm")
-    output = subprocess.check_output([py_version, dump_anydbm_loc, gdbm_test_db])
+    output = subprocess.check_output([py, dump_anydbm_loc, gdbm_test_db])
     print(b"script printout: ")
     print(output)
     print(b"check_one: ")
@@ -108,7 +108,7 @@ def test_dumpanydbm_identify_gdbm(gdbm_test_db):
 
 def test_dumpanydbm_identify_ndbm(ndbm_test_db):
     print("running test_dumpanydbm_identify_ndbm")
-    output = subprocess.check_output([py_version, dump_anydbm_loc, ndbm_test_db])
+    output = subprocess.check_output([py, dump_anydbm_loc, ndbm_test_db])
     print(b"script printout: ")
     print(output)
     print(b"check_one: ")
@@ -121,7 +121,7 @@ def test_dumpanydbm_identify_ndbm(ndbm_test_db):
 def test_dumpanydbm_identify_dumbdbm(dumbdbm_test_db):
     print("running test_dumpanydbm_identify_dumbdbm")
 
-    output = subprocess.check_output([py_version, dump_anydbm_loc, dumbdbm_test_db])
+    output = subprocess.check_output([py, dump_anydbm_loc, dumbdbm_test_db])
     print(b"script printout: ")
     print(output)
     print(b"check_one: ")
