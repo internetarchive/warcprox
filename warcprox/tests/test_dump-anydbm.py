@@ -4,6 +4,7 @@ import pytest
 import os
 import tempfile
 import subprocess # to access the script from shell
+import sys
 
 # will try as python 3 then default to python 2 modules
 try:
@@ -34,8 +35,9 @@ key1 = 'very first key'
 key2 = 'second key'
 val1 = 'very first value'
 val2 = 'second value'
-dump_anydbm = "dump-anydbm"
 
+py = sys.executable
+dump_anydbm_loc = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "bin/dump-anydbm")
 
 @pytest.fixture(scope="function")
 def gdbm_test_db(request):
@@ -94,8 +96,11 @@ def dumbdbm_test_db(request):
 
 def test_dumpanydbm_identify_gdbm(gdbm_test_db):
     print("running test_dumpanydbm_identify_gdbm")
-    output = subprocess.check_output([dump_anydbm, gdbm_test_db])
-    print(b"script printout: \n" + output)
+    output = subprocess.check_output([py, dump_anydbm_loc, gdbm_test_db])
+    print(b"script printout: ")
+    print(output)
+    print(b"check_one: ")
+    print(gdbm_test_db.encode(encoding='UTF-8') + b' is a ' + gdbm_type + b' db\nvery first key:very first value\nsecond key:second value\n')
 
     assert (output == gdbm_test_db.encode(encoding='UTF-8') + b' is a ' + gdbm_type + b' db\nvery first key:very first value\nsecond key:second value\n' or
             output == gdbm_test_db.encode(encoding='UTF-8') + b' is a ' + gdbm_type + b' db\nsecond key:second value\nvery first key:very first value\n')
@@ -103,8 +108,11 @@ def test_dumpanydbm_identify_gdbm(gdbm_test_db):
 
 def test_dumpanydbm_identify_ndbm(ndbm_test_db):
     print("running test_dumpanydbm_identify_ndbm")
-    output = subprocess.check_output([dump_anydbm, ndbm_test_db])
-    print(b"script printout: \n" + output)
+    output = subprocess.check_output([py, dump_anydbm_loc, ndbm_test_db])
+    print(b"script printout: ")
+    print(output)
+    print(b"check_one: ")
+    print(ndbm_test_db.encode(encoding='UTF-8') + b' is a ' + ndbm_type + b' db\nvery first key:very first value\nsecond key:second value\n')
 
     assert (output == ndbm_test_db.encode(encoding='UTF-8') + b' is a ' + ndbm_type + b' db\nvery first key:very first value\nsecond key:second value\n' or
             output == ndbm_test_db.encode(encoding='UTF-8') + b' is a ' + ndbm_type + b' db\nsecond key:second value\nvery first key:very first value\n')
@@ -112,8 +120,12 @@ def test_dumpanydbm_identify_ndbm(ndbm_test_db):
 
 def test_dumpanydbm_identify_dumbdbm(dumbdbm_test_db):
     print("running test_dumpanydbm_identify_dumbdbm")
-    output = subprocess.check_output([dump_anydbm, dumbdbm_test_db])
-    print(b"script printout: \n" + output)
+
+    output = subprocess.check_output([py, dump_anydbm_loc, dumbdbm_test_db])
+    print(b"script printout: ")
+    print(output)
+    print(b"check_one: ")
+    print(dumbdbm_test_db.encode(encoding='UTF-8') + b' is a ' + dumb_type + b' db\nvery first key:very first value\nsecond key:second value\n')
 
     assert (output == dumbdbm_test_db.encode(encoding='UTF-8') + b' is a ' + dumb_type + b' db\nvery first key:very first value\nsecond key:second value\n' or
             output == dumbdbm_test_db.encode(encoding='UTF-8') + b' is a ' + dumb_type + b' db\nsecond key:second value\nvery first key:very first value\n')
