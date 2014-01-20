@@ -1,0 +1,5 @@
+content custombutton chrome/
+  style chrome://global/content/customizeToolbar.xul chrome://custombutton/content/button.css 
+
+# Firefox
+  overlay    chrome://browser/content/browser.xul chrome://custombutton/content/button.xul 

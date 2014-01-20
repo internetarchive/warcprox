@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+  <?xml-stylesheet type="text/css" 
+  href="chrome://custombutton/content/button.css"?> 
+
+<!DOCTYPE overlay >
+  <overlay id="custombutton-overlay" 
+  xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"> 
+
+<script type="application/javascript"
+    src="chrome://custombutton/content/button.js"/> 
+
+<!-- Firefox -->
+  <toolbarpalette id="BrowserToolbarPalette"> 
+    <toolbarbutton id="AIT-button"/> 
+    </toolbarpalette> 
+
+<!-- button details -->
+  <toolbarbutton id="AIT-button" 
+  label="Custom" 
+  tooltiptext="My custom toolbar button" 
+  oncommand="CustomButton[2]()" 
+  class="toolbarbutton-1 chromeclass-toolbar-additional custombutton" 
+  /> 
+
+</overlay>
