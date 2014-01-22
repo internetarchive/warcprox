@@ -18,8 +18,8 @@
   <toolbarbutton id="AIT-button" 
   label="Custom" 
   tooltiptext="My custom toolbar button" 
-  oncommand="CustomButton[2]()" 
-  class="toolbarbutton-1 chromeclass-toolbar-additional custombutton" 
+  oncommand="ButtonClick()" 
+  class="toolbarbutton-1 chromeclass-toolbar-additional custombutton_off" 
   /> 
 
 </overlay>

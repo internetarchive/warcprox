@@ -4,14 +4,14 @@
   {list-style-image: url("chrome://custombutton/content/button-1.png");} 
 
 /* common style for all custom buttons */
-.custombutton                    
+.custombutton_off
   {-moz-image-region: rect( 0px 24px 24px  0px);} 
 
-.custombutton:hover       
+.custombutton_on       
   {-moz-image-region: rect(24px 24px 48px  0px);} 
 
-[iconsize="small"] .custombutton
+[iconsize="small"] .custombutton_off
     {-moz-image-region: rect( 0px 40px 16px 24px);} 
 
-[iconsize="small"] .custombutton:hover
+[iconsize="small"] .custombutton_on
     {-moz-image-region: rect(24px 40px 40px 24px);}
