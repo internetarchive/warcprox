@@ -1,5 +1,5 @@
 var prefs = Components.classes["@mozilla.org/preferences-service;1"].getService(Components.interfaces.nsIPrefBranch);
-
+var this_cert;
 function ButtonClick() { 
     if (prefs.getIntPref("network.proxy.type") == 5) {
         turnProxyOn();
@@ -31,12 +31,12 @@ function turnProxyOn(){
 }
 
 function SaveCert(uri){
+    var certDB = Components.classes["@mozilla.org/security/x509certdb;1"].getService(Components.interfaces.nsIX509CertDB2);
 
-    // var certDB = Components.classes["@mozilla.org/security/x509certdb;1"].getService(Components.interfaces.nsIX509CertDB2);
-    var certDB = Components.classes["@mozilla.org/security/x509certdb;1"].getService(Components.interfaces.nsIX509CertDB);
-    var gIOService = Components.classes['@mozilla.org/network/io-service;1'].getService(Components.interfaces.nsIIOService);
-    var scriptableStream = Components.classes["@mozilla.org/scriptableinputstream;1"].getService(Components.iinterfaces.nsIScriptableInputStream);
-    var uriChannel = gIOService.newChannelFromURI(uri, null, null);
+    var ios = Components.classes['@mozilla.org/network/io-service;1'].getService(Components.interfaces.nsIIOService);
+    var uriChannel = ios.newChannelFromURI(uri, null, null);
+
+    var scriptableStream = Components.classes["@mozilla.org/scriptableinputstream;1"].getService(Components.interfaces.nsIScriptableInputStream);
 
     var input = uriChannel.open();
     scriptableStream.init(input);
@@ -54,9 +54,44 @@ function SaveCert(uri){
     var cert = certfile.substring(begin + beginCert.length, end);
 
     // certDB.addCertFromBase64(cert, "C,c,c", "");
-    created_cert = certDB.constructX509FromBase64(cert);
+
+    // var certDB2 = Components.classes["@mozilla.org/security/x509certdb;1"].getService(Components.interfaces.nsIX509CertDB2);
+    // var certDB = Components.classes["@mozilla.org/security/x509certdb;1"].getService(Components.interfaces.nsIX509CertDB);
+    // var gIOService = Components.classes['@mozilla.org/network/io-service;1'].getService(Components.interfaces.nsIIOService);
+    // var scriptableStream = Components.classes["@mozilla.org/scriptableinputstream;1"].getService(Components.interfaces.nsIScriptableInputStream);
+    // var uriChannel = gIOService.newChannelFromURI(uri, null, null);
+
+    // var input = uriChannel.open();
+    // scriptableStream.init(input);
+
+    // var certfile = scriptableStream.read(input.available());
+    // scriptableStream.close();
+    // input.close();
+
+    // var beginCert = "-----BEGIN CERTIFICATE-----";
+    // var endCert = "-----END CERTIFICATE-----";
+
+    // certfile = certfile.replace(/[\r\n]/g, "");
+    // var begin = certfile.indexOf(beginCert);
+    // var end = certfile.indexOf(endCert);
+    // var cert = certfile.substring(begin + beginCert.length, end);
+
+    // // certDB2.addCertFromBase64(cert, "C,c,c", "");
+
+    // this_cert = certDB.constructX509FromBase64(cert);
+
+    // // list = certDB2.getCerts();
+    // // list.addCert(this_cert);
+
 
 }
+// function RemoveCert(){
+//     var certDB2 = Components.classes["@mozilla.org/security/x509certdb;1"].getService(Components.interfaces.nsIX509CertDB2);
+//     var certDB = Components.classes["@mozilla.org/security/x509certdb;1"].getService(Components.interfaces.nsIX509CertDB);
+    
+//     var list = certDB2.getCerts();
+//     list.deleteCert(this_cert);
+// }
 
 function swapClass(id, removeClass, addClass){
     el = document.getElementById(id);
@@ -99,9 +134,28 @@ function installButton(toolbarId, id, afterId) {
      }
 }
 
+
+let listener = {
+    onDisabling: function(addon){
+        if (addon.id == "ait-button@example.com"){
+            turnProxyOff();
+        }
+    },
+    onUninstalling: function(addon){
+        if(addon.id == "ait-button@example.com"){
+            turnProxyOff();
+        }
+    }
+}
+
+
 if (firstRun) {
      installButton("nav-bar", "AIT-button");
      // The "addon-bar" is available since Firefox 4
      installButton("addon-bar", "AIT-button");
 }
-turnProxyOff();
+
+try{
+    Components.utils.import("resource://gre/modules/AddonManager.jsm");
+    AddonManager.addAddonListener(listener);
+} catch(ex) {}
