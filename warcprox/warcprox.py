@@ -390,11 +390,14 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
 
     def serveCA(self):
         ca_public = CertificateAuthority().ca_public
-        payload = (open(ca_public).read())
+        payload = (open(ca_public).read().encode('ascii'))
         headers = (b"HTTP/1.1 200 OK\n" +
-                    "Content-Encoding: gzip\n" +
-                    "Content-Type: application/x-x509-ca-cert" +
-                    b"Content-Length: " + str(len(payload)).encode('utf-8') )
+                    b"Date: " + datetime.now().strftime("%a, %d %b %Y %H:%M:%S %Z") + "\n"+
+                    b"Content-Encoding: gzip\n" +
+                    b"Content-Type: text/plain\n" +
+                    # b"Content-Type: application/x-x509-ca-cert\n"+
+                    b"Content-Length: " + str(len(payload)).encode('ascii') )
+        self.log_message(payload)
         self.connection.sendall(headers)
         self.connection.sendall(payload)
 
