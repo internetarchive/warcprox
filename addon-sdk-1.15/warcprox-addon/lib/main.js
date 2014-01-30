@@ -43,11 +43,13 @@ function testProxyConnection() {
     return success;
 }
 
-function turnOnProxy(){
-    var ip = "127.0.0.1";
-    var port = 8000;
+function turnOnProxy(addr, port) {
+//    if (!addr && !port ){
+//        addr = "127.0.0.1";
+//        port = 8000;
+//    }
     prefs.set("network.proxy.type", 1);
-    prefs.set("network.proxy.http", ip);
+    prefs.set("network.proxy.http", addr);
     prefs.set("network.proxy.http_port", port);
 
     if ( testProxyConnection() ) {
@@ -55,10 +57,12 @@ function turnOnProxy(){
 
         //    SaveCert("http://warcprox./ca.pem");
         ShowVisuals(true);
+        return true;
     } else {
         console.debug("*** bad proxy connection");
         turnOffProxy();
         // send out error msg to user
+        return false;
     }
 }
 
@@ -82,6 +86,8 @@ function ShowVisuals(bool){
     } else if (pageModObject) {
         pageModObject.destroy();
         // return button to default
+        btn.image = data.url('img/ait-logo-black16.png');
+    } else {
         btn.image = data.url('img/ait-logo-black16.png');
     }
 }
@@ -148,27 +154,67 @@ function SaveCert(url){
 //     list.deleteCert(this_cert);
 }*/
 
-var optionsPanel = panel.Panel({
-      width: 400,
-      height: 400,
-      contentURL: data.url("options.html"),
-      contentScriptFile: data.url("options.js")
-    });
-
-var btn = require("toolbarbutton").ToolbarButton({
-        id: "warcprox-button",
-        label: "Warcprox toggle",
-        onCommand: function () {
-            ButtonClick(); // kills the toolbar button
-        },
-        image: data.url('img/ait-logo-black16.png')//,
-//        panel: optionsPanel
-
-      });
-
+var optionsPanel;
+var btn;
 
 // exports.main is called when extension is installed or re-enabled
 exports.main = function(options, callbacks) {
+    optionsPanel = panel.Panel({
+        width: 300,
+        height: 150,
+        contentURL: data.url("options.html"),
+        contentScriptFile: data.url("options.js"),
+        position: {
+            top: 0,
+            right: 0
+        }
+
+    });
+    // Send the content script a message called "show" when
+    // the panel is shown.
+    optionsPanel.on("show", function() {
+        optionsPanel.port.emit("show");
+    });
+
+    // Listen for messages called "text-entered" coming from
+    // the content script. The message payload is the text the user
+    // entered.
+    // In this implementation we'll just log the text to the console.
+
+    optionsPanel.port.on("startproxy", function(addr, port){
+        var txt;
+        if( addr != null && port != null ){
+            if(turnOnProxy(addr, port)){
+                optionsPanel.port.emit("connected");
+                optionsPanel.hide();
+            } else {
+                txt = "Error: Unable to connect with these settings.";
+                optionsPanel.port.emit("errors", txt);
+            }
+        } else {
+            txt = "Error: Please provide both an address ("+addr+") and port ("+port+") for connection.";
+            optionsPanel.port.emit("errors", txt);
+        }
+
+    });
+    optionsPanel.port.on("stopproxy", function(){
+        turnOffProxy();
+        optionsPanel.port.emit("disconnected");
+        optionsPanel.hide();
+
+    });
+
+
+    btn  = require("toolbarbutton").ToolbarButton({
+        id: "warcprox-button",
+        label: "Warcprox toggle",
+//        onCommand: function () {
+//            ButtonClick(); // kills the toolbar button
+//        },
+        image: data.url('img/ait-logo-black16.png'),
+        panel: optionsPanel
+
+      });
 
     if (options.loadReason == "install") {
         btn.moveTo({
@@ -176,20 +222,7 @@ exports.main = function(options, callbacks) {
             forceMove: false // only move from palette
         });
     }
-    // Send the content script a message called "show" when
-    // the panel is shown.
-    optionsPanel.on("show", function() {
-      optionsPanel.port.emit("show");
-    });
 
-    // Listen for messages called "text-entered" coming from
-    // the content script. The message payload is the text the user
-    // entered.
-    // In this implementation we'll just log the text to the console.
-    optionsPanel.port.on("text-entered", function (text) {
-      console.log(text);
-      optionsPanel.hide();
-    });
 
 };
 

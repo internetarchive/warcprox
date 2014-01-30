@@ -1,0 +1,29 @@
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <style type="text/css" media="all">
+    textarea {
+      margin: 10px;
+    }
+    #errors {
+        color: red
+    }
+  </style>
+</head>
+
+<body>
+    <div id="errors"></div>
+    <div id="startsettings">
+        <p>Proxy Address: <input type="text" id="addr" size="13"></p>
+        <p>Proxy Port: <input type="text" id="port" size="4" maxlength="4"></p>
+        <button id="start">START Proxy</button>
+        <!--<br><button id="defaults">Default Local</button>-->
+    </div>
+    <div id="stopsettings" style="display:none; margin-top:100px">
+        <button id="stop">STOP Proxy</button>
+    </div>
+
+</body>
+
+</html>
