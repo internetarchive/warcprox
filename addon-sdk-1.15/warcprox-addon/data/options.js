@@ -1,8 +1,4 @@
 self.port.on("show", function (arg) {
-//    var startbtn = document.getElementById("start");
-//    var stopbtn = document.getElementById("stop");
-   ;
-
 
     document.getElementById("start").onclick = function(event) {
         var port = document.getElementById("port").value;
@@ -14,23 +10,11 @@ self.port.on("show", function (arg) {
         self.port.emit("stopproxy");
     };
 
-//    var defaultbtn = document.getElementById("defaults");
-//    defaultbtn.onclick = function() {
-//        self.port.emit("startproxy", "127.0.0.1", 8000)
-//    };
+    /****** default button used for testing only!!!!! *****/
+    document.getElementById("defaults").onclick = function() {
+        self.port.emit("startproxy", "127.0.0.1", 8000)
+    };
 
-//  var textArea = document.getElementById('edit-box');
-//  textArea.focus();
-//  // When the user hits return, send a message to main.js.
-//  // The message payload is the contents of the edit box.
-//  textArea.onkeyup = function(event) {
-//    if (event.keyCode == 13) {
-//      // Remove the newline.
-//      text = textArea.value.replace(/(\r\n|\n|\r)/gm,"");
-//      self.port.emit("text-entered", text);
-//      textArea.value = '';
-//    }
-//  };
 });
 
 self.port.on("errors", function(txt){
@@ -44,6 +28,9 @@ self.port.on("connected", function(){
 
     startsettings.style.display = "none";
     stopsettings.style.display = "inline";
+
+    // clear out any previous errors
+    document.getElementById("errors").innerHTML = "";
 
 });
 

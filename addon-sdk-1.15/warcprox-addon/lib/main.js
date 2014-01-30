@@ -44,12 +44,10 @@ function testProxyConnection() {
 }
 
 function turnOnProxy(addr, port) {
-//    if (!addr && !port ){
-//        addr = "127.0.0.1";
-//        port = 8000;
-//    }
     prefs.set("network.proxy.type", 1);
     prefs.set("network.proxy.http", addr);
+    prefs.set("network.proxy.ssl", addr);
+    prefs.set("network.proxy.ssl_port", port);
     prefs.set("network.proxy.http_port", port);
 
     if ( testProxyConnection() ) {
@@ -85,6 +83,7 @@ function ShowVisuals(bool){
 
     } else if (pageModObject) {
         pageModObject.destroy();
+
         // return button to default
         btn.image = data.url('img/ait-logo-black16.png');
     } else {
@@ -159,6 +158,8 @@ var btn;
 
 // exports.main is called when extension is installed or re-enabled
 exports.main = function(options, callbacks) {
+
+    /**** create panel ***/
     optionsPanel = panel.Panel({
         width: 300,
         height: 150,
@@ -170,16 +171,11 @@ exports.main = function(options, callbacks) {
         }
 
     });
-    // Send the content script a message called "show" when
-    // the panel is shown.
+
+    /**** Panel functions/methods ***/
     optionsPanel.on("show", function() {
         optionsPanel.port.emit("show");
     });
-
-    // Listen for messages called "text-entered" coming from
-    // the content script. The message payload is the text the user
-    // entered.
-    // In this implementation we'll just log the text to the console.
 
     optionsPanel.port.on("startproxy", function(addr, port){
         var txt;
@@ -197,6 +193,7 @@ exports.main = function(options, callbacks) {
         }
 
     });
+
     optionsPanel.port.on("stopproxy", function(){
         turnOffProxy();
         optionsPanel.port.emit("disconnected");
@@ -204,18 +201,15 @@ exports.main = function(options, callbacks) {
 
     });
 
-
+    /***** create toolbar button ****/
     btn  = require("toolbarbutton").ToolbarButton({
         id: "warcprox-button",
         label: "Warcprox toggle",
-//        onCommand: function () {
-//            ButtonClick(); // kills the toolbar button
-//        },
         image: data.url('img/ait-logo-black16.png'),
         panel: optionsPanel
-
       });
 
+    /**** move toolbarbutton to nav-bar on install ***/
     if (options.loadReason == "install") {
         btn.moveTo({
             toolbarID: "nav-bar",
