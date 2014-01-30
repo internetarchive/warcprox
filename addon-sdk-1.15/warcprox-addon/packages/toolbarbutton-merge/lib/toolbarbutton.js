@@ -11,6 +11,7 @@ const NS_XUL = "http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul";
 
 exports.ToolbarButton = function ToolbarButton(options) {
   var unloaders = [],
+//      tbb,
       toolbarID = "",
       insertbefore = "",
       destroyed = false,
@@ -36,14 +37,14 @@ exports.ToolbarButton = function ToolbarButton(options) {
       tbb.setAttribute("label", options.label);
       tbb.setAttribute('tooltiptext', options.tooltiptext);
       if(options.panel)
-        options.panel.on("hide",_onPanelhide);
+        options.panel.on("hide",_onPanelHide);
         
       tbb.addEventListener("command", function() {
         if (options.onCommand)
           options.onCommand({}); // TODO: provide something?
 
         if (options.panel) {
-          options.panel.show(tbb);
+          options.panel.show(null);
         }
       }, true);
 
@@ -105,7 +106,9 @@ exports.ToolbarButton = function ToolbarButton(options) {
 
       // add unloader to unload+'s queue
       var unloadFunc = function() {
-        tbb.parentNode.removeChild(tbb);
+        getToolbarButtons(function(tbb) {
+          tbb.parentNode.removeChild(tbb);
+        }, options.id);
         window.removeEventListener("aftercustomization", saveTBNodeInfo, false);
       };
       var index = destoryFuncs.push(unloadFunc) - 1;
@@ -124,6 +127,15 @@ exports.ToolbarButton = function ToolbarButton(options) {
       tbb.image = options.image;
     }, options.id);
     return options.image;
+  }
+
+  function _onPanelHide() {
+//    var tbb = document.getElementById(options.id);
+    getToolbarButtons(function(tbb) {
+      tbb.checked = false;
+      if(tbb.mozMatchesSelector("toolbarbutton:hover"))
+        tbb.checkState = 2;
+    }, options.id)
   }
 
   return {
@@ -166,7 +178,7 @@ exports.ToolbarButton = function ToolbarButton(options) {
 
         if (tb) {
           tb.insertItem(options.id, b4, null, false);
-          tb.setAttibute("currentset", tb.currentSet);
+          tb.setAttribute("currentset", tb.currentSet);
           persist.update(tb.id + ".currentset", tb.currentSet);
         }
       };
@@ -204,13 +216,6 @@ exports.ToolbarButton = function ToolbarButton(options) {
         }
     }
   };
-  
-  
-    function _onPanelHide() {
-        tbb.checked = false;
-        if(tbb.mozMatchesSelector("toolbarbutton:hover"))
-            tbb.checkState = 2;
-    }
 };
 
 function getToolbarButtons(callback, id) {

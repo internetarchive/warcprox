@@ -35,6 +35,7 @@ function eachToolbar(callback) {
         
         for (var i2 = 0; i2 < prefList.length; i2++) {
             let toolbarID = prefList[i2].replace(/\.currentset$/, "");
+            var tb;
             if (tb = $(toolbarID)) {
                 callback(tb);
             }
