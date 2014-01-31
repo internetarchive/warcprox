@@ -397,7 +397,6 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                     b"Content-Length: " + str(len(payload)).encode('ascii') +
                     b"\r\n\r\n"
         )
-        self.log_message(payload)
         self.connection.sendall(headers)
         self.connection.sendall(payload)
 
