@@ -7,17 +7,41 @@ var prefs = require("sdk/preferences/service");
 var pageMod = require("sdk/page-mod");
 var panel = require("sdk/panel")
 var xhr = require("sdk/net/xhr");
+var notification = require("notification-box")
 
-var pageModObject;
+var pageModObject, optionsPanel, btn, cert_issuer, cert_serialno;
+var whitelogo = data.url('img/ait-logo-white16.png');
+var blacklogo = data.url('img/ait-logo-black16.png');
+var greenlogo = data.url('img/ait-logo-green16.png');
 
-prefs.set("extensions.sdk.console.logLevel", "all");
+// for debugging
+//prefs.set("extensions.sdk.console.logLevel", "all");
 
-function ButtonClick(){
-    if (prefs.get("network.proxy.type") == 5 ) {
-        turnOnProxy();
+function turnOnProxy(addr, port) {
+    prefs.set("network.proxy.type", 1);
+    prefs.set("network.proxy.http", addr);
+    prefs.set("network.proxy.ssl", addr);
+    prefs.set("network.proxy.ssl_port", port);
+    prefs.set("network.proxy.http_port", port);
+
+    if ( testProxyConnection() ) {
+        console.debug("*** success! proxy connected!");
+
+        SaveCert("http://warcprox./ca.pem");
+        ShowVisuals(true);
+        return true;
     } else {
+        console.debug("*** bad proxy connection");
         turnOffProxy();
+        // send out error msg to user
+        return false;
     }
+}
+
+function turnOffProxy(){
+    prefs.set("network.proxy.type", 5);
+    ShowVisuals(false);
+    RemoveCert();
 }
 
 function testProxyConnection() {
@@ -43,32 +67,6 @@ function testProxyConnection() {
     return success;
 }
 
-function turnOnProxy(addr, port) {
-    prefs.set("network.proxy.type", 1);
-    prefs.set("network.proxy.http", addr);
-    prefs.set("network.proxy.ssl", addr);
-    prefs.set("network.proxy.ssl_port", port);
-    prefs.set("network.proxy.http_port", port);
-
-    if ( testProxyConnection() ) {
-        console.debug("*** success! proxy connected!");
-
-        //    SaveCert("http://warcprox./ca.pem");
-        ShowVisuals(true);
-        return true;
-    } else {
-        console.debug("*** bad proxy connection");
-        turnOffProxy();
-        // send out error msg to user
-        return false;
-    }
-}
-
-function turnOffProxy(){
-    prefs.set("network.proxy.type", 5);
-    ShowVisuals(false);
-}
-
 function ShowVisuals(bool){
     if (bool) {
         // show warnings with css
@@ -79,27 +77,28 @@ function ShowVisuals(bool){
         });
 
         // turn button icon green
-        btn.image = data.url('img/ait-logo-green16.png');
+        btn.image = greenlogo;
 
     } else if (pageModObject) {
         pageModObject.destroy();
 
         // return button to default
-        btn.image = data.url('img/ait-logo-black16.png');
+        btn.image = blacklogo;
     } else {
-        btn.image = data.url('img/ait-logo-black16.png');
+        btn.image = blacklogo;
     }
 }
 
 function SaveCert(url){
+    var certDB2 = Cc["@mozilla.org/security/x509certdb;1"].getService(Ci.nsIX509CertDB2);
+    var certDB = Cc["@mozilla.org/security/x509certdb;1"].getService(Ci.nsIX509CertDB);
     var gIOService = Cc["@mozilla.org/network/io-service;1"].getService(Ci.nsIIOService);
-    var certDB = Cc["@mozilla.org/security/x509certdb;1"].getService(Ci.nsIX509CertDB2);
     var scriptableStream = Cc["@mozilla.org/scriptableinputstream;1"].getService(Ci.nsIScriptableInputStream);
 
     var URI = gIOService.newURI(url, null, null);
-    var uriChannel = gIOService.newChannelFromURI(URI, null, null);
+    var channel = gIOService.newChannelFromURI(URI, null, null);
 
-    var input = uriChannel.open();
+    var input = channel.open();
     scriptableStream.init(input);
 
     var certfile = scriptableStream.read(input.available());
@@ -115,46 +114,44 @@ function SaveCert(url){
     var cert = certfile.substring(begin + beginCert.length, end);
 
     console.debug(certfile);
-    certDB.addCertFromBase64(cert, "C,c,c", "");
+    certDB2.addCertFromBase64(cert, "C,c,c", "");
+    var this_cert = certDB.constructX509FromBase64(cert);
+    cert_issuer = this_cert.issuerCommonName;
+    cert_serialno = this_cert.serialNumber;
 
-    // var certDB2 = Components.classes["@mozilla.org/security/x509certdb;1"].getService(Components.interfaces.nsIX509CertDB2);
-    // var certDB = Components.classes["@mozilla.org/security/x509certdb;1"].getService(Components.interfaces.nsIX509CertDB);
-    // var gIOService = Components.classes['@mozilla.org/network/io-service;1'].getService(Components.interfaces.nsIIOService);
-    // var scriptableStream = Components.classes["@mozilla.org/scriptableinputstream;1"].getService(Components.interfaces.nsIScriptableInputStream);
-    // var uriChannel = gIOService.newChannelFromURI(uri, null, null);
-
-    // var input = uriChannel.open();
-    // scriptableStream.init(input);
-
-    // var certfile = scriptableStream.read(input.available());
-    // scriptableStream.close();
-    // input.close();
-
-    // var beginCert = "-----BEGIN CERTIFICATE-----";
-    // var endCert = "-----END CERTIFICATE-----";
-
-    // certfile = certfile.replace(/[\r\n]/g, "");
-    // var begin = certfile.indexOf(beginCert);
-    // var end = certfile.indexOf(endCert);
-    // var cert = certfile.substring(begin + beginCert.length, end);
-
-    // // certDB2.addCertFromBase64(cert, "C,c,c", "");
-
-    // this_cert = certDB.constructX509FromBase64(cert);
-
-    // // list = certDB2.getCerts();
-    // // list.addCert(this_cert);
 }
-/*function RemoveCert(){
-//     var certDB2 = Components.classes["@mozilla.org/security/x509certdb;1"].getService(Components.interfaces.nsIX509CertDB2);
-//     var certDB = Components.classes["@mozilla.org/security/x509certdb;1"].getService(Components.interfaces.nsIX509CertDB);
-//
-//     var list = certDB2.getCerts();
-//     list.deleteCert(this_cert);
-}*/
 
-var optionsPanel;
-var btn;
+function RemoveCert(){
+    var certDB = Cc["@mozilla.org/security/x509certdb;1"].getService(Ci.nsIX509CertDB);
+    var certDB2 = Cc["@mozilla.org/security/x509certdb;1"].getService(Ci.nsIX509CertDB2);
+
+    var foundcert = false;
+    var listenum = certDB2.getCerts().getEnumerator();
+    var cert = listenum.getNext().QueryInterface(Ci.nsIX509Cert);
+    while( listenum.hasMoreElements() ){
+        if (cert.issuerCommonName == cert_issuer
+            && cert.serialNumber == cert_serialno){
+
+            console.debug("** found cert and will remove: "+ cert.issuerCommonName);
+            certDB.deleteCertificate(cert);
+            foundcert = true;
+            break;
+        }
+        else cert = listenum.getNext().QueryInterface(Ci.nsIX509Cert);
+    }
+    if (!foundcert) console.debug("** never found cert to remove");
+}
+
+function notify(id, txt, priority){
+    if (!priority ) priority = 'INFO_MEDIUM';
+    notification.NotificationBox({
+        'value': id,
+        'label': txt,
+        'image': whitelogo,
+        'closeprev': true,
+        'priority': priority
+    });
+}
 
 // exports.main is called when extension is installed or re-enabled
 exports.main = function(options, callbacks) {
@@ -169,7 +166,6 @@ exports.main = function(options, callbacks) {
             top: 0,
             right: 0
         }
-
     });
 
     /**** Panel functions/methods ***/
@@ -183,6 +179,9 @@ exports.main = function(options, callbacks) {
             if(turnOnProxy(addr, port)){
                 optionsPanel.port.emit("connected");
                 optionsPanel.hide();
+                var id = "connect-success";
+                var msg = "Warcprox Connected - Successfully connected to "+addr+":"+port;
+                notify(id, msg);
             } else {
                 txt = "Error: Unable to connect with these settings.";
                 optionsPanel.port.emit("errors", txt);
@@ -191,14 +190,15 @@ exports.main = function(options, callbacks) {
             txt = "Error: Please provide both an address ("+addr+") and port ("+port+") for connection.";
             optionsPanel.port.emit("errors", txt);
         }
-
     });
 
     optionsPanel.port.on("stopproxy", function(){
         turnOffProxy();
         optionsPanel.port.emit("disconnected");
         optionsPanel.hide();
-
+        var id = "success-disconnect";
+        var msg = "Warcprox Disconnected - Disconnected from proxy.";
+        notify(id, msg);
     });
 
     /***** create toolbar button ****/
@@ -216,13 +216,10 @@ exports.main = function(options, callbacks) {
             forceMove: false // only move from palette
         });
     }
-
-
 };
 
 // exports.onUnload is called when Firefox starts and when the extension is disabled or uninstalled
 exports.onUnload = function(reason) {
     btn.destroy();
     turnOffProxy();
-//    RemoveCert();
 };
