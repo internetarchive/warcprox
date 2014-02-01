@@ -389,7 +389,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         raise Exception('_proxy_request() not implemented in MitmProxyHandler, must be implemented in subclass!')
 
     def serveCA(self):
-        ca_public = CertificateAuthority().ca_public
+        ca_public = self.server.ca.ca_public
         payload = (open(ca_public).read().encode('ascii'))
         headers = (b"HTTP/1.1 200 OK\n" +
                     b"Date: " + datetime.now().strftime("%a, %d %b %Y %H:%M:%S %Z") + "\n"+
