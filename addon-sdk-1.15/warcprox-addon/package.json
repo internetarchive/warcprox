@@ -2,7 +2,7 @@
   "name": "warcprox-addon",
   "title": "warcprox-addon",
   "id": "jid1-ARn8vjOuwhbs9g",
-  "description": "a basic add-on",
+  "description": "Addon built to connect to Warcporx for the purpose of archiving the user's web activity",
   "author": "",
   "license": "MPL 2.0",
   "version": "0.1",
