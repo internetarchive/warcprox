@@ -44,8 +44,12 @@ try:
     import dbm.gnu
     dbm_gnu = dbm.gnu
 except ImportError:
-    import gdbm
-    dbm_gnu = gdbm
+    try:
+        import gdbm
+        dbm_gnu = gdbm
+    except ImportError:
+        import anydbm
+        dbm_gnu = anydbm
 
 try:
     from io import StringIO
