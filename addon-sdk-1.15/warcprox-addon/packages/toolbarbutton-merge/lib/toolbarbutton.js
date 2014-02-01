@@ -44,7 +44,7 @@ exports.ToolbarButton = function ToolbarButton(options) {
           options.onCommand({}); // TODO: provide something?
 
         if (options.panel) {
-          options.panel.show(null);
+          options.panel.show(null, tbb);
         }
       }, true);
 

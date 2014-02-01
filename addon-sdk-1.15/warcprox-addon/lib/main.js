@@ -5,7 +5,7 @@ var {XPCOMUtils} = Cu.import("resource://gre/modules/XPCOMUtils.jsm");
 var mediator = Cc['@mozilla.org/appshell/window-mediator;1'].getService(Ci.nsIWindowMediator);
 var prefs = require("sdk/preferences/service");
 var pageMod = require("sdk/page-mod");
-var panel = require("sdk/panel")
+var panel = require("sdk/panel");
 var xhr = require("sdk/net/xhr");
 var notification = require("notification-box");
 var tabs = require("sdk/tabs");
@@ -24,7 +24,7 @@ var disconnect_id = "success-disconnect";
 var disconnect_msg = "Warcprox Disconnected - Disconnected from proxy.";
 
 // for debugging
-//prefs.set("extensions.sdk.console.logLevel", "all");
+prefs.set("extensions.sdk.console.logLevel", "all");
 
 function turnOnProxy(addr, port) {
     prefs.set("network.proxy.type", 1);
@@ -178,11 +178,7 @@ exports.main = function(options, callbacks) {
         width: 300,
         height: 150,
         contentURL: data.url("options.html"),
-        contentScriptFile: data.url("options.js"),
-        position: {
-            top: 0,
-            right: 0
-        }
+        contentScriptFile: data.url("options.js")
     });
 
     /**** Panel functions/methods ***/

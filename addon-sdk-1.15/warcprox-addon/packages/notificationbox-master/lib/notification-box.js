@@ -101,7 +101,7 @@ exports.clearNotification = function (value){
     for (var i= 0; i<browsers.length; i++) {
         let nb = mainWindow.gBrowser.getNotificationBox(browsers[i]);
         var notification = nb.getNotificationWithValue(value);
-        nb.removeNotification(notification);
+        if (notification) nb.removeNotification(notification);
     }
 }
 
