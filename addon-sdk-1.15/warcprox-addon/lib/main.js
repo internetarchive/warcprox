@@ -7,12 +7,21 @@ var prefs = require("sdk/preferences/service");
 var pageMod = require("sdk/page-mod");
 var panel = require("sdk/panel")
 var xhr = require("sdk/net/xhr");
-var notification = require("notification-box")
+var notification = require("notification-box");
+var tabs = require("sdk/tabs");
+
 
 var pageModObject, optionsPanel, btn, cert_issuer, cert_serialno;
 var whitelogo = data.url('img/ait-logo-white16.png');
 var blacklogo = data.url('img/ait-logo-black16.png');
 var greenlogo = data.url('img/ait-logo-green16.png');
+var ProxyOn = false;
+
+// default msgs
+var warning_id = "warning-being-archived";
+var warning_msg = "Warcprox Connected - Careful!!  Your activity is being archived!";
+var disconnect_id = "success-disconnect";
+var disconnect_msg = "Warcprox Disconnected - Disconnected from proxy.";
 
 // for debugging
 //prefs.set("extensions.sdk.console.logLevel", "all");
@@ -68,24 +77,25 @@ function testProxyConnection() {
 }
 
 function ShowVisuals(bool){
+    ProxyOn = bool;
     if (bool) {
-        // show warnings with css
+        /*// show warnings with css
         pageModObject = pageMod.PageMod({
             include: "*",
             contentScriptFile: data.url("page.js"),
             contentStyleFile: data.url("page.css")
-        });
+        });*/
 
         // turn button icon green
         btn.image = greenlogo;
 
-    } else if (pageModObject) {
+    } /*else if (pageModObject) {
         pageModObject.destroy();
-
-        // return button to default
+    }*/
+    // return button to default
+    if (!bool){
         btn.image = blacklogo;
-    } else {
-        btn.image = blacklogo;
+        notification.clearNotification(warning_id);
     }
 }
 
@@ -142,16 +152,23 @@ function RemoveCert(){
     if (!foundcert) console.debug("** never found cert to remove");
 }
 
-function notify(id, txt, priority){
-    if (!priority ) priority = 'INFO_MEDIUM';
+function notify(id, txt, priority, allTabs){
+    if(allTabs == null ) allTabs = true;
+    if (!priority ) priority = 'WARNING_HIGH';
+    if (priority.startsWith("INFO"))
+        var logo = whitelogo;
+    else
+        var logo = blacklogo;
     notification.NotificationBox({
         'value': id,
         'label': txt,
-        'image': whitelogo,
+        'image': logo,
         'closeprev': true,
+        'allTabs' : allTabs,
         'priority': priority
     });
 }
+
 
 // exports.main is called when extension is installed or re-enabled
 exports.main = function(options, callbacks) {
@@ -179,9 +196,7 @@ exports.main = function(options, callbacks) {
             if(turnOnProxy(addr, port)){
                 optionsPanel.port.emit("connected");
                 optionsPanel.hide();
-                var id = "connect-success";
-                var msg = "Warcprox Connected - Successfully connected to "+addr+":"+port;
-                notify(id, msg);
+                notify(warning_id, warning_msg);
             } else {
                 txt = "Error: Unable to connect with these settings.";
                 optionsPanel.port.emit("errors", txt);
@@ -196,9 +211,7 @@ exports.main = function(options, callbacks) {
         turnOffProxy();
         optionsPanel.port.emit("disconnected");
         optionsPanel.hide();
-        var id = "success-disconnect";
-        var msg = "Warcprox Disconnected - Disconnected from proxy.";
-        notify(id, msg);
+        notify(disconnect_id, disconnect_msg, "INFO_LOW", false);
     });
 
     /***** create toolbar button ****/
@@ -216,6 +229,12 @@ exports.main = function(options, callbacks) {
             forceMove: false // only move from palette
         });
     }
+    tabs.on('ready', function(tab) {
+        if(ProxyOn) notify(warning_id, warning_msg);
+    });
+    tabs.on('open', function(tab) {
+        if(ProxyOn) notify(warning_id, warning_msg);
+    });
 };
 
 // exports.onUnload is called when Firefox starts and when the extension is disabled or uninstalled
@@ -223,3 +242,10 @@ exports.onUnload = function(reason) {
     btn.destroy();
     turnOffProxy();
 };
+
+// string checking helper
+if (typeof String.prototype.startsWith != 'function') {
+  String.prototype.startsWith = function (str){
+    return this.slice(0, str.length) == str;
+  };
+}

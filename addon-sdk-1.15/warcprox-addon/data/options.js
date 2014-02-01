@@ -11,9 +11,9 @@ self.port.on("show", function (arg) {
     };
 
     /****** default button used for testing only!!!!! *****/
-    document.getElementById("defaults").onclick = function() {
+/*    document.getElementById("defaults").onclick = function() {
         self.port.emit("startproxy", "127.0.0.1", 8000)
-    };
+    };*/
 
 });
 
