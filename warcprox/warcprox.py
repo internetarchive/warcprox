@@ -83,6 +83,9 @@ class CertificateAuthority(object):
         self.ca_file = ca_file
         self.certs_dir = certs_dir
 
+        filename, ext = os.path.splitext(ca_file)
+        self.ca_public = filename + "-public" + ext
+
         if not os.path.exists(ca_file):
             self._generate_ca()
         else:
@@ -117,6 +120,9 @@ class CertificateAuthority(object):
 
         with open(self.ca_file, 'wb+') as f:
             f.write(OpenSSL.crypto.dump_privatekey(OpenSSL.SSL.FILETYPE_PEM, self.key))
+            f.write(OpenSSL.crypto.dump_certificate(OpenSSL.SSL.FILETYPE_PEM, self.cert))
+
+        with open(self.ca_public, 'wb+') as f:
             f.write(OpenSSL.crypto.dump_certificate(OpenSSL.SSL.FILETYPE_PEM, self.cert))
 
         self.logger.info('generated CA key+cert and wrote to {}'.format(self.ca_file))
@@ -364,6 +370,9 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
 
 
     def do_COMMAND(self):
+        if self.path == "http://warcprox./ca.pem":
+            self.serveCA()
+            return
         if not self.is_connect:
             try:
                 # Connect to destination
@@ -382,6 +391,18 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
 
     def _proxy_request(self):
         raise Exception('_proxy_request() not implemented in MitmProxyHandler, must be implemented in subclass!')
+
+    def serveCA(self):
+        ca_public = self.server.ca.ca_public
+        payload = (open(ca_public).read().encode('ascii'))
+        headers = (b"HTTP/1.1 200 OK\n" +
+                    b"Date: " + datetime.now().strftime("%a, %d %b %Y %H:%M:%S %Z") + "\n"+
+                    b"Content-Type: text/plain\n" +
+                    b"Content-Length: " + str(len(payload)).encode('ascii') +
+                    b"\r\n\r\n"
+        )
+        self.connection.sendall(headers)
+        self.connection.sendall(payload)
 
     def __getattr__(self, item):
         if item.startswith('do_'):
