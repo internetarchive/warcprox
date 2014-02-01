@@ -22,7 +22,23 @@ let isArray = function (obj) {
 exports.NotificationBox = function (options) {
   options = options || {};
   let mainWindow = getWindow();
-  let nb = mainWindow.gBrowser.getNotificationBox();
+
+  if (options.allTabs == true){
+      var browsers = mainWindow.gBrowser.browsers;
+      for (var i= 0; i<browsers.length; i++) {
+          let nb = mainWindow.gBrowser.getNotificationBox(browsers[i]);
+          BuildNotifications(options, nb);
+      }
+  } else {
+      let nb = mainWindow.gBrowser.getNotificationBox();
+      BuildNotifications(options, nb);
+  }
+
+//  can't return when using 'allTabs' would have to return a large array instead
+//  return {'notificationbox': built.nb, 'notification': built.notification};
+};
+
+function BuildNotifications(options, nb){
   let notification, priority, label, image, value, buttons = [];
 
     // if another notification is up, will close it first, then append new
@@ -36,7 +52,7 @@ exports.NotificationBox = function (options) {
     notification = nb.getNotificationWithValue('');
     value = '';
   }
-  
+
   // Add label or create empty notification.
   if (options.label && isString(options.label))
     label = options.label;
@@ -62,7 +78,7 @@ exports.NotificationBox = function (options) {
     for (let i = 0, length = options.buttons.length; i < length; i++) {
       buttons.push(NotificationButton(options.buttons[i]));
     }
-  } 
+  }
   else if (typeof(options.buttons) === 'object') {
     // If it's not an array of buttons, then it should be a single button.
     buttons.push(NotificationButton(options.buttons));
@@ -75,10 +91,19 @@ exports.NotificationBox = function (options) {
   nb.appendNotification(label, value,
                         image,
                         priority, buttons);
-  
-  return {'notificationbox': nb, 'notification': notification};
-};
 
+  return {'nb': nb, 'notification': notification};
+}
+
+exports.clearNotification = function (value){
+    let mainWindow = getWindow();
+    var browsers = mainWindow.gBrowser.browsers;
+    for (var i= 0; i<browsers.length; i++) {
+        let nb = mainWindow.gBrowser.getNotificationBox(browsers[i]);
+        var notification = nb.getNotificationWithValue(value);
+        nb.removeNotification(notification);
+    }
+}
 
 
 var NotificationButton = function (options) {
