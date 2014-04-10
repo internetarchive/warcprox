@@ -11,6 +11,7 @@ import logging
 import sys
 import os
 import hashlib
+import re
 
 try:
     import queue
@@ -18,25 +19,43 @@ except ImportError:
     import Queue
     queue = Queue
 
+try:
+    import http.cookies
+    cookie = http.cookies
+except ImportError:
+    import Cookie
+    cookie = Cookie
+
 
 class SingleWarcPerUrlWriterThread(WarcWriterThread):
+
+    # regex to match invalid chars in dir
+    STRIP_DIR_RX = re.compile('[\W]+')
+
     def init_writer(self):
         pass
 
     def get_record_writer(self, recorded_url):
+        target_dir = None
 
         if recorded_url.custom_header_params:
-            target_dir = recorded_url.custom_header_params
-        else:
-            target_dir = None
+            params = cookie.SimpleCookie()
+            params.load(recorded_url.custom_header_params)
+            try:
+                target_dir = params["target"].value
+            except KeyError:
+                pass
 
         if target_dir:
+            # strip non-alphanum and _ from target dir, for security
+            target_dir = self.STRIP_DIR_RX.sub('', target_dir)
             target_dir = os.path.join(self.directory, target_dir)
 
             if not os.path.exists(target_dir):
                 self.logger.info("warc destination directory {} doesn't exist, creating it".format(target_dir))
                 os.mkdir(target_dir)
         else:
+            #TODO: is this required? maybe it an error if omitted?
             target_dir = self.directory
 
 

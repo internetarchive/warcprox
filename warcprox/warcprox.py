@@ -405,10 +405,9 @@ class WarcProxyHandler(MitmProxyHandler):
         req_str = '{} {} {}\r\n'.format(self.command, self.path, self.request_version)
 
         # Get and remove optional request header for custom warcprox params
-        try:
-            custom_header_params = self.headers.pop('x-warcprox-params')
-        except KeyError:
-            custom_header_params = None
+        custom_header_params = self.headers.get('x-warcprox-params')
+        if custom_header_params is not None:
+            del self.headers['x-warcprox-params']
 
         # Add headers to the request
         # XXX in at least python3.3 str(self.headers) uses \n not \r\n :(
