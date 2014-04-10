@@ -404,6 +404,12 @@ class WarcProxyHandler(MitmProxyHandler):
         # Build request
         req_str = '{} {} {}\r\n'.format(self.command, self.path, self.request_version)
 
+        # Get and remove optional request header for custom warcprox params
+        try:
+            custom_header_params = self.headers.pop('x-warcprox-params')
+        except KeyError:
+            custom_header_params = None
+
         # Add headers to the request
         # XXX in at least python3.3 str(self.headers) uses \n not \r\n :(
         req_str += '\r\n'.join('{}: {}'.format(k,v) for (k,v) in self.headers.items())
@@ -446,12 +452,14 @@ class WarcProxyHandler(MitmProxyHandler):
         self._proxy_sock.close()
 
         recorded_url = RecordedUrl(url=self.url, request_data=req,
-                response_recorder=h.recorder, remote_ip=remote_ip)
+                response_recorder=h.recorder, remote_ip=remote_ip,
+                custom_header_params=custom_header_params)
         self.server.recorded_url_q.put(recorded_url)
 
 
 class RecordedUrl(object):
-    def __init__(self, url, request_data, response_recorder, remote_ip):
+    def __init__(self, url, request_data, response_recorder, remote_ip,
+                 custom_header_params=None):
         # XXX should test what happens with non-ascii url (when does
         # url-encoding happen?)
         if type(url) is not bytes:
@@ -466,6 +474,7 @@ class RecordedUrl(object):
 
         self.request_data = request_data
         self.response_recorder = response_recorder
+        self.custom_header_params = custom_header_params
 
 
 class WarcProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
@@ -735,16 +744,18 @@ class WarcWriterThread(threading.Thread):
         self.prefix = prefix
         self.port = port
 
+        self.init_writer()
+
+        self.stop = threading.Event()
+
+    def init_writer(self):
         self._f = None
         self._fpath = None
         self._serial = 0
 
-        if not os.path.exists(directory):
-            self.logger.info("warc destination directory {} doesn't exist, creating it".format(directory))
+        if not os.path.exists(self.directory):
+            self.logger.info("warc destination directory {} doesn't exist, creating it".format(self.directory))
             os.mkdir(directory)
-
-        self.stop = threading.Event()
-
 
     # returns a tuple (principal_record, request_record) where principal_record is either a response or revisit record
     def build_warc_records(self, recorded_url):
@@ -854,7 +865,7 @@ class WarcWriterThread(threading.Thread):
         now = datetime.now()
         return '{}{}'.format(now.strftime('%Y%m%d%H%M%S'), now.microsecond//1000)
 
-    def _close_writer(self):
+    def close_writer(self):
         if self._fpath:
             self.logger.info('closing {0}'.format(self._f_finalname))
             self._f.close()
@@ -891,9 +902,9 @@ class WarcWriterThread(threading.Thread):
 
 
     # <!-- <property name="template" value="${prefix}-${timestamp17}-${serialno}-${heritrix.pid}~${heritrix.hostname}~${heritrix.port}" /> -->
-    def _writer(self):
+    def get_record_writer(self, recorded_url):
         if self._fpath and os.path.getsize(self._fpath) > self.rollover_size:
-            self._close_writer()
+            self.close_writer()
 
         if self._f == None:
             self._f_finalname = '{}-{}-{:05d}-{}-{}-{}.warc{}'.format(
@@ -909,8 +920,10 @@ class WarcWriterThread(threading.Thread):
 
             self._serial += 1
 
-        return self._f
+        return self._fpath, self._f
 
+    def finish_record(self, path, writer, recorded_url):
+        writer.flush()
 
     def _final_tasks(self, recorded_url, recordset, recordset_offset):
         if (self.dedup_db is not None
@@ -939,7 +952,7 @@ class WarcWriterThread(threading.Thread):
 
                 recordset = self.build_warc_records(recorded_url)
 
-                writer = self._writer()
+                path, writer = self.get_record_writer(recorded_url)
                 recordset_offset = writer.tell()
 
                 for record in recordset:
@@ -949,19 +962,18 @@ class WarcWriterThread(threading.Thread):
                             record.get_header(warctools.WarcRecord.TYPE),
                             record.get_header(warctools.WarcRecord.CONTENT_LENGTH),
                             record.get_header(warctools.WarcRecord.URL),
-                            self._fpath, offset))
+                            path, offset))
 
-                self._f.flush()
+                self.finish_record(path, writer, recorded_url)
 
                 self._final_tasks(recorded_url, recordset, recordset_offset)
 
             except queue.Empty:
-                if (self._fpath is not None
-                        and self.rollover_idle_time is not None
+                if (self.rollover_idle_time is not None
                         and self.rollover_idle_time > 0
                         and time.time() - self._last_activity > self.rollover_idle_time):
                     self.logger.debug('rolling over warc file after {} seconds idle'.format(time.time() - self._last_activity))
-                    self._close_writer()
+                    self.close_writer()
 
                 if time.time() - self._last_sync > 60:
                     if self.dedup_db:
@@ -971,7 +983,7 @@ class WarcWriterThread(threading.Thread):
                     self._last_sync = time.time()
 
         self.logger.info('WarcWriterThread shutting down')
-        self._close_writer();
+        self.close_writer();
 
 
 class PlaybackIndexDb(object):
