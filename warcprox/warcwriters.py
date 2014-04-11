@@ -6,15 +6,6 @@ import time
 import hashlib
 import socket
 from datetime import datetime
-
-try:
-    import http.cookies
-    cookie = http.cookies
-except ImportError:
-    import Cookie
-    cookie = Cookie
-
-
 from hanzo import warctools, httptools
 
 #======================================================================
@@ -297,13 +288,10 @@ class WarcPerUrlWriter(BaseWarcWriter):
         target_dir = None
         ext = '.gz' if self.gzip else ''
 
-        if recorded_url.custom_header_params:
-            params = cookie.SimpleCookie()
-            params.load(recorded_url.custom_header_params)
-            try:
-                target_dir = params["target"].value
-            except KeyError:
-                pass
+        try:
+            target_dir = recorded_url.custom_params_cookie["target"].value
+        except TypeError, KeyError:
+            pass
 
         if target_dir:
             # strip non-alphanum and _ from target dir, for security

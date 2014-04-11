@@ -56,6 +56,13 @@ try:
 except ImportError:
     from StringIO import StringIO
 
+try:
+    import http.cookies
+    cookie = http.cookies
+except ImportError:
+    import Cookie
+    cookie = Cookie
+
 import socket
 import OpenSSL
 import ssl
@@ -405,10 +412,15 @@ class WarcProxyHandler(MitmProxyHandler):
         # Build request
         req_str = '{} {} {}\r\n'.format(self.command, self.path, self.request_version)
 
-        # Get and remove optional request header for custom warcprox params
-        custom_header_params = self.headers.get('x-warcprox-params')
-        if custom_header_params is not None:
+        # Get and remove optional request 'cookies' for warcprox
+        # parse the header as cookie to avoid dealing with custom encoding schemes
+        custom_params_header = self.headers.get('x-warcprox-params')
+        if custom_params_header:
             del self.headers['x-warcprox-params']
+            custom_params_cookie = cookie.SimpleCookie()
+            custom_params_cookie.load(custom_params_header)
+        else:
+            custom_params_cookie = None
 
         # Add headers to the request
         # XXX in at least python3.3 str(self.headers) uses \n not \r\n :(
@@ -453,13 +465,13 @@ class WarcProxyHandler(MitmProxyHandler):
 
         recorded_url = RecordedUrl(url=self.url, request_data=req,
                 response_recorder=h.recorder, remote_ip=remote_ip,
-                custom_header_params=custom_header_params)
+                custom_params_cookie=custom_params_cookie)
         self.server.recorded_url_q.put(recorded_url)
 
 
 class RecordedUrl(object):
     def __init__(self, url, request_data, response_recorder, remote_ip,
-                 custom_header_params=None):
+                 custom_params_cookie=None):
         # XXX should test what happens with non-ascii url (when does
         # url-encoding happen?)
         if type(url) is not bytes:
@@ -474,7 +486,10 @@ class RecordedUrl(object):
 
         self.request_data = request_data
         self.response_recorder = response_recorder
-        self.custom_header_params = custom_header_params
+
+        # An optional SimpleCookie object representing
+        # custom params, if any, passed to warcprox itself.
+        self.custom_params_cookie = custom_params_cookie
 
 
 class WarcProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
