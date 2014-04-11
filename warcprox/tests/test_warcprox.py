@@ -138,8 +138,7 @@ class WarcproxTest(unittest.TestCase):
         self._dedup_db_file = f.name
         dedup_db = warcprox.DedupDb(self._dedup_db_file)
 
-        warc_writer = warcprox.WarcWriterThread(recorded_url_q=recorded_url_q,
-                directory=self._warcs_dir, port=proxy.server_port,
+        warc_writer = warcprox.WarcWriter(directory=self._warcs_dir, port=proxy.server_port,
                 dedup_db=dedup_db, playback_index_db=playback_index_db)
 
         self.warcprox = warcprox.WarcproxController(proxy, warc_writer, playback_proxy)
@@ -191,7 +190,7 @@ class WarcproxTest(unittest.TestCase):
                 os.unlink(f)
 
 
-    def _test_httpds_no_proxy(self):
+    def test_httpds_no_proxy(self):
         url = 'http://localhost:{}/'.format(self.http_daemon.server_port)
         response = requests.get(url)
         self.assertEqual(response.status_code, 404)
@@ -227,7 +226,7 @@ class WarcproxTest(unittest.TestCase):
         return response
 
 
-    def _test_archive_and_playback_http_url(self):
+    def test_archive_and_playback_http_url(self):
         url = 'http://localhost:{}/a/b'.format(self.http_daemon.server_port)
 
         # ensure playback fails before archiving
@@ -247,7 +246,7 @@ class WarcproxTest(unittest.TestCase):
         self.assertEqual(response.content, b'I am the warcprox test payload! bbbbbbbbbb!\n')
 
 
-    def _test_archive_and_playback_https_url(self):
+    def test_archive_and_playback_https_url(self):
         url = 'https://localhost:{}/c/d'.format(self.https_daemon.server_port)
 
         # ensure playback fails before archiving
@@ -269,7 +268,7 @@ class WarcproxTest(unittest.TestCase):
 
 
     # test dedup of same http url with same payload
-    def _test_dedup_http(self):
+    def test_dedup_http(self):
         url = 'http://localhost:{}/e/f'.format(self.http_daemon.server_port)
 
         # ensure playback fails before archiving
@@ -331,7 +330,7 @@ class WarcproxTest(unittest.TestCase):
 
 
     # test dedup of same https url with same payload
-    def _test_dedup_https(self):
+    def test_dedup_https(self):
         url = 'https://localhost:{}/g/h'.format(self.https_daemon.server_port)
 
         # ensure playback fails before archiving
@@ -395,11 +394,12 @@ class WarcproxTest(unittest.TestCase):
     # run everything from here, otherwise it wants to setUp() and tearDown
     # around each test
     def runTest(self):
-        self._test_httpds_no_proxy()
-        self._test_archive_and_playback_http_url()
-        self._test_archive_and_playback_https_url()
-        self._test_dedup_http()
-        self._test_dedup_https()
+        pass
+ #       self._test_httpds_no_proxy()
+ #       self._test_archive_and_playback_http_url()
+ #       self._test_archive_and_playback_https_url()
+ #       self._test_dedup_http()
+ #       self._test_dedup_https()
         # self._test_dedup_mixed_http()
         # self._test_dedup_mixed_https()
 

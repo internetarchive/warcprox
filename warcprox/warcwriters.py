@@ -1,4 +1,3 @@
-import threading
 import base64
 import os
 import logging
@@ -7,12 +6,6 @@ import time
 import hashlib
 import socket
 from datetime import datetime
-
-try:
-    import queue
-except ImportError:
-    import Queue
-    queue = Queue
 
 try:
     import http.cookies
@@ -25,14 +18,10 @@ except ImportError:
 from hanzo import warctools, httptools
 
 #======================================================================
-class BaseWarcWriterThread(threading.Thread):
+class BaseWarcWriter(object):
     # port is only used for warc filename
     def __init__(self, **kwargs):
-        threading.Thread.__init__(self, name=self.__class__.__name__)
-
         self.logger = logging.getLogger(self.__class__.__name__)
-
-        self.recorded_url_q = kwargs.get('recorded_url_q')
 
         self.gzip = kwargs.get('gzip', False)
         self.digest_algorithm = kwargs.get('digest_algorithm', 'sha1')
@@ -46,9 +35,7 @@ class BaseWarcWriterThread(threading.Thread):
         self.prefix = kwargs.get('prefix', 'WARCPROX')
         self.port = kwargs.get('port', 0)
 
-        self._init_writer()
-
-        self.stop = threading.Event()
+        self._last_sync = self._last_activity = time.time()
 
     # returns a tuple (principal_record, request_record) where principal_record is either a response or revisit record
     def build_warc_records(self, recorded_url):
@@ -188,48 +175,37 @@ class BaseWarcWriterThread(threading.Thread):
 
         return record
 
-    def run(self):
-        self._on_thread_start()
+    def write_url(self, recorded_url):
+        self._last_activity = time.time()
 
-        self._last_sync = self._last_activity = time.time()
+        recordset = self.build_warc_records(recorded_url)
 
-        while not self.stop.is_set():
-            try:
-                recorded_url = self.recorded_url_q.get(block=True, timeout=0.5)
+        fullpath, filename, writer = self._begin_record(recorded_url)
 
-                self._last_activity = time.time()
+        recordset_offset = writer.tell()
 
-                recordset = self.build_warc_records(recorded_url)
+        for record in recordset:
+            offset = writer.tell()
+            record.write_to(writer, gzip=self.gzip)
+            self.logger.debug('wrote warc record: warc_type={} content_length={} url={} warc={} offset={}'.format(
+                    record.get_header(warctools.WarcRecord.TYPE),
+                    record.get_header(warctools.WarcRecord.CONTENT_LENGTH),
+                    record.get_header(warctools.WarcRecord.URL),
+                    fullpath, offset))
 
-                fullpath, filename, writer = self._begin_record(recorded_url)
+        self._finish_record(fullpath, filename, writer, recorded_url)
 
-                recordset_offset = writer.tell()
+        self._final_tasks(recorded_url, recordset, recordset_offset)
 
-                for record in recordset:
-                    offset = writer.tell()
-                    record.write_to(writer, gzip=self.gzip)
-                    self.logger.debug('wrote warc record: warc_type={} content_length={} url={} warc={} offset={}'.format(
-                            record.get_header(warctools.WarcRecord.TYPE),
-                            record.get_header(warctools.WarcRecord.CONTENT_LENGTH),
-                            record.get_header(warctools.WarcRecord.URL),
-                            fullpath, offset))
+    def on_empty_queue(self):
+        self._on_empty_queue()
 
-                self._finish_record(fullpath, filename, writer, recorded_url)
-
-                self._final_tasks(recorded_url, recordset, recordset_offset)
-
-            except queue.Empty:
-                self._on_empty_queue()
-
-                if time.time() - self._last_sync > 60:
-                    if self.dedup_db:
-                        self.dedup_db.sync()
-                    if self.playback_index_db:
-                        self.playback_index_db.sync()
-                    self._last_sync = time.time()
-
-        self.logger.info('{} shutting down'.format(self.__class__.__name__))
-        self._close_writer();
+        if time.time() - self._last_sync > 60:
+            if self.dedup_db:
+                self.dedup_db.sync()
+            if self.playback_index_db:
+                self.playback_index_db.sync()
+            self._last_sync = time.time()
 
     def _final_tasks(self, recorded_url, recordset, recordset_offset):
         if (self.dedup_db is not None
@@ -245,13 +221,13 @@ class BaseWarcWriterThread(threading.Thread):
 
 
 #======================================================================
-class WarcWriterThread(BaseWarcWriterThread):
+class WarcWriter(BaseWarcWriter):
     def __init__(self, **kwargs):
-        super(WarcWriterThread, self).__init__(**kwargs)
+        super(WarcWriter, self).__init__(**kwargs)
         self.rollover_size = kwargs.get('rollover_size', 1000000000)
         self.rollover_idle_time = kwargs.get('rollover_idle_time')
 
-    def _init_writer(self):
+    def init_writer(self):
         self._f = None
         self._fpath = None
         self._serial = 0
@@ -260,7 +236,7 @@ class WarcWriterThread(BaseWarcWriterThread):
             self.logger.info("warc destination directory {} doesn't exist, creating it".format(self.directory))
             os.mkdir(self.directory)
 
-    def _close_writer(self):
+    def close_writer(self):
         if self._fpath:
             self.logger.info('closing {0}'.format(self._f_finalname))
             self._f.close()
@@ -273,7 +249,7 @@ class WarcWriterThread(BaseWarcWriterThread):
     # <!-- <property name="template" value="${prefix}-${timestamp17}-${serialno}-${heritrix.pid}~${heritrix.hostname}~${heritrix.port}" /> -->
     def _begin_record(self, recorded_url):
         if self._fpath and os.path.getsize(self._fpath) > self.rollover_size:
-            self._close_writer()
+            self.close_writer()
 
         if self._f == None:
             self._f_finalname = '{}-{}-{:05d}-{}-{}-{}.warc{}'.format(
@@ -294,27 +270,27 @@ class WarcWriterThread(BaseWarcWriterThread):
     def _finish_record(self, fullpath, filename, writer, recorded_url):
         writer.flush()
 
-    def _on_thread_start(self):
-        self.logger.info('{} starting, directory={} gzip={} rollover_size={} rollover_idle_time={} prefix={} port={}'.format(
+    def describe(self):
+        return '{} starting, directory={} gzip={} rollover_size={} rollover_idle_time={} prefix={} port={}'.format(
                 self.__class__.__name__,
                 os.path.abspath(self.directory), self.gzip, self.rollover_size,
-                self.rollover_idle_time, self.prefix, self.port))
+                self.rollover_idle_time, self.prefix, self.port)
 
     def _on_empty_queue(self):
         if (self.rollover_idle_time is not None
                 and self.rollover_idle_time > 0
                 and time.time() - self._last_activity > self.rollover_idle_time):
             self.logger.debug('rolling over warc file after {} seconds idle'.format(time.time() - self._last_activity))
-            self._close_writer()
+            self.close_writer()
 
 
 #======================================================================
-class WarcPerUrlWriterThread(BaseWarcWriterThread):
+class WarcPerUrlWriter(BaseWarcWriter):
 
     # regex to match invalid chars in dir
     STRIP_DIR_RX = re.compile('[\W]+')
 
-    def _init_writer(self):
+    def init_writer(self):
         pass
 
     def _begin_record(self, recorded_url):
@@ -358,13 +334,13 @@ class WarcPerUrlWriterThread(BaseWarcWriterThread):
         writer.flush()
         writer.close()
 
-    def _close_writer(self):
+    def close_writer(self):
         pass
 
-    def _on_thread_start(self):
-        self.logger.info('{} starting, directory={} gzip={} prefix={} port={}'.format(
+    def describe(self):
+        return '{} starting, directory={} gzip={} prefix={} port={}'.format(
                 self.__class__.__name__,
-                os.path.abspath(self.directory), self.gzip, self.prefix, self.port))
+                os.path.abspath(self.directory), self.gzip, self.prefix, self.port)
 
     def _on_empty_queue(self):
         pass

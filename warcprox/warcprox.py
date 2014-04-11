@@ -75,7 +75,7 @@ import tempfile
 import json
 import traceback
 
-from warcwriters import WarcWriterThread, WarcPerUrlWriterThread
+from warcwriters import WarcWriter, WarcPerUrlWriter
 
 class CertificateAuthority(object):
     logger = logging.getLogger('warcprox.CertificateAuthority')
@@ -809,7 +809,7 @@ class WarcproxController(object):
         Create warcprox controller.
 
         If supplied, proxy should be an instance of WarcProxy, and warc_writer
-        should be an instance of WarcWriterThread. If not supplied, they are
+        should be an instance of WarcproxWriter. If not supplied, they are
         created with default values.
 
         If supplied, playback_proxy should be an instance of PlaybackProxy. If not
@@ -820,10 +820,12 @@ class WarcproxController(object):
         else:
             self.proxy = WarcProxy()
 
-        if warc_writer is not None:
-            self.warc_writer = warc_writer
-        else:
-            self.warc_writer = WarcWriterThread(recorded_url_q=self.proxy.recorded_url_q)
+        if warc_writer is None:
+            warc_writer = WarcWriter()
+
+        self.warc_writer_thread = WarcproxWriterThread(recorded_url_q=self.proxy.recorded_url_q,
+                                                       warc_writer=warc_writer)
+        self.warc_writer = warc_writer
 
         self.playback_proxy = playback_proxy
 
@@ -836,7 +838,7 @@ class WarcproxController(object):
         """
         proxy_thread = threading.Thread(target=self.proxy.serve_forever, name='ProxyThread')
         proxy_thread.start()
-        self.warc_writer.start()
+        self.warc_writer_thread.start()
 
         if self.playback_proxy is not None:
             playback_proxy_thread = threading.Thread(target=self.playback_proxy.serve_forever, name='PlaybackProxyThread')
@@ -856,10 +858,11 @@ class WarcproxController(object):
         except:
             pass
         finally:
-            self.warc_writer.stop.set()
+            self.warc_writer_thread.stop.set()
             self.proxy.shutdown()
             self.proxy.server_close()
 
+            # should this be moved into warc_writer thread?
             if self.warc_writer.dedup_db is not None:
                 self.warc_writer.dedup_db.close()
 
@@ -870,11 +873,43 @@ class WarcproxController(object):
                     self.playback_proxy.playback_index_db.close()
 
             # wait for threads to finish
-            self.warc_writer.join()
+            self.warc_writer_thread.join()
             proxy_thread.join()
             if self.playback_proxy is not None:
                 playback_proxy_thread.join()
 
+
+class WarcproxWriterThread(threading.Thread):
+    def __init__(self, recorded_url_q, warc_writer=None):
+        threading.Thread.__init__(self, name=self.__class__.__name__)
+
+        self.logger = logging.getLogger(self.__class__.__name__)
+
+        self.recorded_url_q = recorded_url_q
+
+        if warc_writer:
+            self.warc_writer = warc_writer
+        else:
+            self.warc_writer = WarcWriter()
+
+        self.stop = threading.Event()
+
+
+    def run(self):
+        self.warc_writer.init_writer()
+
+        self.logger.info(self.warc_writer.describe())
+
+        try:
+            while not self.stop.is_set():
+                try:
+                    recorded_url = self.recorded_url_q.get(block=True, timeout=0.5)
+                    self.warc_writer.write_url(recorded_url)
+                except queue.Empty:
+                    self.warc_writer.on_empty_queue()
+        finally:
+            self.logger.info('{} shutting down'.format(self.warc_writer.__class__.__name__))
+            self.warc_writer.close_writer()
 
 def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
     arg_parser = argparse.ArgumentParser(prog=prog,
@@ -975,13 +1010,13 @@ def main(argv=sys.argv):
 
     if args.warc_per_url:
         logging.info('Using warc-per-url writer')
-        warc_writer_class = WarcPerUrlWriterThread
+        warc_writer_class = WarcPerUrlWriter
     else:
         logging.info('Using default warc writer')
-        warc_writer_class = WarcWriterThread
+        warc_writer_class = WarcWriter
 
-    warc_writer = warc_writer_class(recorded_url_q=recorded_url_q,
-            directory=args.directory, gzip=args.gzip, prefix=args.prefix,
+    warc_writer = warc_writer_class(directory=args.directory,
+            gzip=args.gzip, prefix=args.prefix,
             port=int(args.port), rollover_size=int(args.size),
             rollover_idle_time=int(args.rollover_idle_time) if args.rollover_idle_time is not None else None,
             base32=args.base32, dedup_db=dedup_db,
