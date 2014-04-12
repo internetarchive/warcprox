@@ -82,7 +82,10 @@ import tempfile
 import json
 import traceback
 
-from warcwriters import WarcWriter, WarcPerUrlWriter
+try:
+    from warcprox.warcwriters import WarcWriter, WarcPerUrlWriter
+except ImportError:
+    from warcwriters import WarcWriter, WarcPerUrlWriter
 
 class CertificateAuthority(object):
     logger = logging.getLogger('warcprox.CertificateAuthority')
@@ -417,10 +420,11 @@ class WarcProxyHandler(MitmProxyHandler):
         custom_params_header = self.headers.get('x-warcprox-params')
         if custom_params_header:
             del self.headers['x-warcprox-params']
-            custom_params_cookie = cookie.SimpleCookie()
-            custom_params_cookie.load(custom_params_header)
+            cp_cookie = cookie.SimpleCookie()
+            cp_cookie.load(custom_params_header)
+            custom_params = dict((n, m.value) for n, m in cp_cookie.items())
         else:
-            custom_params_cookie = None
+            custom_params = {}
 
         # Add headers to the request
         # XXX in at least python3.3 str(self.headers) uses \n not \r\n :(
@@ -465,13 +469,13 @@ class WarcProxyHandler(MitmProxyHandler):
 
         recorded_url = RecordedUrl(url=self.url, request_data=req,
                 response_recorder=h.recorder, remote_ip=remote_ip,
-                custom_params_cookie=custom_params_cookie)
+                custom_params=custom_params, status=h.status)
         self.server.recorded_url_q.put(recorded_url)
 
 
 class RecordedUrl(object):
     def __init__(self, url, request_data, response_recorder, remote_ip,
-                 custom_params_cookie=None):
+                 custom_params={}, status=None):
         # XXX should test what happens with non-ascii url (when does
         # url-encoding happen?)
         if type(url) is not bytes:
@@ -487,9 +491,11 @@ class RecordedUrl(object):
         self.request_data = request_data
         self.response_recorder = response_recorder
 
-        # An optional SimpleCookie object representing
-        # custom params, if any, passed to warcprox itself.
-        self.custom_params_cookie = custom_params_cookie
+        # Optional params dict, if any, passed to warcprox
+        # via a cookie-like header
+        self.custom_params = custom_params
+
+        self.status = status
 
 
 class WarcProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
@@ -707,7 +713,12 @@ class DedupDb(object):
     def sync(self):
         self.db.sync()
 
-    def save(self, key, response_record, offset):
+    def save_digest(self, digest, response_record, recorded_url):
+        if ((response_record.get_header(warctools.WarcRecord.TYPE) !=
+             warctools.WarcRecord.RESPONSE) or
+            recorded_url.response_recorder.payload_size() == 0):
+            return
+
         record_id = response_record.get_header(warctools.WarcRecord.ID).decode('latin1')
         url = response_record.get_header(warctools.WarcRecord.URL).decode('latin1')
         date = response_record.get_header(warctools.WarcRecord.DATE).decode('latin1')
@@ -715,13 +726,13 @@ class DedupDb(object):
         py_value = {'i':record_id, 'u':url, 'd':date}
         json_value = json.dumps(py_value, separators=(',',':'))
 
-        self.db[key] = json_value.encode('utf-8')
-        self.logger.debug('dedup db saved {}:{}'.format(key, json_value))
+        self.db[digest] = json_value.encode('utf-8')
+        self.logger.debug('dedup db saved {}:{}'.format(digest, json_value))
 
 
-    def lookup(self, key):
-        if key in self.db:
-            json_result = self.db[key]
+    def lookup(self, digest, custom_params={}):
+        if digest in self.db:
+            json_result = self.db[digest]
             result = json.loads(json_result.decode('utf-8'))
             result['i'] = result['i'].encode('latin1')
             result['u'] = result['u'].encode('latin1')
@@ -751,8 +762,7 @@ class PlaybackIndexDb(object):
         self.db.sync()
 
 
-    def save(self, warcfile, recordset, offset):
-        response_record = recordset[0]
+    def save_url(self, digest, response_record, offset, length, filename, recorded_url):
         # XXX canonicalize url?
         url = response_record.get_header(warctools.WarcRecord.URL)
         date_str = response_record.get_header(warctools.WarcRecord.DATE).decode('latin1')
@@ -761,7 +771,7 @@ class PlaybackIndexDb(object):
         # there could be two visits of same url in the same second, and WARC-Date is
         # prescribed as YYYY-MM-DDThh:mm:ssZ, so we have to handle it :-\
 
-        # url:{date1:[record1={'f':warcfile,'o':response_offset,'q':request_offset,'i':record_id},record2,...],date2:[{...}],...}
+        # url:{date1:[record1={'f':filename,'o':response_offset,'q':request_offset,'i':record_id},record2,...],date2:[{...}],...}
         if url in self.db:
             existing_json_value = self.db[url].decode('utf-8')
             py_value = json.loads(existing_json_value)
@@ -769,9 +779,9 @@ class PlaybackIndexDb(object):
             py_value = {}
 
         if date_str in py_value:
-            py_value[date_str].append({'f':warcfile, 'o':offset, 'i':record_id_str})
+            py_value[date_str].append({'f':filename, 'o':offset, 'i':record_id_str})
         else:
-            py_value[date_str] = [{'f':warcfile, 'o':offset, 'i':record_id_str}]
+            py_value[date_str] = [{'f':filename, 'o':offset, 'i':record_id_str}]
 
         json_value = json.dumps(py_value, separators=(',',':'))
 

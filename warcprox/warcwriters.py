@@ -5,6 +5,7 @@ import re
 import time
 import hashlib
 import socket
+
 from datetime import datetime
 from hanzo import warctools, httptools
 
@@ -35,7 +36,7 @@ class BaseWarcWriter(object):
         dedup_info = None
         if self.dedup_db is not None and recorded_url.response_recorder.payload_digest is not None:
             key = self.digest_str(recorded_url.response_recorder.payload_digest)
-            dedup_info = self.dedup_db.lookup(key)
+            dedup_info = self.dedup_db.lookup(key, recorded_url.custom_params)
 
         if dedup_info is not None:
             # revisit record
@@ -175,6 +176,8 @@ class BaseWarcWriter(object):
 
         recordset_offset = writer.tell()
 
+        record_length = None
+
         for record in recordset:
             offset = writer.tell()
             record.write_to(writer, gzip=self.gzip)
@@ -184,9 +187,12 @@ class BaseWarcWriter(object):
                     record.get_header(warctools.WarcRecord.URL),
                     fullpath, offset))
 
+            if record_length is None:
+                record_length = writer.tell()
+
         self._finish_record(fullpath, filename, writer, recorded_url)
 
-        self._final_tasks(recorded_url, recordset, recordset_offset)
+        self._final_tasks(recordset, recordset_offset, record_length, filename, recorded_url)
 
     def on_empty_queue(self):
         self._on_empty_queue()
@@ -198,15 +204,22 @@ class BaseWarcWriter(object):
                 self.playback_index_db.sync()
             self._last_sync = time.time()
 
-    def _final_tasks(self, recorded_url, recordset, recordset_offset):
-        if (self.dedup_db is not None
-                and recordset[0].get_header(warctools.WarcRecord.TYPE) == warctools.WarcRecord.RESPONSE
-                and recorded_url.response_recorder.payload_size() > 0):
-            key = self.digest_str(recorded_url.response_recorder.payload_digest)
-            self.dedup_db.save(key, recordset[0], recordset_offset)
+    def _final_tasks(self, recordset, recordset_offset, record_length, filename, recorded_url):
+        if (self.dedup_db or self.playback_index_db):
+            digest_key = self.digest_str(recorded_url.response_recorder.payload_digest)
+
+        if self.dedup_db is not None:
+            self.dedup_db.save_digest(digest_key,
+                                      recordset[0],
+                                      recorded_url)
 
         if self.playback_index_db is not None:
-            self.playback_index_db.save(self._f_finalname, recordset, recordset_offset)
+            self.playback_index_db.save_url(digest_key,
+                                            recordset[0],
+                                            recordset_offset,
+                                            record_length,
+                                            filename,
+                                            recorded_url)
 
         recorded_url.response_recorder.tempfile.close()
 
@@ -288,10 +301,7 @@ class WarcPerUrlWriter(BaseWarcWriter):
         target_dir = None
         ext = '.gz' if self.gzip else ''
 
-        try:
-            target_dir = recorded_url.custom_params_cookie["target"].value
-        except TypeError, KeyError:
-            pass
+        target_dir = recorded_url.custom_params.get('target')
 
         if target_dir:
             # strip non-alphanum and _ from target dir, for security
