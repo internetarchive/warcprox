@@ -39,6 +39,10 @@ class BaseWarcWriter(object):
             dedup_info = self.dedup_db.lookup(key, recorded_url.custom_params)
 
         if dedup_info is not None:
+
+            if dedup_info.get('skip', False):
+                return None
+
             # revisit record
             recorded_url.response_recorder.tempfile.seek(0)
             if recorded_url.response_recorder.payload_offset is not None:
@@ -171,6 +175,8 @@ class BaseWarcWriter(object):
         self._last_activity = time.time()
 
         recordset = self.build_warc_records(recorded_url)
+        if recordset is None:
+            return None
 
         fullpath, filename, writer = self._begin_record(recorded_url)
 
