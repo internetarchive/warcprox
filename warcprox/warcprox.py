@@ -730,7 +730,7 @@ class DedupDb(object):
         self.logger.debug('dedup db saved {}:{}'.format(digest, json_value))
 
 
-    def lookup(self, digest, custom_params={}):
+    def lookup(self, digest, url=None, custom_params={}):
         if digest in self.db:
             json_result = self.db[digest]
             result = json.loads(json_result.decode('utf-8'))

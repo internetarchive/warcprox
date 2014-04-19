@@ -277,7 +277,7 @@ class WarcproxTest(unittest.TestCase):
         self.assertEqual(response.content, b'404 Not in Archive\n')
 
         # check not in dedup db
-        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup(b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
+        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup(b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc', url)
         self.assertIsNone(dedup_lookup)
 
         # archive
@@ -294,7 +294,7 @@ class WarcproxTest(unittest.TestCase):
 
         # check in dedup db
         # {u'i': u'<urn:uuid:e691dc0f-4bb9-4ad8-9afb-2af836aa05e4>', u'u': u'https://localhost:62841/c/d', u'd': u'2013-11-22T00:14:37Z'}
-        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup(b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
+        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup(b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc', url)
         self.assertEqual(dedup_lookup['u'], url.encode('ascii'))
         self.assertRegexpMatches(dedup_lookup['i'], br'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$')
         self.assertRegexpMatches(dedup_lookup['d'], br'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$')
@@ -315,7 +315,7 @@ class WarcproxTest(unittest.TestCase):
         time.sleep(2.0)
 
         # check in dedup db (no change from prev)
-        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup(b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
+        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup(b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc', url)
         self.assertEqual(dedup_lookup['u'], url.encode('ascii'))
         self.assertEqual(dedup_lookup['i'], record_id)
         self.assertEqual(dedup_lookup['d'], dedup_date)
@@ -339,7 +339,7 @@ class WarcproxTest(unittest.TestCase):
         self.assertEqual(response.content, b'404 Not in Archive\n')
 
         # check not in dedup db
-        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup(b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
+        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup(b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89', url)
         self.assertIsNone(dedup_lookup)
 
         # archive
@@ -356,7 +356,7 @@ class WarcproxTest(unittest.TestCase):
 
         # check in dedup db
         # {u'i': u'<urn:uuid:e691dc0f-4bb9-4ad8-9afb-2af836aa05e4>', u'u': u'https://localhost:62841/c/d', u'd': u'2013-11-22T00:14:37Z'}
-        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup(b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
+        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup(b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89', url)
         self.assertEqual(dedup_lookup['u'], url.encode('ascii'))
         self.assertRegexpMatches(dedup_lookup['i'], br'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$')
         self.assertRegexpMatches(dedup_lookup['d'], br'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$')
@@ -377,7 +377,7 @@ class WarcproxTest(unittest.TestCase):
         time.sleep(2.0)
 
         # check in dedup db (no change from prev)
-        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup(b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
+        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup(b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89', url)
         self.assertEqual(dedup_lookup['u'], url.encode('ascii'))
         self.assertEqual(dedup_lookup['i'], record_id)
         self.assertEqual(dedup_lookup['d'], dedup_date)

@@ -36,7 +36,7 @@ class BaseWarcWriter(object):
         dedup_info = None
         if self.dedup_db is not None and recorded_url.response_recorder.payload_digest is not None:
             key = self.digest_str(recorded_url.response_recorder.payload_digest)
-            dedup_info = self.dedup_db.lookup(key, recorded_url.custom_params)
+            dedup_info = self.dedup_db.lookup(key, recorded_url.url, recorded_url.custom_params)
 
         if dedup_info is not None:
 
