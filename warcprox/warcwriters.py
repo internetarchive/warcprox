@@ -220,7 +220,7 @@ class BaseWarcWriter(object):
             self.playback_index_db.save_url(digest_key,
                                             recordset[0],
                                             recordset_offset,
-                                            record_lengths,
+                                            record_length,
                                             filename,
                                             recorded_url)
 
