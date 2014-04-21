@@ -182,8 +182,6 @@ class BaseWarcWriter(object):
 
         recordset_offset = writer.tell()
 
-        record_length = None
-
         for record in recordset:
             offset = writer.tell()
             record.write_to(writer, gzip=self.gzip)
@@ -193,8 +191,7 @@ class BaseWarcWriter(object):
                     record.get_header(warctools.WarcRecord.URL),
                     fullpath, offset))
 
-            if record_length is None:
-                record_length = writer.tell()
+        record_length = writer.tell() - recordset_offset
 
         self._finish_record(fullpath, filename, writer, recorded_url)
 
@@ -223,7 +220,7 @@ class BaseWarcWriter(object):
             self.playback_index_db.save_url(digest_key,
                                             recordset[0],
                                             recordset_offset,
-                                            record_length,
+                                            record_lengths,
                                             filename,
                                             recorded_url)
 
@@ -328,15 +325,22 @@ class WarcPerUrlWriter(BaseWarcWriter):
                                         os.getpid(),
                                         ext)
 
+        # filename does not get a .open, only fullpath
         fullpath = os.path.join(target_dir, filename)
 
-        writer = open(fullpath, 'wb')
+        writer = open(fullpath + '.open', 'wb')
 
         return (fullpath, filename, writer)
 
     def _finish_record(self, fullpath, filename, writer, recorded_url):
         writer.flush()
         writer.close()
+
+        #parts = os.path.splitext(fullpath)
+        #if len(parts) == 2 and parts[1] == '.open':
+        #    os.rename(fullpath, parts[0])
+        if os.path.isfile(fullpath + '.open'):
+            os.rename(fullpath + '.open', fullpath)
 
     def close_writer(self):
         pass
