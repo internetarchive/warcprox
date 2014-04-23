@@ -31,7 +31,7 @@ class BaseWarcWriter(object):
 
     # returns a tuple (principal_record, request_record) where principal_record is either a response or revisit record
     def build_warc_records(self, recorded_url):
-        warc_date = warctools.warc.warc_datetime_str(datetime.now())
+        warc_date = warctools.warc.warc_datetime_str(datetime.utcnow())
 
         dedup_info = None
         if self.dedup_db is not None and recorded_url.response_recorder.payload_digest is not None:
@@ -89,7 +89,7 @@ class BaseWarcWriter(object):
         refers_to_date=None):
 
         if warc_date is None:
-            warc_date = warctools.warc.warc_datetime_str(datetime.now())
+            warc_date = warctools.warc.warc_datetime_str(datetime.utcnow())
 
         record_id = warctools.WarcRecord.random_warc_uuid()
 
@@ -143,11 +143,11 @@ class BaseWarcWriter(object):
         #return '{}{}'.format(now.strftime('%Y%m%d%H%M%S'), now.microsecond//1000)
 
     def timestamp20(self):
-        now = datetime.now()
+        now = datetime.utcnow()
         return now.strftime('%Y%m%d%H%M%S%f')
 
     def _build_warcinfo_record(self, filename):
-        warc_record_date = warctools.warc.warc_datetime_str(datetime.now())
+        warc_record_date = warctools.warc.warc_datetime_str(datetime.utcnow())
         record_id = warctools.WarcRecord.random_warc_uuid()
 
         headers = []
