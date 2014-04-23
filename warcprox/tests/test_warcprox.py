@@ -138,8 +138,7 @@ class WarcproxTest(unittest.TestCase):
         self._dedup_db_file = f.name
         dedup_db = warcprox.DedupDb(self._dedup_db_file)
 
-        warc_writer = warcprox.WarcWriterThread(recorded_url_q=recorded_url_q,
-                directory=self._warcs_dir, port=proxy.server_port,
+        warc_writer = warcprox.WarcWriter(directory=self._warcs_dir, port=proxy.server_port,
                 dedup_db=dedup_db, playback_index_db=playback_index_db)
 
         self.warcprox = warcprox.WarcproxController(proxy, warc_writer, playback_proxy)
@@ -191,7 +190,7 @@ class WarcproxTest(unittest.TestCase):
                 os.unlink(f)
 
 
-    def _test_httpds_no_proxy(self):
+    def test_httpds_no_proxy(self):
         url = 'http://localhost:{}/'.format(self.http_daemon.server_port)
         response = requests.get(url)
         self.assertEqual(response.status_code, 404)
@@ -227,7 +226,7 @@ class WarcproxTest(unittest.TestCase):
         return response
 
 
-    def _test_archive_and_playback_http_url(self):
+    def test_archive_and_playback_http_url(self):
         url = 'http://localhost:{}/a/b'.format(self.http_daemon.server_port)
 
         # ensure playback fails before archiving
@@ -247,7 +246,7 @@ class WarcproxTest(unittest.TestCase):
         self.assertEqual(response.content, b'I am the warcprox test payload! bbbbbbbbbb!\n')
 
 
-    def _test_archive_and_playback_https_url(self):
+    def test_archive_and_playback_https_url(self):
         url = 'https://localhost:{}/c/d'.format(self.https_daemon.server_port)
 
         # ensure playback fails before archiving
@@ -269,7 +268,7 @@ class WarcproxTest(unittest.TestCase):
 
 
     # test dedup of same http url with same payload
-    def _test_dedup_http(self):
+    def test_dedup_http(self):
         url = 'http://localhost:{}/e/f'.format(self.http_daemon.server_port)
 
         # ensure playback fails before archiving
@@ -278,7 +277,7 @@ class WarcproxTest(unittest.TestCase):
         self.assertEqual(response.content, b'404 Not in Archive\n')
 
         # check not in dedup db
-        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup(b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
+        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup(b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc', url)
         self.assertIsNone(dedup_lookup)
 
         # archive
@@ -295,7 +294,7 @@ class WarcproxTest(unittest.TestCase):
 
         # check in dedup db
         # {u'i': u'<urn:uuid:e691dc0f-4bb9-4ad8-9afb-2af836aa05e4>', u'u': u'https://localhost:62841/c/d', u'd': u'2013-11-22T00:14:37Z'}
-        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup(b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
+        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup(b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc', url)
         self.assertEqual(dedup_lookup['u'], url.encode('ascii'))
         self.assertRegexpMatches(dedup_lookup['i'], br'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$')
         self.assertRegexpMatches(dedup_lookup['d'], br'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$')
@@ -316,7 +315,7 @@ class WarcproxTest(unittest.TestCase):
         time.sleep(2.0)
 
         # check in dedup db (no change from prev)
-        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup(b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
+        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup(b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc', url)
         self.assertEqual(dedup_lookup['u'], url.encode('ascii'))
         self.assertEqual(dedup_lookup['i'], record_id)
         self.assertEqual(dedup_lookup['d'], dedup_date)
@@ -331,7 +330,7 @@ class WarcproxTest(unittest.TestCase):
 
 
     # test dedup of same https url with same payload
-    def _test_dedup_https(self):
+    def test_dedup_https(self):
         url = 'https://localhost:{}/g/h'.format(self.https_daemon.server_port)
 
         # ensure playback fails before archiving
@@ -340,7 +339,7 @@ class WarcproxTest(unittest.TestCase):
         self.assertEqual(response.content, b'404 Not in Archive\n')
 
         # check not in dedup db
-        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup(b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
+        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup(b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89', url)
         self.assertIsNone(dedup_lookup)
 
         # archive
@@ -357,7 +356,7 @@ class WarcproxTest(unittest.TestCase):
 
         # check in dedup db
         # {u'i': u'<urn:uuid:e691dc0f-4bb9-4ad8-9afb-2af836aa05e4>', u'u': u'https://localhost:62841/c/d', u'd': u'2013-11-22T00:14:37Z'}
-        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup(b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
+        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup(b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89', url)
         self.assertEqual(dedup_lookup['u'], url.encode('ascii'))
         self.assertRegexpMatches(dedup_lookup['i'], br'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$')
         self.assertRegexpMatches(dedup_lookup['d'], br'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$')
@@ -378,7 +377,7 @@ class WarcproxTest(unittest.TestCase):
         time.sleep(2.0)
 
         # check in dedup db (no change from prev)
-        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup(b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
+        dedup_lookup = self.warcprox.warc_writer.dedup_db.lookup(b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89', url)
         self.assertEqual(dedup_lookup['u'], url.encode('ascii'))
         self.assertEqual(dedup_lookup['i'], record_id)
         self.assertEqual(dedup_lookup['d'], dedup_date)
@@ -395,11 +394,12 @@ class WarcproxTest(unittest.TestCase):
     # run everything from here, otherwise it wants to setUp() and tearDown
     # around each test
     def runTest(self):
-        self._test_httpds_no_proxy()
-        self._test_archive_and_playback_http_url()
-        self._test_archive_and_playback_https_url()
-        self._test_dedup_http()
-        self._test_dedup_https()
+        pass
+ #       self._test_httpds_no_proxy()
+ #       self._test_archive_and_playback_http_url()
+ #       self._test_archive_and_playback_https_url()
+ #       self._test_dedup_http()
+ #       self._test_dedup_https()
         # self._test_dedup_mixed_http()
         # self._test_dedup_mixed_https()
 

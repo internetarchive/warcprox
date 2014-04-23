@@ -56,6 +56,13 @@ try:
 except ImportError:
     from StringIO import StringIO
 
+try:
+    import http.cookies
+    cookie = http.cookies
+except ImportError:
+    import Cookie
+    cookie = Cookie
+
 import socket
 import OpenSSL
 import ssl
@@ -72,9 +79,13 @@ import re
 import signal
 import time
 import tempfile
-import base64
 import json
 import traceback
+
+try:
+    from warcprox.warcwriters import WarcWriter, WarcPerUrlWriter
+except ImportError:
+    from warcwriters import WarcWriter, WarcPerUrlWriter
 
 class CertificateAuthority(object):
     logger = logging.getLogger('warcprox.CertificateAuthority')
@@ -404,6 +415,17 @@ class WarcProxyHandler(MitmProxyHandler):
         # Build request
         req_str = '{} {} {}\r\n'.format(self.command, self.path, self.request_version)
 
+        # Get and remove optional request 'cookies' for warcprox
+        # parse the header as cookie to avoid dealing with custom encoding schemes
+        custom_params_header = self.headers.get('x-warcprox-params')
+        if custom_params_header:
+            del self.headers['x-warcprox-params']
+            cp_cookie = cookie.SimpleCookie()
+            cp_cookie.load(custom_params_header)
+            custom_params = dict((n, m.value) for n, m in cp_cookie.items())
+        else:
+            custom_params = {}
+
         # Add headers to the request
         # XXX in at least python3.3 str(self.headers) uses \n not \r\n :(
         req_str += '\r\n'.join('{}: {}'.format(k,v) for (k,v) in self.headers.items())
@@ -446,12 +468,14 @@ class WarcProxyHandler(MitmProxyHandler):
         self._proxy_sock.close()
 
         recorded_url = RecordedUrl(url=self.url, request_data=req,
-                response_recorder=h.recorder, remote_ip=remote_ip)
+                response_recorder=h.recorder, remote_ip=remote_ip,
+                custom_params=custom_params, status=h.status)
         self.server.recorded_url_q.put(recorded_url)
 
 
 class RecordedUrl(object):
-    def __init__(self, url, request_data, response_recorder, remote_ip):
+    def __init__(self, url, request_data, response_recorder, remote_ip,
+                 custom_params={}, status=None):
         # XXX should test what happens with non-ascii url (when does
         # url-encoding happen?)
         if type(url) is not bytes:
@@ -466,6 +490,12 @@ class RecordedUrl(object):
 
         self.request_data = request_data
         self.response_recorder = response_recorder
+
+        # Optional params dict, if any, passed to warcprox
+        # via a cookie-like header
+        self.custom_params = custom_params
+
+        self.status = status
 
 
 class WarcProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
@@ -521,7 +551,7 @@ class PlaybackProxyHandler(MitmProxyHandler):
                 payload = b'500 Warcprox Error\n\n{}\n'.format(traceback.format_exc()).encode('utf-8')
                 headers = (b'HTTP/1.1 500 Internal Server Error\r\n'
                         +  b'Content-Type: text/plain;charset=utf-8\r\n'
-                        +  b'Content-Length: ' + len(payload) + b'\r\n'
+                        +  b'Content-Length: ' + str(len(payload)) + b'\r\n'
                         +  b'\r\n')
                 self.connection.sendall(headers)
                 self.connection.sendall(payload)
@@ -683,7 +713,12 @@ class DedupDb(object):
     def sync(self):
         self.db.sync()
 
-    def save(self, key, response_record, offset):
+    def save_digest(self, digest, response_record, recorded_url):
+        if ((response_record.get_header(warctools.WarcRecord.TYPE) !=
+             warctools.WarcRecord.RESPONSE) or
+            recorded_url.response_recorder.payload_size() == 0):
+            return
+
         record_id = response_record.get_header(warctools.WarcRecord.ID).decode('latin1')
         url = response_record.get_header(warctools.WarcRecord.URL).decode('latin1')
         date = response_record.get_header(warctools.WarcRecord.DATE).decode('latin1')
@@ -691,13 +726,13 @@ class DedupDb(object):
         py_value = {'i':record_id, 'u':url, 'd':date}
         json_value = json.dumps(py_value, separators=(',',':'))
 
-        self.db[key] = json_value.encode('utf-8')
-        self.logger.debug('dedup db saved {}:{}'.format(key, json_value))
+        self.db[digest] = json_value.encode('utf-8')
+        self.logger.debug('dedup db saved {}:{}'.format(digest, json_value))
 
 
-    def lookup(self, key):
-        if key in self.db:
-            json_result = self.db[key]
+    def lookup(self, digest, url=None, custom_params={}):
+        if digest in self.db:
+            json_result = self.db[digest]
             result = json.loads(json_result.decode('utf-8'))
             result['i'] = result['i'].encode('latin1')
             result['u'] = result['u'].encode('latin1')
@@ -705,273 +740,6 @@ class DedupDb(object):
             return result
         else:
             return None
-
-
-class WarcWriterThread(threading.Thread):
-    logger = logging.getLogger('warcprox.WarcWriterThread')
-
-    # port is only used for warc filename
-    def __init__(self, recorded_url_q=None, directory='./warcs',
-            rollover_size=1000000000, rollover_idle_time=None, gzip=False,
-            prefix='WARCPROX', port=0, digest_algorithm='sha1', base32=False,
-            dedup_db=None, playback_index_db=None):
-
-        threading.Thread.__init__(self, name='WarcWriterThread')
-
-        self.recorded_url_q = recorded_url_q
-
-        self.rollover_size = rollover_size
-        self.rollover_idle_time = rollover_idle_time
-
-        self.gzip = gzip
-        self.digest_algorithm = digest_algorithm
-        self.base32 = base32
-        self.dedup_db = dedup_db
-
-        self.playback_index_db = playback_index_db
-
-        # warc path and filename stuff
-        self.directory = directory
-        self.prefix = prefix
-        self.port = port
-
-        self._f = None
-        self._fpath = None
-        self._serial = 0
-
-        if not os.path.exists(directory):
-            self.logger.info("warc destination directory {} doesn't exist, creating it".format(directory))
-            os.mkdir(directory)
-
-        self.stop = threading.Event()
-
-
-    # returns a tuple (principal_record, request_record) where principal_record is either a response or revisit record
-    def build_warc_records(self, recorded_url):
-        warc_date = warctools.warc.warc_datetime_str(datetime.now())
-
-        dedup_info = None
-        if self.dedup_db is not None and recorded_url.response_recorder.payload_digest is not None:
-            key = self.digest_str(recorded_url.response_recorder.payload_digest)
-            dedup_info = self.dedup_db.lookup(key)
-
-        if dedup_info is not None:
-            # revisit record
-            recorded_url.response_recorder.tempfile.seek(0)
-            if recorded_url.response_recorder.payload_offset is not None:
-                response_header_block = recorded_url.response_recorder.tempfile.read(recorded_url.response_recorder.payload_offset)
-            else:
-                response_header_block = recorded_url.response_recorder.tempfile.read()
-
-            principal_record = self.build_warc_record(
-                    url=recorded_url.url, warc_date=warc_date,
-                    data=response_header_block,
-                    warc_type=warctools.WarcRecord.REVISIT,
-                    refers_to=dedup_info['i'],
-                    refers_to_target_uri=dedup_info['u'],
-                    refers_to_date=dedup_info['d'],
-                    profile=warctools.WarcRecord.PROFILE_IDENTICAL_PAYLOAD_DIGEST,
-                    content_type=httptools.ResponseMessage.CONTENT_TYPE,
-                    remote_ip=recorded_url.remote_ip)
-        else:
-            # response record
-            principal_record = self.build_warc_record(
-                    url=recorded_url.url, warc_date=warc_date,
-                    recorder=recorded_url.response_recorder,
-                    warc_type=warctools.WarcRecord.RESPONSE,
-                    content_type=httptools.ResponseMessage.CONTENT_TYPE,
-                    remote_ip=recorded_url.remote_ip)
-
-        request_record = self.build_warc_record(
-                url=recorded_url.url, warc_date=warc_date,
-                data=recorded_url.request_data,
-                warc_type=warctools.WarcRecord.REQUEST,
-                content_type=httptools.RequestMessage.CONTENT_TYPE,
-                concurrent_to=principal_record.id)
-
-        return principal_record, request_record
-
-
-    def digest_str(self, hash_obj):
-        return hash_obj.name.encode('utf-8') + b':' + (base64.b32encode(hash_obj.digest()) if self.base32 else hash_obj.hexdigest().encode('ascii'))
-
-
-    def build_warc_record(self, url, warc_date=None, recorder=None, data=None,
-        concurrent_to=None, warc_type=None, content_type=None, remote_ip=None,
-        profile=None, refers_to=None, refers_to_target_uri=None,
-        refers_to_date=None):
-
-        if warc_date is None:
-            warc_date = warctools.warc.warc_datetime_str(datetime.now())
-
-        record_id = warctools.WarcRecord.random_warc_uuid()
-
-        headers = []
-        if warc_type is not None:
-            headers.append((warctools.WarcRecord.TYPE, warc_type))
-        headers.append((warctools.WarcRecord.ID, record_id))
-        headers.append((warctools.WarcRecord.DATE, warc_date))
-        headers.append((warctools.WarcRecord.URL, url))
-        if remote_ip is not None:
-            headers.append((warctools.WarcRecord.IP_ADDRESS, remote_ip))
-        if profile is not None:
-            headers.append((warctools.WarcRecord.PROFILE, profile))
-        if refers_to is not None:
-            headers.append((warctools.WarcRecord.REFERS_TO, refers_to))
-        if refers_to_target_uri is not None:
-            headers.append((warctools.WarcRecord.REFERS_TO_TARGET_URI, refers_to_target_uri))
-        if refers_to_date is not None:
-            headers.append((warctools.WarcRecord.REFERS_TO_DATE, refers_to_date))
-        if concurrent_to is not None:
-            headers.append((warctools.WarcRecord.CONCURRENT_TO, concurrent_to))
-        if content_type is not None:
-            headers.append((warctools.WarcRecord.CONTENT_TYPE, content_type))
-
-        if recorder is not None:
-            headers.append((warctools.WarcRecord.CONTENT_LENGTH, str(len(recorder)).encode('latin1')))
-            headers.append((warctools.WarcRecord.BLOCK_DIGEST,
-                self.digest_str(recorder.block_digest)))
-            if recorder.payload_digest is not None:
-                headers.append((warctools.WarcRecord.PAYLOAD_DIGEST,
-                    self.digest_str(recorder.payload_digest)))
-
-            recorder.tempfile.seek(0)
-            record = warctools.WarcRecord(headers=headers, content_file=recorder.tempfile)
-
-        else:
-            headers.append((warctools.WarcRecord.CONTENT_LENGTH, str(len(data)).encode('latin1')))
-            block_digest = hashlib.new(self.digest_algorithm, data)
-            headers.append((warctools.WarcRecord.BLOCK_DIGEST,
-                self.digest_str(block_digest)))
-
-            content_tuple = content_type, data
-            record = warctools.WarcRecord(headers=headers, content=content_tuple)
-
-        return record
-
-
-    def timestamp17(self):
-        now = datetime.now()
-        return '{}{}'.format(now.strftime('%Y%m%d%H%M%S'), now.microsecond//1000)
-
-    def _close_writer(self):
-        if self._fpath:
-            self.logger.info('closing {0}'.format(self._f_finalname))
-            self._f.close()
-            finalpath = os.path.sep.join([self.directory, self._f_finalname])
-            os.rename(self._fpath, finalpath)
-
-            self._fpath = None
-            self._f = None
-
-    def _build_warcinfo_record(self, filename):
-        warc_record_date = warctools.warc.warc_datetime_str(datetime.now())
-        record_id = warctools.WarcRecord.random_warc_uuid()
-
-        headers = []
-        headers.append((warctools.WarcRecord.ID, record_id))
-        headers.append((warctools.WarcRecord.TYPE, warctools.WarcRecord.WARCINFO))
-        headers.append((warctools.WarcRecord.FILENAME, filename.encode('latin1')))
-        headers.append((warctools.WarcRecord.DATE, warc_record_date))
-
-        warcinfo_fields = []
-        warcinfo_fields.append(b'software: warcprox.py https://github.com/internetarchive/warcprox')
-        hostname = socket.gethostname()
-        warcinfo_fields.append('hostname: {}'.format(hostname).encode('latin1'))
-        warcinfo_fields.append('ip: {0}'.format(socket.gethostbyname(hostname)).encode('latin1'))
-        warcinfo_fields.append(b'format: WARC File Format 1.0')
-        # warcinfo_fields.append('robots: ignore')
-        # warcinfo_fields.append('description: {0}'.format(self.description))
-        # warcinfo_fields.append('isPartOf: {0}'.format(self.is_part_of))
-        data = b'\r\n'.join(warcinfo_fields) + b'\r\n'
-
-        record = warctools.WarcRecord(headers=headers, content=(b'application/warc-fields', data))
-
-        return record
-
-
-    # <!-- <property name="template" value="${prefix}-${timestamp17}-${serialno}-${heritrix.pid}~${heritrix.hostname}~${heritrix.port}" /> -->
-    def _writer(self):
-        if self._fpath and os.path.getsize(self._fpath) > self.rollover_size:
-            self._close_writer()
-
-        if self._f == None:
-            self._f_finalname = '{}-{}-{:05d}-{}-{}-{}.warc{}'.format(
-                    self.prefix, self.timestamp17(), self._serial, os.getpid(),
-                    socket.gethostname(), self.port, '.gz' if self.gzip else '')
-            self._fpath = os.path.sep.join([self.directory, self._f_finalname + '.open'])
-
-            self._f = open(self._fpath, 'wb')
-
-            warcinfo_record = self._build_warcinfo_record(self._f_finalname)
-            self.logger.debug('warcinfo_record.headers={}'.format(warcinfo_record.headers))
-            warcinfo_record.write_to(self._f, gzip=self.gzip)
-
-            self._serial += 1
-
-        return self._f
-
-
-    def _final_tasks(self, recorded_url, recordset, recordset_offset):
-        if (self.dedup_db is not None
-                and recordset[0].get_header(warctools.WarcRecord.TYPE) == warctools.WarcRecord.RESPONSE
-                and recorded_url.response_recorder.payload_size() > 0):
-            key = self.digest_str(recorded_url.response_recorder.payload_digest)
-            self.dedup_db.save(key, recordset[0], recordset_offset)
-
-        if self.playback_index_db is not None:
-            self.playback_index_db.save(self._f_finalname, recordset, recordset_offset)
-
-        recorded_url.response_recorder.tempfile.close()
-
-    def run(self):
-        self.logger.info('WarcWriterThread starting, directory={} gzip={} rollover_size={} rollover_idle_time={} prefix={} port={}'.format(
-                os.path.abspath(self.directory), self.gzip, self.rollover_size,
-                self.rollover_idle_time, self.prefix, self.port))
-
-        self._last_sync = self._last_activity = time.time()
-
-        while not self.stop.is_set():
-            try:
-                recorded_url = self.recorded_url_q.get(block=True, timeout=0.5)
-
-                self._last_activity = time.time()
-
-                recordset = self.build_warc_records(recorded_url)
-
-                writer = self._writer()
-                recordset_offset = writer.tell()
-
-                for record in recordset:
-                    offset = writer.tell()
-                    record.write_to(writer, gzip=self.gzip)
-                    self.logger.debug('wrote warc record: warc_type={} content_length={} url={} warc={} offset={}'.format(
-                            record.get_header(warctools.WarcRecord.TYPE),
-                            record.get_header(warctools.WarcRecord.CONTENT_LENGTH),
-                            record.get_header(warctools.WarcRecord.URL),
-                            self._fpath, offset))
-
-                self._f.flush()
-
-                self._final_tasks(recorded_url, recordset, recordset_offset)
-
-            except queue.Empty:
-                if (self._fpath is not None
-                        and self.rollover_idle_time is not None
-                        and self.rollover_idle_time > 0
-                        and time.time() - self._last_activity > self.rollover_idle_time):
-                    self.logger.debug('rolling over warc file after {} seconds idle'.format(time.time() - self._last_activity))
-                    self._close_writer()
-
-                if time.time() - self._last_sync > 60:
-                    if self.dedup_db:
-                        self.dedup_db.sync()
-                    if self.playback_index_db:
-                        self.playback_index_db.sync()
-                    self._last_sync = time.time()
-
-        self.logger.info('WarcWriterThread shutting down')
-        self._close_writer();
 
 
 class PlaybackIndexDb(object):
@@ -994,8 +762,7 @@ class PlaybackIndexDb(object):
         self.db.sync()
 
 
-    def save(self, warcfile, recordset, offset):
-        response_record = recordset[0]
+    def save_url(self, digest, response_record, offset, length, filename, recorded_url):
         # XXX canonicalize url?
         url = response_record.get_header(warctools.WarcRecord.URL)
         date_str = response_record.get_header(warctools.WarcRecord.DATE).decode('latin1')
@@ -1004,7 +771,7 @@ class PlaybackIndexDb(object):
         # there could be two visits of same url in the same second, and WARC-Date is
         # prescribed as YYYY-MM-DDThh:mm:ssZ, so we have to handle it :-\
 
-        # url:{date1:[record1={'f':warcfile,'o':response_offset,'q':request_offset,'i':record_id},record2,...],date2:[{...}],...}
+        # url:{date1:[record1={'f':filename,'o':response_offset,'q':request_offset,'i':record_id},record2,...],date2:[{...}],...}
         if url in self.db:
             existing_json_value = self.db[url].decode('utf-8')
             py_value = json.loads(existing_json_value)
@@ -1012,9 +779,9 @@ class PlaybackIndexDb(object):
             py_value = {}
 
         if date_str in py_value:
-            py_value[date_str].append({'f':warcfile, 'o':offset, 'i':record_id_str})
+            py_value[date_str].append({'f':filename, 'o':offset, 'i':record_id_str})
         else:
-            py_value[date_str] = [{'f':warcfile, 'o':offset, 'i':record_id_str}]
+            py_value[date_str] = [{'f':filename, 'o':offset, 'i':record_id_str}]
 
         json_value = json.dumps(py_value, separators=(',',':'))
 
@@ -1067,7 +834,7 @@ class WarcproxController(object):
         Create warcprox controller.
 
         If supplied, proxy should be an instance of WarcProxy, and warc_writer
-        should be an instance of WarcWriterThread. If not supplied, they are
+        should be an instance of WarcproxWriter. If not supplied, they are
         created with default values.
 
         If supplied, playback_proxy should be an instance of PlaybackProxy. If not
@@ -1078,10 +845,12 @@ class WarcproxController(object):
         else:
             self.proxy = WarcProxy()
 
-        if warc_writer is not None:
-            self.warc_writer = warc_writer
-        else:
-            self.warc_writer = WarcWriterThread(recorded_url_q=self.proxy.recorded_url_q)
+        if warc_writer is None:
+            warc_writer = WarcWriter()
+
+        self.warc_writer_thread = WarcproxWriterThread(recorded_url_q=self.proxy.recorded_url_q,
+                                                       warc_writer=warc_writer)
+        self.warc_writer = warc_writer
 
         self.playback_proxy = playback_proxy
 
@@ -1094,7 +863,7 @@ class WarcproxController(object):
         """
         proxy_thread = threading.Thread(target=self.proxy.serve_forever, name='ProxyThread')
         proxy_thread.start()
-        self.warc_writer.start()
+        self.warc_writer_thread.start()
 
         if self.playback_proxy is not None:
             playback_proxy_thread = threading.Thread(target=self.playback_proxy.serve_forever, name='PlaybackProxyThread')
@@ -1114,10 +883,11 @@ class WarcproxController(object):
         except:
             pass
         finally:
-            self.warc_writer.stop.set()
+            self.warc_writer_thread.stop.set()
             self.proxy.shutdown()
             self.proxy.server_close()
 
+            # should this be moved into warc_writer thread?
             if self.warc_writer.dedup_db is not None:
                 self.warc_writer.dedup_db.close()
 
@@ -1128,11 +898,43 @@ class WarcproxController(object):
                     self.playback_proxy.playback_index_db.close()
 
             # wait for threads to finish
-            self.warc_writer.join()
+            self.warc_writer_thread.join()
             proxy_thread.join()
             if self.playback_proxy is not None:
                 playback_proxy_thread.join()
 
+
+class WarcproxWriterThread(threading.Thread):
+    def __init__(self, recorded_url_q, warc_writer=None):
+        threading.Thread.__init__(self, name=self.__class__.__name__)
+
+        self.logger = logging.getLogger(self.__class__.__name__)
+
+        self.recorded_url_q = recorded_url_q
+
+        if warc_writer:
+            self.warc_writer = warc_writer
+        else:
+            self.warc_writer = WarcWriter()
+
+        self.stop = threading.Event()
+
+
+    def run(self):
+        self.warc_writer.init_writer()
+
+        self.logger.info(self.warc_writer.describe())
+
+        try:
+            while not self.stop.is_set():
+                try:
+                    recorded_url = self.recorded_url_q.get(block=True, timeout=0.5)
+                    self.warc_writer.write_url(recorded_url)
+                except queue.Empty:
+                    self.warc_writer.on_empty_queue()
+        finally:
+            self.logger.info('{} shutting down'.format(self.warc_writer.__class__.__name__))
+            self.warc_writer.close_writer()
 
 def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
     arg_parser = argparse.ArgumentParser(prog=prog,
@@ -1152,6 +954,8 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
             default='./warcs', help='where to write warcs')
     arg_parser.add_argument('-z', '--gzip', dest='gzip', action='store_true',
             help='write gzip-compressed warc records')
+    arg_parser.add_argument('-u', '--warc-per-url', dest='warc_per_url', action='store_true',
+            help='create a warc per request in optional target dir')
     arg_parser.add_argument('-n', '--prefix', dest='prefix',
             default='WARCPROX', help='WARC filename prefix')
     arg_parser.add_argument('-s', '--size', dest='size',
@@ -1229,8 +1033,15 @@ def main(argv=sys.argv):
         playback_index_db = None
         playback_proxy = None
 
-    warc_writer = WarcWriterThread(recorded_url_q=recorded_url_q,
-            directory=args.directory, gzip=args.gzip, prefix=args.prefix,
+    if args.warc_per_url:
+        logging.info('Using warc-per-url writer')
+        warc_writer_class = WarcPerUrlWriter
+    else:
+        logging.info('Using default warc writer')
+        warc_writer_class = WarcWriter
+
+    warc_writer = warc_writer_class(directory=args.directory,
+            gzip=args.gzip, prefix=args.prefix,
             port=int(args.port), rollover_size=int(args.size),
             rollover_idle_time=int(args.rollover_idle_time) if args.rollover_idle_time is not None else None,
             base32=args.base32, dedup_db=dedup_db,
