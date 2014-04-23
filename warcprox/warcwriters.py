@@ -51,21 +51,35 @@ class BaseWarcWriter(object):
                 response_header_block = recorded_url.response_recorder.tempfile.read()
 
             principal_record = self.build_warc_record(
-                    url=recorded_url.url, warc_date=warc_date,
-                    data=response_header_block,
+                    url=recorded_url.url,
+                    warc_date=warc_date,
+                    payload_digest=recorded_url.response_recorder.payload_digest,
+
                     warc_type=warctools.WarcRecord.REVISIT,
+
+                    # revisit specific params
+                    data=response_header_block,
                     refers_to=dedup_info['i'],
                     refers_to_target_uri=dedup_info['u'],
                     refers_to_date=dedup_info['d'],
                     profile=warctools.WarcRecord.PROFILE_IDENTICAL_PAYLOAD_DIGEST,
+                    # end revisit-specific params
+
                     content_type=httptools.ResponseMessage.CONTENT_TYPE,
                     remote_ip=recorded_url.remote_ip)
         else:
             # response record
             principal_record = self.build_warc_record(
-                    url=recorded_url.url, warc_date=warc_date,
-                    recorder=recorded_url.response_recorder,
+                    url=recorded_url.url,
+                    warc_date=warc_date,
+                    payload_digest=recorded_url.response_recorder.payload_digest,
+
                     warc_type=warctools.WarcRecord.RESPONSE,
+
+                    # response specific params
+                    recorder=recorded_url.response_recorder,
+                    # end response specific
+
                     content_type=httptools.ResponseMessage.CONTENT_TYPE,
                     remote_ip=recorded_url.remote_ip)
 
@@ -85,7 +99,7 @@ class BaseWarcWriter(object):
 
     def build_warc_record(self, url, warc_date=None, recorder=None, data=None,
         concurrent_to=None, warc_type=None, content_type=None, remote_ip=None,
-        profile=None, refers_to=None, refers_to_target_uri=None,
+        payload_digest=None, profile=None, refers_to=None, refers_to_target_uri=None,
         refers_to_date=None):
 
         if warc_date is None:
@@ -113,15 +127,13 @@ class BaseWarcWriter(object):
             headers.append((warctools.WarcRecord.CONCURRENT_TO, concurrent_to))
         if content_type is not None:
             headers.append((warctools.WarcRecord.CONTENT_TYPE, content_type))
+        if payload_digest is not None:
+            headers.append((warctools.WarcRecord.PAYLOAD_DIGEST, self.digest_str(payload_digest)))
 
         if recorder is not None:
             headers.append((warctools.WarcRecord.CONTENT_LENGTH, str(len(recorder)).encode('latin1')))
             headers.append((warctools.WarcRecord.BLOCK_DIGEST,
                 self.digest_str(recorder.block_digest)))
-            if recorder.payload_digest is not None:
-                headers.append((warctools.WarcRecord.PAYLOAD_DIGEST,
-                    self.digest_str(recorder.payload_digest)))
-
             recorder.tempfile.seek(0)
             record = warctools.WarcRecord(headers=headers, content_file=recorder.tempfile)
 
