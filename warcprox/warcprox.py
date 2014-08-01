@@ -100,7 +100,7 @@ class CertificateAuthority(object):
 
         # Generate certificate
         self.cert = OpenSSL.crypto.X509()
-        self.cert.set_version(3)
+        self.cert.set_version(2)
         # avoid sec_error_reused_issuer_and_serial
         self.cert.set_serial_number(random.randint(0,2**64-1))
         self.cert.get_subject().CN = 'Warcprox CA on {}'.format(socket.gethostname())[:64]
