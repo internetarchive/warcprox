@@ -5,6 +5,7 @@ import os
 import tempfile
 import subprocess # to access the script from shell
 import sys
+import glob
 
 # will try as python 3 then default to python 2 modules
 try:
@@ -41,7 +42,7 @@ dump_anydbm_loc = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(_
 
 @pytest.fixture(scope="function")
 def gdbm_test_db(request):
-    temp_file = tempfile.NamedTemporaryFile()
+    temp_file = tempfile.NamedTemporaryFile(delete=False)
     print("creating test gdbm file {}".format(temp_file.name))
     test_db = gdbm.open(temp_file.name, "n")
     test_db[key1] = val1
@@ -49,8 +50,10 @@ def gdbm_test_db(request):
     test_db.close()
 
     def delete_gdbm_test_db():
-        print("deleting test gdbm file {}".format(temp_file.name))
         temp_file.close()
+        for f in glob.glob("{}*".format(temp_file.name)):
+            print("deleting test gdbm file {}".format(f))
+            os.remove(f)
 
     request.addfinalizer(delete_gdbm_test_db)
     return temp_file.name
@@ -58,24 +61,17 @@ def gdbm_test_db(request):
 
 @pytest.fixture(scope="function")
 def ndbm_test_db(request):
-    # print("00") ; subprocess.call("ls -l {}*".format(temp_file.name), shell=True)
-    temp_file = tempfile.NamedTemporaryFile()
-    print("10") ; subprocess.call("ls -l {}*".format(temp_file.name), shell=True)
-    print("creating test ndbm file {}".format(temp_file.name))
+    temp_file = tempfile.NamedTemporaryFile(delete=False)
     test_db = ndbm.open(temp_file.name, "n")
-    print("20") ; subprocess.call("ls -l {}*".format(temp_file.name), shell=True)
     test_db[key1] = val1
     test_db[key2] = val2
     test_db.close()
-    subprocess.call("ls -l {}*".format(temp_file.name), shell=True)
-    print("30") ; subprocess.call("ls -l {}*".format(temp_file.name), shell=True)
 
     def delete_test_ndbm():
-        print("deleting test ndbm file {}.db".format(temp_file.name))
         temp_file.close()
-        print("40") ; subprocess.call("ls -l {}*".format(temp_file.name), shell=True)
-        os.remove(temp_file.name + ".db")
-        print("50") ; subprocess.call("ls -l {}*".format(temp_file.name), shell=True)
+        for f in glob.glob("{}*".format(temp_file.name)):
+            print("deleting test ndbm file {}".format(f))
+            os.remove(f)
 
     request.addfinalizer(delete_test_ndbm)
     return temp_file.name
@@ -83,7 +79,7 @@ def ndbm_test_db(request):
 
 @pytest.fixture(scope="function")
 def dumbdbm_test_db(request):
-    temp_file = tempfile.NamedTemporaryFile()
+    temp_file = tempfile.NamedTemporaryFile(delete=False)
     print("creating test dumbdbm file {}".format(temp_file.name))
     test_db = dumb.open(temp_file.name, "n")
     test_db[key1] = val1
@@ -91,11 +87,10 @@ def dumbdbm_test_db(request):
     test_db.close()
 
     def delete_dumbdbm_test_db():
-        print("deleting test dumbdbm file {}".format(temp_file.name))
         temp_file.close()
-        os.remove(temp_file.name + ".dir")
-        os.remove(temp_file.name + ".bak")
-        os.remove(temp_file.name + ".dat")
+        for f in glob.glob("{}*".format(temp_file.name)):
+            print("deleting test dumbdbm file {}".format(f))
+            os.remove(f)
 
     request.addfinalizer(delete_dumbdbm_test_db)
     return temp_file.name
