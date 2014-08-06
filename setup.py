@@ -19,7 +19,7 @@ class PyTest(TestCommand):
 
 
 setuptools.setup(name='warcprox',
-        version='1.1',
+        version='1.2',
         description='WARC writing MITM HTTP/S proxy',
         url='https://github.com/internetarchive/warcprox',
         author='Noah Levitt',
