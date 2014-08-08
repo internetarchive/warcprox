@@ -76,6 +76,14 @@ import base64
 import json
 import traceback
 
+def _read_version_bytes():
+    version_txt = os.path.sep.join(__file__.split(os.path.sep)[:-1] + ['version.txt'])
+    with open(version_txt, 'rb') as fin:
+        return fin.read().strip()
+
+version_bytes = _read_version_bytes()
+version_str = version_bytes.strip().decode('utf-8')
+
 class CertificateAuthority(object):
     logger = logging.getLogger('warcprox.CertificateAuthority')
 
@@ -875,7 +883,7 @@ class WarcWriterThread(threading.Thread):
         headers.append((warctools.WarcRecord.DATE, warc_record_date))
 
         warcinfo_fields = []
-        warcinfo_fields.append(b'software: warcprox.py https://github.com/internetarchive/warcprox')
+        warcinfo_fields.append(b'software: warcprox ' + version_bytes)
         hostname = socket.gethostname()
         warcinfo_fields.append('hostname: {}'.format(hostname).encode('latin1'))
         warcinfo_fields.append('ip: {0}'.format(socket.gethostbyname(hostname)).encode('latin1'))
@@ -1175,6 +1183,8 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
     arg_parser.add_argument('--playback-index-db-file', dest='playback_index_db_file',
             default='./warcprox-playback-index.db',
             help='playback index database file (only used if --playback-port is specified)')
+    arg_parser.add_argument('--version', action='version',
+            version="warcprox {}".format(version_str))
     arg_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true')
     arg_parser.add_argument('-q', '--quiet', dest='quiet', action='store_true')
     # [--ispartof=warcinfo ispartof]
