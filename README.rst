@@ -9,6 +9,19 @@ https://github.com/allfro/pymiproxy
 License: because pymiproxy is GPL and warcprox is a derivative work of
 pymiproxy, warcprox is also GPL.
 
+
+Install
+~~~~~~~
+
+Warcprox runs on python 3 or 2.7.
+
+Install latest release from PyPI::
+    pip install warcprox
+
+Or install the latest code from github::
+    pip install git+https://github.com/internetarchive/warcprox.git
+
+
 Trusting the CA cert
 ~~~~~~~~~~~~~~~~~~~~
 
@@ -23,12 +36,13 @@ Usage
 
 ::
 
-    usage: warcprox.py [-h] [-p PORT] [-b ADDRESS] [-c CACERT]
-                       [--certs-dir CERTS_DIR] [-d DIRECTORY] [-z] [-n PREFIX]
-                       [-s SIZE] [--rollover-idle-time ROLLOVER_IDLE_TIME]
-                       [-g DIGEST_ALGORITHM] [--base32] [-j DEDUP_DB_FILE]
-                       [-P PLAYBACK_PORT]
-                       [--playback-index-db-file PLAYBACK_INDEX_DB_FILE] [-v] [-q]
+    usage: warcprox [-h] [-p PORT] [-b ADDRESS] [-c CACERT]
+                    [--certs-dir CERTS_DIR] [-d DIRECTORY] [-z] [-n PREFIX]
+                    [-s SIZE] [--rollover-idle-time ROLLOVER_IDLE_TIME]
+                    [-g DIGEST_ALGORITHM] [--base32] [-j DEDUP_DB_FILE]
+                    [-P PLAYBACK_PORT]
+                    [--playback-index-db-file PLAYBACK_INDEX_DB_FILE] [--version]
+                    [-v] [-q]
 
     warcprox - WARC writing MITM HTTP/S proxy
 
@@ -56,8 +70,8 @@ Usage
                             that Friday's last open WARC doesn't sit there all
                             weekend waiting for more data) (default: None)
       -g DIGEST_ALGORITHM, --digest-algorithm DIGEST_ALGORITHM
-                            digest algorithm, one of md5, sha1, sha224, sha256,
-                            sha384, sha512 (default: sha1)
+                            digest algorithm, one of sha384, sha512, md5, sha224,
+                            sha256, sha1 (default: sha1)
       --base32              write digests in Base32 instead of hex (default:
                             False)
       -j DEDUP_DB_FILE, --dedup-db-file DEDUP_DB_FILE
@@ -70,6 +84,7 @@ Usage
                             playback index database file (only used if --playback-
                             port is specified) (default: ./warcprox-playback-
                             index.db)
+      --version             show program's version number and exit
       -v, --verbose
       -q, --quiet
 
