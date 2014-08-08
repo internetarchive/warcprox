@@ -16,11 +16,15 @@ Install
 Warcprox runs on python 2.7 or python 3.2+.
 
 To install latest release run:
+
 ::
+
     pip install warcprox
 
 You can also install the latest bleeding edge code:
+
 ::
+
     pip install git+https://github.com/internetarchive/warcprox.git
 
 
