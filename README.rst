@@ -13,12 +13,14 @@ pymiproxy, warcprox is also GPL.
 Install
 ~~~~~~~
 
-Warcprox runs on python 3 or 2.7.
+Warcprox runs on python 2.7 or python 3.2+.
 
-Install latest release from PyPI::
+To install latest release run:
+::
     pip install warcprox
 
-Or install the latest code from github::
+You can also install the latest bleeding edge code:
+::
     pip install git+https://github.com/internetarchive/warcprox.git
 
 
