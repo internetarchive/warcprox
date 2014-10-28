@@ -689,7 +689,8 @@ class DedupDb(object):
         self.db.close()
 
     def sync(self):
-        self.db.sync()
+        if hasattr(self.db, 'sync'):
+            self.db.sync()
 
     def save(self, key, response_record, offset):
         record_id = response_record.get_header(warctools.WarcRecord.ID).decode('latin1')
@@ -999,7 +1000,8 @@ class PlaybackIndexDb(object):
 
 
     def sync(self):
-        self.db.sync()
+        if hasattr(self.db, 'sync'):
+            self.db.sync()
 
 
     def save(self, warcfile, recordset, offset):
