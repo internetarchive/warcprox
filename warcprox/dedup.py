@@ -28,8 +28,10 @@ class DedupDb(object):
         self.db.close()
 
     def sync(self):
-        if hasattr(self.db, 'sync'):
+        try:
             self.db.sync()
+        except:
+            pass
 
     def save(self, key, response_record, offset):
         record_id = response_record.get_header(warctools.WarcRecord.ID).decode('latin1')

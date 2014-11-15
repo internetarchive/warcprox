@@ -43,12 +43,11 @@ import tempfile
 import json
 import traceback
 
-import warcprox
-from warcprox.mitmproxy import MitmProxyHandler
-from warcprox.dedup import DedupDb
-from warcprox.certauth import CertificateAuthority
-from warcprox.warcwriter import WarcWriterThread
-from warcprox import playback
+import warcprox.certauth
+import warcprox.mitmproxy
+import warcprox.playback
+import warcprox.dedup
+import warcprox.warcwriter
 
 
 class ProxyingRecorder(object):
@@ -159,7 +158,7 @@ class ProxyingRecordingHTTPResponse(http_client.HTTPResponse):
         self.fp = self.recorder
 
 
-class WarcProxyHandler(MitmProxyHandler):
+class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
     logger = logging.getLogger(__module__ + "." + __qualname__)
 
     def _proxy_request(self):
@@ -243,7 +242,7 @@ class WarcProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
         if ca is not None:
             self.ca = ca
         else:
-            self.ca = CertificateAuthority()
+            self.ca = warcprox.certauth.CertificateAuthority()
 
         if recorded_url_q is not None:
             self.recorded_url_q = recorded_url_q
@@ -262,13 +261,13 @@ class WarcProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
 class WarcproxController(object):
     logger = logging.getLogger(__module__ + "." + __qualname__)
 
-    def __init__(self, proxy=None, warc_writer=None, playback_proxy=None):
+    def __init__(self, proxy=None, warc_writer_thread=None, playback_proxy=None):
         """
         Create warcprox controller.
 
-        If supplied, proxy should be an instance of WarcProxy, and warc_writer
-        should be an instance of WarcWriterThread. If not supplied, they are
-        created with default values.
+        If supplied, proxy should be an instance of WarcProxy, and
+        warc_writer_thread should be an instance of WarcWriterThread. If not
+        supplied, they are created with default values.
 
         If supplied, playback_proxy should be an instance of PlaybackProxy. If not
         supplied, no playback proxy will run.
@@ -278,10 +277,10 @@ class WarcproxController(object):
         else:
             self.proxy = WarcProxy()
 
-        if warc_writer is not None:
-            self.warc_writer = warc_writer
+        if warc_writer_thread is not None:
+            self.warc_writer_thread = warc_writer_thread
         else:
-            self.warc_writer = WarcWriterThread(recorded_url_q=self.proxy.recorded_url_q)
+            self.warc_writer_thread = WarcWriterThread(recorded_url_q=self.proxy.recorded_url_q)
 
         self.playback_proxy = playback_proxy
 
@@ -294,7 +293,7 @@ class WarcproxController(object):
         """
         proxy_thread = threading.Thread(target=self.proxy.serve_forever, name='ProxyThread')
         proxy_thread.start()
-        self.warc_writer.start()
+        self.warc_writer_thread.start()
 
         if self.playback_proxy is not None:
             playback_proxy_thread = threading.Thread(target=self.playback_proxy.serve_forever, name='PlaybackProxyThread')
@@ -314,12 +313,12 @@ class WarcproxController(object):
         except:
             pass
         finally:
-            self.warc_writer.stop.set()
+            self.warc_writer_thread.stop.set()
             self.proxy.shutdown()
             self.proxy.server_close()
 
-            if self.warc_writer.dedup_db is not None:
-                self.warc_writer.dedup_db.close()
+            if self.warc_writer_thread.warc_writer.dedup_db is not None:
+                self.warc_writer_thread.warc_writer.dedup_db.close()
 
             if self.playback_proxy is not None:
                 self.playback_proxy.shutdown()
@@ -328,7 +327,7 @@ class WarcproxController(object):
                     self.playback_proxy.playback_index_db.close()
 
             # wait for threads to finish
-            self.warc_writer.join()
+            self.warc_writer_thread.join()
             proxy_thread.join()
             if self.playback_proxy is not None:
                 playback_proxy_thread.join()
@@ -411,36 +410,37 @@ def main(argv=sys.argv):
         logging.info('deduplication disabled')
         dedup_db = None
     else:
-        dedup_db = DedupDb(args.dedup_db_file)
+        dedup_db = warcprox.dedup.DedupDb(args.dedup_db_file)
 
     recorded_url_q = queue.Queue()
 
-    ca = CertificateAuthority(args.cacert, args.certs_dir)
+    ca = warcprox.certauth.CertificateAuthority(args.cacert, args.certs_dir)
 
     proxy = WarcProxy(server_address=(args.address, int(args.port)),
             ca=ca, recorded_url_q=recorded_url_q,
             digest_algorithm=args.digest_algorithm)
 
     if args.playback_port is not None:
-        playback_index_db = playback.PlaybackIndexDb(args.playback_index_db_file)
+        playback_index_db = warcprox.playback.PlaybackIndexDb(args.playback_index_db_file)
         playback_server_address=(args.address, int(args.playback_port))
-        playback_proxy = playback.PlaybackProxy(server_address=playback_server_address,
+        playback_proxy = warcprox.playback.PlaybackProxy(server_address=playback_server_address,
                 ca=ca, playback_index_db=playback_index_db,
                 warcs_dir=args.directory)
     else:
         playback_index_db = None
         playback_proxy = None
 
-    warc_writer = WarcWriterThread(recorded_url_q=recorded_url_q,
-            directory=args.directory, gzip=args.gzip, prefix=args.prefix,
-            port=int(args.port), rollover_size=int(args.size),
-            rollover_idle_time=int(args.rollover_idle_time) if args.rollover_idle_time is not None else None,
-            base32=args.base32, dedup_db=dedup_db,
-            digest_algorithm=args.digest_algorithm,
+    warc_writer = warcprox.warcwriter.WarcWriter(directory=args.directory,
+            gzip=args.gzip, prefix=args.prefix, port=int(args.port),
+            rollover_size=int(args.size), base32=args.base32,
+            dedup_db=dedup_db, digest_algorithm=args.digest_algorithm,
             playback_index_db=playback_index_db)
+    warc_writer_thread = warcprox.warcwriter.WarcWriterThread(
+            recorded_url_q=recorded_url_q, warc_writer=warc_writer,
+            rollover_idle_time=int(args.rollover_idle_time) if args.rollover_idle_time is not None else None)
 
-    warcprox = WarcproxController(proxy, warc_writer, playback_proxy)
-    warcprox.run_until_shutdown()
+    controller = WarcproxController(proxy, warc_writer_thread, playback_proxy)
+    controller.run_until_shutdown()
 
 
 if __name__ == '__main__':

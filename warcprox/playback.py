@@ -210,8 +210,10 @@ class PlaybackIndexDb(object):
         self.db.close()
 
     def sync(self):
-        if hasattr(self.db, 'sync'):
+        try:
             self.db.sync()
+        except:
+            pass
 
     def save(self, warcfile, recordset, offset):
         response_record = recordset[0]

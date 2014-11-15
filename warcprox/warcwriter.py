@@ -17,22 +17,16 @@ import hanzo.httptools
 from hanzo import warctools
 import warcprox
 
-
-class WarcWriterThread(threading.Thread):
+class WarcWriter:
     logger = logging.getLogger(__module__ + "." + __qualname__)
 
     # port is only used for warc filename
-    def __init__(self, recorded_url_q=None, directory='./warcs',
-            rollover_size=1000000000, rollover_idle_time=None, gzip=False,
-            prefix='WARCPROX', port=0, digest_algorithm='sha1', base32=False,
-            dedup_db=None, playback_index_db=None):
-
-        threading.Thread.__init__(self, name='WarcWriterThread')
-
-        self.recorded_url_q = recorded_url_q
+    def __init__(self, directory='./warcs', rollover_size=1000000000,
+            gzip=False, prefix='WARCPROX', port=0,
+            digest_algorithm='sha1', base32=False, dedup_db=None,
+            playback_index_db=None):
 
         self.rollover_size = rollover_size
-        self.rollover_idle_time = rollover_idle_time
 
         self.gzip = gzip
         self.digest_algorithm = digest_algorithm
@@ -53,8 +47,6 @@ class WarcWriterThread(threading.Thread):
         if not os.path.exists(directory):
             self.logger.info("warc destination directory {} doesn't exist, creating it".format(directory))
             os.mkdir(directory)
-
-        self.stop = threading.Event()
 
 
     # returns a tuple (principal_record, request_record) where principal_record is either a response or revisit record
@@ -165,7 +157,7 @@ class WarcWriterThread(threading.Thread):
         now = datetime.utcnow()
         return '{}{}'.format(now.strftime('%Y%m%d%H%M%S'), now.microsecond//1000)
 
-    def _close_writer(self):
+    def close_writer(self):
         if self._fpath:
             self.logger.info('closing {0}'.format(self._f_finalname))
             self._f.close()
@@ -204,7 +196,7 @@ class WarcWriterThread(threading.Thread):
     # <!-- <property name="template" value="${prefix}-${timestamp17}-${serialno}-${heritrix.pid}~${heritrix.hostname}~${heritrix.port}" /> -->
     def _writer(self):
         if self._fpath and os.path.getsize(self._fpath) > self.rollover_size:
-            self._close_writer()
+            self.close_writer()
 
         if self._f == None:
             self._f_finalname = '{}-{}-{:05d}-{}-{}-{}.warc{}'.format(
@@ -235,53 +227,69 @@ class WarcWriterThread(threading.Thread):
 
         recorded_url.response_recorder.tempfile.close()
 
+    def write_records(self, recorded_url):
+        recordset = self.build_warc_records(recorded_url)
+
+        writer = self._writer()
+        recordset_offset = writer.tell()
+
+        for record in recordset:
+            offset = writer.tell()
+            record.write_to(writer, gzip=self.gzip)
+            self.logger.debug('wrote warc record: warc_type={} content_length={} url={} warc={} offset={}'.format(
+                    record.get_header(warctools.WarcRecord.TYPE),
+                    record.get_header(warctools.WarcRecord.CONTENT_LENGTH),
+                    record.get_header(warctools.WarcRecord.URL),
+                    self._fpath, offset))
+
+        self._f.flush()
+
+        self._final_tasks(recorded_url, recordset, recordset_offset)
+
+
+
+class WarcWriterThread(threading.Thread):
+    logger = logging.getLogger(__module__ + "." + __qualname__)
+
+    def __init__(self, recorded_url_q=None, warc_writer=None, rollover_idle_time=None):
+        """recorded_url_q is a queue.Queue of warcprox.warcprox.RecordedUrl."""
+        threading.Thread.__init__(self, name='WarcWriterThread')
+        self.recorded_url_q = recorded_url_q
+        self.rollover_idle_time = rollover_idle_time
+        self.stop = threading.Event()
+        if warc_writer:
+            self.warc_writer = warc_writer
+        else:
+            self.warc_writer = WarcWriter()
+
     def run(self):
         self.logger.info('WarcWriterThread starting, directory={} gzip={} rollover_size={} rollover_idle_time={} prefix={} port={}'.format(
-                os.path.abspath(self.directory), self.gzip, self.rollover_size,
-                self.rollover_idle_time, self.prefix, self.port))
+                os.path.abspath(self.warc_writer.directory), self.warc_writer.gzip, self.warc_writer.rollover_size,
+                self.rollover_idle_time, self.warc_writer.prefix, self.warc_writer.port))
 
         self._last_sync = self._last_activity = time.time()
 
         while not self.stop.is_set():
             try:
                 recorded_url = self.recorded_url_q.get(block=True, timeout=0.5)
-
+                self.warc_writer.write_records(recorded_url)
                 self._last_activity = time.time()
-
-                recordset = self.build_warc_records(recorded_url)
-
-                writer = self._writer()
-                recordset_offset = writer.tell()
-
-                for record in recordset:
-                    offset = writer.tell()
-                    record.write_to(writer, gzip=self.gzip)
-                    self.logger.debug('wrote warc record: warc_type={} content_length={} url={} warc={} offset={}'.format(
-                            record.get_header(warctools.WarcRecord.TYPE),
-                            record.get_header(warctools.WarcRecord.CONTENT_LENGTH),
-                            record.get_header(warctools.WarcRecord.URL),
-                            self._fpath, offset))
-
-                self._f.flush()
-
-                self._final_tasks(recorded_url, recordset, recordset_offset)
-
             except queue.Empty:
-                if (self._fpath is not None
+                if (self.warc_writer._fpath is not None
                         and self.rollover_idle_time is not None
                         and self.rollover_idle_time > 0
                         and time.time() - self._last_activity > self.rollover_idle_time):
                     self.logger.debug('rolling over warc file after {} seconds idle'.format(time.time() - self._last_activity))
-                    self._close_writer()
+                    self.warc_writer.close_writer()
 
                 if time.time() - self._last_sync > 60:
-                    if self.dedup_db:
-                        self.dedup_db.sync()
-                    if self.playback_index_db:
-                        self.playback_index_db.sync()
+                    if self.warc_writer.dedup_db:
+                        self.warc_writer.dedup_db.sync()
+                    if self.warc_writer.playback_index_db:
+                        self.warc_writer.playback_index_db.sync()
                     self._last_sync = time.time()
 
         self.logger.info('WarcWriterThread shutting down')
-        self._close_writer();
+        self.warc_writer.close_writer();
 
 
