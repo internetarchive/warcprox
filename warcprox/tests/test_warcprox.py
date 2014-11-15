@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 # vim: set sw=4 et:
 
-from warcprox import warcprox
+import warcprox.warcprox
+import warcprox.certauth
 import unittest
 import threading
 import time
@@ -117,11 +118,11 @@ class WarcproxTest(unittest.TestCase):
         f.close() # delete it, or CertificateAuthority will try to read it
         self._ca_file = f.name
         self._ca_dir = tempfile.mkdtemp(prefix='warcprox-test-', suffix='-ca')
-        ca = warcprox.CertificateAuthority(self._ca_file, self._ca_dir)
+        ca = warcprox.certauth.CertificateAuthority(self._ca_file, self._ca_dir)
 
         recorded_url_q = queue.Queue()
 
-        proxy = warcprox.WarcProxy(server_address=('localhost', 0), ca=ca,
+        proxy = warcprox.warcprox.WarcProxy(server_address=('localhost', 0), ca=ca,
                 recorded_url_q=recorded_url_q)
 
         self._warcs_dir = tempfile.mkdtemp(prefix='warcprox-test-warcs-')
@@ -129,20 +130,20 @@ class WarcproxTest(unittest.TestCase):
         f = tempfile.NamedTemporaryFile(prefix='warcprox-test-playback-index-', suffix='.db', delete=False)
         f.close()
         self._playback_index_db_file = f.name
-        playback_index_db = warcprox.PlaybackIndexDb(self._playback_index_db_file)
-        playback_proxy = warcprox.PlaybackProxy(server_address=('localhost', 0), ca=ca,
+        playback_index_db = warcprox.playback.PlaybackIndexDb(self._playback_index_db_file)
+        playback_proxy = warcprox.playback.PlaybackProxy(server_address=('localhost', 0), ca=ca,
                 playback_index_db=playback_index_db, warcs_dir=self._warcs_dir)
 
         f = tempfile.NamedTemporaryFile(prefix='warcprox-test-dedup-', suffix='.db', delete=False)
         f.close()
         self._dedup_db_file = f.name
-        dedup_db = warcprox.DedupDb(self._dedup_db_file)
+        dedup_db = warcprox.dedup.DedupDb(self._dedup_db_file)
 
-        warc_writer = warcprox.WarcWriterThread(recorded_url_q=recorded_url_q,
+        warc_writer = warcprox.warcwriter.WarcWriterThread(recorded_url_q=recorded_url_q,
                 directory=self._warcs_dir, port=proxy.server_port,
                 dedup_db=dedup_db, playback_index_db=playback_index_db)
 
-        self.warcprox = warcprox.WarcproxController(proxy, warc_writer, playback_proxy)
+        self.warcprox = warcprox.warcprox.WarcproxController(proxy, warc_writer, playback_proxy)
         self.logger.info('starting warcprox')
         self.warcprox_thread = threading.Thread(name='WarcproxThread',
                 target=self.warcprox.run_until_shutdown)
