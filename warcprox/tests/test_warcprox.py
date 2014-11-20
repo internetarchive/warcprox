@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 # vim: set sw=4 et:
 
-import warcprox.warcprox
-import warcprox.certauth
 import unittest
 import threading
 import time
@@ -17,18 +15,21 @@ import shutil
 import requests
 
 try:
-    import http.server
-    http_server = http.server
+    import http.server as http_server
 except ImportError:
-    import BaseHTTPServer
-    http_server = BaseHTTPServer
+    import BaseHTTPServer as http_server
 
 try:
     import queue
 except ImportError:
-    import Queue
-    queue = Queue
+    import Queue as queue
 
+import warcprox.controller
+import warcprox.warcprox
+import warcprox.certauth
+import warcprox.playback
+import warcprox.warcwriter
+import warcprox.dedup
 
 class TestHttpRequestHandler(http_server.BaseHTTPRequestHandler):
     logger = logging.getLogger('TestHttpRequestHandler')
@@ -145,7 +146,7 @@ class WarcproxTest(unittest.TestCase):
         warc_writer_thread = warcprox.warcwriter.WarcWriterThread(recorded_url_q=recorded_url_q,
                 warc_writer=warc_writer)
 
-        self.warcprox = warcprox.warcprox.WarcproxController(proxy, warc_writer_thread, playback_proxy)
+        self.warcprox = warcprox.controller.WarcproxController(proxy, warc_writer_thread, playback_proxy)
         self.logger.info('starting warcprox')
         self.warcprox_thread = threading.Thread(name='WarcproxThread',
                 target=self.warcprox.run_until_shutdown)
