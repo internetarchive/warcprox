@@ -34,6 +34,7 @@ import re
 import tempfile
 import traceback
 import hashlib
+import json
 
 import warcprox.certauth
 import warcprox.mitmproxy
@@ -154,6 +155,17 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         # Build request
         req_str = '{} {} {}\r\n'.format(self.command, self.path, self.request_version)
 
+        warcprox_meta = self.headers['Warcprox-Meta']
+
+        # Swallow headers that don't make sense to forward on, i.e. most
+        # hop-by-hop headers, see http://tools.ietf.org/html/rfc2616#section-13.5
+        # self.headers is an email.message.Message, which is case-insensitive
+        # and doesn't throw KeyError in __delitem__
+        for h in ('Connection', 'Proxy-Connection', 'Keep-Alive',
+                'Proxy-Authenticate', 'Proxy-Authorization', 'Upgrade',
+                'Warcprox-Meta'):
+            del self.headers[h]
+
         # Add headers to the request
         # XXX in at least python3.3 str(self.headers) uses \n not \r\n :(
         req_str += '\r\n'.join('{}: {}'.format(k,v) for (k,v) in self.headers.items())
@@ -196,12 +208,13 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         self._proxy_sock.close()
 
         recorded_url = RecordedUrl(url=self.url, request_data=req,
-                response_recorder=h.recorder, remote_ip=remote_ip)
+                response_recorder=h.recorder, remote_ip=remote_ip,
+                warcprox_meta=warcprox_meta)
         self.server.recorded_url_q.put(recorded_url)
 
 
 class RecordedUrl(object):
-    def __init__(self, url, request_data, response_recorder, remote_ip):
+    def __init__(self, url, request_data, response_recorder, remote_ip, warcprox_meta=None):
         # XXX should test what happens with non-ascii url (when does
         # url-encoding happen?)
         if type(url) is not bytes:
@@ -216,6 +229,11 @@ class RecordedUrl(object):
 
         self.request_data = request_data
         self.response_recorder = response_recorder
+
+        if warcprox_meta:
+            self.warcprox_meta = json.loads(warcprox_meta)
+        else:
+            self.warcprox_meta = {}
 
 
 class WarcProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):

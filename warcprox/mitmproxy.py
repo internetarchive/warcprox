@@ -53,7 +53,6 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 )
             )
 
-
     def _connect_to_host(self):
         # Connect to destination
         self._proxy_sock = socket.socket()
@@ -64,11 +63,9 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         if self.is_connect:
             self._proxy_sock = ssl.wrap_socket(self._proxy_sock)
 
-
     def _transition_to_ssl(self):
         self.request = self.connection = ssl.wrap_socket(self.connection,
                 server_side=True, certfile=self.server.ca[self.hostname])
-
 
     def do_CONNECT(self):
         self.is_connect = True
@@ -89,7 +86,6 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         self.setup()
         self.handle_one_request()
 
-
     def _construct_tunneled_url(self):
         if int(self.port) == 443:
             netloc = self.hostname
@@ -108,7 +104,6 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         )
 
         return result
-
 
     def do_COMMAND(self):
         if not self.is_connect:

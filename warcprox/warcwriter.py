@@ -272,6 +272,7 @@ class WarcWriterThread(threading.Thread):
         while not self.stop.is_set():
             try:
                 recorded_url = self.recorded_url_q.get(block=True, timeout=0.5)
+                self.logger.info("recorded_url.warcprox_meta={} for {}".format(recorded_url.warcprox_meta, recorded_url.url))
                 self.warc_writer.write_records(recorded_url)
                 self._last_activity = time.time()
             except queue.Empty:
