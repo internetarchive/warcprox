@@ -1,5 +1,7 @@
 # vim: set sw=4 et:
 
+from __future__ import absolute_import
+
 import logging
 import threading
 import signal
@@ -9,7 +11,7 @@ import warcprox.warcprox
 import warcprox.warcwriter
 
 class WarcproxController(object):
-    logger = logging.getLogger(__module__ + "." + __qualname__)
+    logger = logging.getLogger("warcprox.controller.WarcproxController")
 
     def __init__(self, proxy=None, warc_writer_thread=None, playback_proxy=None):
         """

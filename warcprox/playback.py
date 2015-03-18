@@ -1,5 +1,7 @@
 # vim:set sw=4 et:
 
+from __future__ import absolute_import
+
 try:
     import http.server as http_server
 except ImportError:
@@ -27,7 +29,7 @@ import re
 from warcprox.mitmproxy import MitmProxyHandler
 
 class PlaybackProxyHandler(MitmProxyHandler):
-    logger = logging.getLogger(__module__ + "." + __qualname__)
+    logger = logging.getLogger("warcprox.playback.PlaybackProxyHandler")
 
     # @Override
     def _connect_to_host(self):
@@ -176,7 +178,7 @@ class PlaybackProxyHandler(MitmProxyHandler):
 
 
 class PlaybackProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
-    logger = logging.getLogger(__module__ + "." + __qualname__)
+    logger = logging.getLogger("warcprox.playback.PlaybackProxy")
 
     def __init__(self, server_address, req_handler_class=PlaybackProxyHandler,
             bind_and_activate=True, ca=None, playback_index_db=None,
@@ -196,7 +198,7 @@ class PlaybackProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
 
 
 class PlaybackIndexDb(object):
-    logger = logging.getLogger(__module__ + "." + __qualname__)
+    logger = logging.getLogger("warcprox.playback.PlaybackIndexDb")
 
     def __init__(self, dbm_file='./warcprox-playback-index.db'):
         if os.path.exists(dbm_file):

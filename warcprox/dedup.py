@@ -1,5 +1,7 @@
 # vim:set sw=4 et:
 
+from __future__ import absolute_import
+
 try:
     import dbm.gnu as dbm_gnu
 except ImportError:
@@ -14,7 +16,7 @@ import json
 from hanzo import warctools
 
 class DedupDb(object):
-    logger = logging.getLogger(__module__ + "." + __qualname__)
+    logger = logging.getLogger("warcprox.dedup.DedupDb")
 
     def __init__(self, dbm_file='./warcprox-dedup.db'):
         if os.path.exists(dbm_file):

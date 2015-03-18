@@ -45,7 +45,7 @@ class ProxyingRecorder(object):
     calculating digests, and sending them on to the proxy client.
     """
 
-    logger = logging.getLogger(__module__ + "." + __qualname__)
+    logger = logging.getLogger("warcprox.warcprox.ProxyingRecorder")
 
     def __init__(self, fp, proxy_dest, digest_algorithm='sha1'):
         self.fp = fp
@@ -149,13 +149,13 @@ class ProxyingRecordingHTTPResponse(http_client.HTTPResponse):
 
 
 class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
-    logger = logging.getLogger(__module__ + "." + __qualname__)
+    logger = logging.getLogger("warcprox.warcprox.WarcProxyHandler")
 
     def _proxy_request(self):
         # Build request
         req_str = '{} {} {}\r\n'.format(self.command, self.path, self.request_version)
 
-        warcprox_meta = self.headers['Warcprox-Meta']
+        warcprox_meta = self.headers.get('Warcprox-Meta')
 
         # Swallow headers that don't make sense to forward on, i.e. most
         # hop-by-hop headers, see http://tools.ietf.org/html/rfc2616#section-13.5
@@ -237,7 +237,7 @@ class RecordedUrl(object):
 
 
 class WarcProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
-    logger = logging.getLogger(__module__ + "." + __qualname__)
+    logger = logging.getLogger("warcprox.warcprox.WarcProxy")
 
     def __init__(self, server_address=('localhost', 8000),
             req_handler_class=WarcProxyHandler, bind_and_activate=True,

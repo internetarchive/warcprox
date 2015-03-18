@@ -1,5 +1,7 @@
 # vim:set sw=4 et:
 
+from __future__ import absolute_import
+
 import logging
 import os
 import OpenSSL
@@ -7,7 +9,7 @@ import socket
 import random
 
 class CertificateAuthority(object):
-    logger = logging.getLogger(__module__ + "." + __qualname__)
+    logger = logging.getLogger("warcprox.certauth.CertificateAuthority")
 
     def __init__(self, ca_file='warcprox-ca.pem', certs_dir='./warcprox-ca'):
         self.ca_file = ca_file

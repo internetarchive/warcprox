@@ -1,5 +1,7 @@
 # vim:set sw=4 et:
 
+from __future__ import absolute_import
+
 try:
     import http.server as http_server
 except ImportError:
@@ -15,7 +17,7 @@ import logging
 import ssl
 
 class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
-    logger = logging.getLogger(__module__ + "." + __qualname__)
+    logger = logging.getLogger("warcprox.mitmproxy.MitmProxyHandler")
 
     def __init__(self, request, client_address, server):
         self.is_connect = False

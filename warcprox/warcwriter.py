@@ -1,5 +1,7 @@
 # vim:set sw=4 et:
 
+from __future__ import absolute_import
+
 try:
     import queue
 except ImportError:
@@ -18,7 +20,7 @@ from hanzo import warctools
 import warcprox
 
 class WarcWriter:
-    logger = logging.getLogger(__module__ + "." + __qualname__)
+    logger = logging.getLogger("warcprox.warcwriter.WarcWriter")
 
     # port is only used for warc filename
     def __init__(self, directory='./warcs', rollover_size=1000000000,
@@ -249,7 +251,7 @@ class WarcWriter:
 
 
 class WarcWriterThread(threading.Thread):
-    logger = logging.getLogger(__module__ + "." + __qualname__)
+    logger = logging.getLogger("warcprox.warcwriter.WarcWriterThread")
 
     def __init__(self, recorded_url_q=None, warc_writer=None, rollover_idle_time=None):
         """recorded_url_q is a queue.Queue of warcprox.warcprox.RecordedUrl."""
