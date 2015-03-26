@@ -75,6 +75,7 @@ class WarcWriter:
                     refers_to=dedup_info['i'],
                     refers_to_target_uri=dedup_info['u'],
                     refers_to_date=dedup_info['d'],
+                    payload_digest=self.digest_str(recorded_url.response_recorder.payload_digest),
                     profile=warctools.WarcRecord.PROFILE_IDENTICAL_PAYLOAD_DIGEST,
                     content_type=hanzo.httptools.ResponseMessage.CONTENT_TYPE,
                     remote_ip=recorded_url.remote_ip)
@@ -104,7 +105,7 @@ class WarcWriter:
     def build_warc_record(self, url, warc_date=None, recorder=None, data=None,
         concurrent_to=None, warc_type=None, content_type=None, remote_ip=None,
         profile=None, refers_to=None, refers_to_target_uri=None,
-        refers_to_date=None):
+        refers_to_date=None, payload_digest=None):
 
         if warc_date is None:
             warc_date = warctools.warc.warc_datetime_str(datetime.utcnow())
@@ -131,6 +132,8 @@ class WarcWriter:
             headers.append((warctools.WarcRecord.CONCURRENT_TO, concurrent_to))
         if content_type is not None:
             headers.append((warctools.WarcRecord.CONTENT_TYPE, content_type))
+        if payload_digest is not None:
+            headers.append((warctools.WarcRecord.PAYLOAD_DIGEST, payload_digest))
 
         if recorder is not None:
             headers.append((warctools.WarcRecord.CONTENT_LENGTH, str(len(recorder)).encode('latin1')))
