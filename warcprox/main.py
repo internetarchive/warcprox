@@ -15,7 +15,8 @@ import argparse
 import os
 import socket
 
-import warcprox.certauth
+import certauth.certauth
+
 import warcprox.playback
 import warcprox.dedup
 import warcprox.warcwriter
@@ -103,9 +104,11 @@ def main(argv=sys.argv):
 
     recorded_url_q = queue.Queue()
 
-    ca = warcprox.certauth.CertificateAuthority(args.cacert, args.certs_dir)
+    ca_name = 'Warcprox CA on {}'.format(socket.gethostname())[:64]
+    ca = certauth.certauth.CertificateAuthority(args.cacert, args.certs_dir,
+                                                ca_name=ca_name)
 
-    proxy = warcprox.warcprox.WarcProxy( 
+    proxy = warcprox.warcprox.WarcProxy(
             server_address=(args.address, int(args.port)), ca=ca,
             recorded_url_q=recorded_url_q,
             digest_algorithm=args.digest_algorithm)

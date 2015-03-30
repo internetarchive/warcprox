@@ -24,9 +24,10 @@ try:
 except ImportError:
     import Queue as queue
 
+import certauth.certauth
+
 import warcprox.controller
 import warcprox.warcprox
-import warcprox.certauth
 import warcprox.playback
 import warcprox.warcwriter
 import warcprox.dedup
@@ -119,7 +120,7 @@ class WarcproxTest(unittest.TestCase):
         f.close() # delete it, or CertificateAuthority will try to read it
         self._ca_file = f.name
         self._ca_dir = tempfile.mkdtemp(prefix='warcprox-test-', suffix='-ca')
-        ca = warcprox.certauth.CertificateAuthority(self._ca_file, self._ca_dir)
+        ca = certauth.certauth.CertificateAuthority(self._ca_file, self._ca_dir, 'warcprox-test')
 
         recorded_url_q = queue.Queue()
 

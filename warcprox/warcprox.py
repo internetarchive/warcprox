@@ -35,8 +35,9 @@ import tempfile
 import traceback
 import hashlib
 import json
+import socket
 
-import warcprox.certauth
+from certauth.certauth import CertificateAuthority
 import warcprox.mitmproxy
 
 class ProxyingRecorder(object):
@@ -249,7 +250,10 @@ class WarcProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
         if ca is not None:
             self.ca = ca
         else:
-            self.ca = warcprox.certauth.CertificateAuthority()
+            ca_name = 'Warcprox CA on {}'.format(socket.gethostname())[:64]
+            self.ca = CertificateAuthority(ca_file='warcprox-ca.pem',
+                                           certs_dir='./warcprox-ca',
+                                           ca_name=ca_name)
 
         if recorded_url_q is not None:
             self.recorded_url_q = recorded_url_q
