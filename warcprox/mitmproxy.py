@@ -67,7 +67,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
 
     def _transition_to_ssl(self):
         self.request = self.connection = ssl.wrap_socket(self.connection,
-                server_side=True, certfile=self.server.ca.get_cert_for_host(self.hostname))
+                server_side=True, certfile=self.server.ca.cert_for_host(self.hostname))
 
     def do_CONNECT(self):
         self.is_connect = True
