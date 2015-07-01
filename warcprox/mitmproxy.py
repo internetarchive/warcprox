@@ -49,7 +49,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
     def _connect_to_host(self):
         # Connect to destination
         self._proxy_sock = socket.socket()
-        self._proxy_sock.settimeout(10)
+        self._proxy_sock.settimeout(60)
         self._proxy_sock.connect((self.hostname, int(self.port)))
 
         # Wrap socket if SSL is required
@@ -82,7 +82,13 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             self.end_headers()
             self._transition_to_ssl()
         except Exception as e:
-            self.send_error(500, str(e))
+            try:
+                if type(e) is socket.timeout:
+                    self.send_error(504, str(e))
+                else:
+                    self.send_error(500, str(e))
+            except Exception as f:
+                self.logger.warn("failed to send error response ({}) to proxy client: {}".format(e, f))
             return
 
         # Reload!
