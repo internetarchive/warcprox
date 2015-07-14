@@ -116,6 +116,13 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
 
     def do_COMMAND(self):
         if not self.is_connect:
+            if self.command == 'PUTMETA':
+                self._handle_custom_record(type_='metadata')
+                return
+            # if self.command == 'PUTRES':
+            #     self._handle_custom_record(type_='resource')
+            #     return
+
             try:
                 # Connect to destination
                 self._determine_host_port()
@@ -130,6 +137,8 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
 
         self._proxy_request()
 
+    def _handle_custom_record(self, type_):
+        raise Exception('Not supported')
 
     def _proxy_request(self):
         raise Exception('_proxy_request() not implemented in MitmProxyHandler, must be implemented in subclass!')

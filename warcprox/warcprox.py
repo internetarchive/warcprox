@@ -215,9 +215,33 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
 
         return recorded_url
 
+    def _handle_custom_record(self, type_):
+        self.url = self.path
+
+        if 'Content-Length' in self.headers and 'Content-Type' in self.headers:
+            request_data = self.rfile.read(int(self.headers['Content-Length']))
+
+            warcprox_meta = self.headers.get('Warcprox-Meta')
+
+            rec_custom = RecordedUrl(url=self.url,
+                                     request_data=request_data,
+                                     response_recorder=None,
+                                     remote_ip=b'',
+                                     warcprox_meta=warcprox_meta,
+                                     content_type=self.headers['Content-Type'].encode('latin1'),
+                                     custom_type=type_)
+
+            self.server.recorded_url_q.put(rec_custom)
+            self.send_response(204, 'OK')
+        else:
+            self.send_error(400, 'Bad request')
+
+        self.end_headers()
+
 
 class RecordedUrl(object):
-    def __init__(self, url, request_data, response_recorder, remote_ip, warcprox_meta=None):
+    def __init__(self, url, request_data, response_recorder, remote_ip,
+            warcprox_meta=None, content_type=None, custom_type=None):
         # XXX should test what happens with non-ascii url (when does
         # url-encoding happen?)
         if type(url) is not bytes:
@@ -237,6 +261,9 @@ class RecordedUrl(object):
             self.warcprox_meta = json.loads(warcprox_meta)
         else:
             self.warcprox_meta = {}
+
+        self.content_type = content_type
+        self.custom_type = custom_type
 
 
 class WarcProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
