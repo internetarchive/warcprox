@@ -160,7 +160,7 @@ class WarcWriter:
 
     def timestamp17(self):
         now = datetime.utcnow()
-        return '{}{}'.format(now.strftime('%Y%m%d%H%M%S'), now.microsecond//1000)
+        return '{:%Y%m%d%H%M%S}{:03d}'.format(now, now.microsecond//1000)
 
     def close_writer(self):
         if self._fpath:
