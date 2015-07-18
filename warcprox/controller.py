@@ -69,8 +69,8 @@ class WarcproxController(object):
             self.proxy.shutdown()
             self.proxy.server_close()
 
-            if self.warc_writer_thread.warc_writer.dedup_db is not None:
-                self.warc_writer_thread.warc_writer.dedup_db.close()
+            if self.warc_writer_thread.default_warc_writer.dedup_db is not None:
+                self.warc_writer_thread.default_warc_writer.dedup_db.close()
 
             if self.playback_proxy is not None:
                 self.playback_proxy.shutdown()

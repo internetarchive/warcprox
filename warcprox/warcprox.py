@@ -210,7 +210,8 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
 
         recorded_url = RecordedUrl(url=self.url, request_data=req,
                 response_recorder=h.recorder, remote_ip=remote_ip,
-                warcprox_meta=warcprox_meta)
+                warcprox_meta=warcprox_meta, method=self.command,
+                status=h.status, size=h.recorder.len)
         self.server.recorded_url_q.put(recorded_url)
 
         return recorded_url
@@ -241,7 +242,8 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
 
 class RecordedUrl(object):
     def __init__(self, url, request_data, response_recorder, remote_ip,
-            warcprox_meta=None, content_type=None, custom_type=None):
+            warcprox_meta=None, content_type=None, custom_type=None,
+            method=None, status=None, size=None):
         # XXX should test what happens with non-ascii url (when does
         # url-encoding happen?)
         if type(url) is not bytes:
@@ -264,6 +266,10 @@ class RecordedUrl(object):
 
         self.content_type = content_type
         self.custom_type = custom_type
+
+        self.method = method
+        self.status = status
+        self.size = size
 
 
 class WarcProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):

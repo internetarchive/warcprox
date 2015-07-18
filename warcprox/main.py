@@ -123,14 +123,14 @@ def main(argv=sys.argv):
         playback_index_db = None
         playback_proxy = None
 
-    warc_writer = warcprox.warcwriter.WarcWriter(directory=args.directory,
+    default_warc_writer = warcprox.warcwriter.WarcWriter(directory=args.directory,
             gzip=args.gzip, prefix=args.prefix, port=int(args.port),
             rollover_size=int(args.size), base32=args.base32,
             dedup_db=dedup_db, digest_algorithm=args.digest_algorithm,
-            playback_index_db=playback_index_db)
-    warc_writer_thread = warcprox.warcwriter.WarcWriterThread(
-            recorded_url_q=recorded_url_q, warc_writer=warc_writer,
+            playback_index_db=playback_index_db,
             rollover_idle_time=int(args.rollover_idle_time) if args.rollover_idle_time is not None else None)
+    warc_writer_thread = warcprox.warcwriter.WarcWriterThread(recorded_url_q=recorded_url_q,
+            default_warc_writer=default_warc_writer)
 
     controller = warcprox.controller.WarcproxController(proxy, warc_writer_thread, playback_proxy)
     controller.run_until_shutdown()

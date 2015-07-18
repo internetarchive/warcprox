@@ -152,7 +152,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             self.log_date_time_string(), fmt % args))
 
     def log_message(self, fmt, *args):
-        self.logger.info("{} {} - - [{}] {}".format(self.__class__.__name__,
+        self.logger.debug("{} {} - - [{}] {}".format(self.__class__.__name__,
             self.address_string(), self.log_date_time_string(), fmt % args))
 
 
