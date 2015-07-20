@@ -240,13 +240,16 @@ class WarcWriter:
             recorded_url.response_recorder.tempfile.close()
 
         self._last_activity = time.time()
-
+        
+        try:
+            payload_digest = recordset[0].get_header(warctools.WarcRecord.PAYLOAD_DIGEST).decode("utf-8")
+        except:
+            payload_digest = "-"
         # 2015-07-17T22:32:23.672Z     1         58 dns:www.dhss.delaware.gov P http://www.dhss.delaware.gov/dhss/ text/dns #045 20150717223214881+316 sha1:63UTPB7GTWIHAGIK3WWL76E57BBTJGAK http://www.dhss.delaware.gov/dhss/ - {"warcFileOffset":2964,"warcFilename":"ARCHIVEIT-1303-WEEKLY-JOB165158-20150717223222113-00000.warc.gz"}
         self.logger.info("{} {} {} size={} {} {} offset={}".format(
-            recorded_url.status, recorded_url.method, 
+            recorded_url.status, recorded_url.method,
             recorded_url.url.decode('utf-8'), recorded_url.size,
-            recordset[0].get_header(warctools.WarcRecord.PAYLOAD_DIGEST).decode("utf-8"),
-            self._f_finalname, recordset_offset))
+            payload_digest, self._f_finalname, recordset_offset))
 
     def write_records(self, recorded_url):
         recordset = self.build_warc_records(recorded_url)

@@ -216,7 +216,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
 
         return recorded_url
 
-    def _handle_custom_record(self, type_):
+    def _handle_custom_record(self, method, type_):
         self.url = self.path
 
         if 'Content-Length' in self.headers and 'Content-Type' in self.headers:
@@ -230,7 +230,9 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                                      remote_ip=b'',
                                      warcprox_meta=warcprox_meta,
                                      content_type=self.headers['Content-Type'].encode('latin1'),
-                                     custom_type=type_)
+                                     custom_type=type_,
+                                     method=method,
+                                     status=204, size=len(request_data))
 
             self.server.recorded_url_q.put(rec_custom)
             self.send_response(204, 'OK')
@@ -239,6 +241,13 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
 
         self.end_headers()
 
+    def log_error(self, fmt, *args):
+        # logging better handled elsewhere?
+        pass
+
+    def log_message(self, fmt, *args):
+        # logging better handled elsewhere?
+        pass
 
 class RecordedUrl(object):
     def __init__(self, url, request_data, response_recorder, remote_ip,
@@ -270,7 +279,6 @@ class RecordedUrl(object):
         self.method = method
         self.status = status
         self.size = size
-
 
 class WarcProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
     logger = logging.getLogger("warcprox.warcprox.WarcProxy")
