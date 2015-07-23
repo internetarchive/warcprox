@@ -216,30 +216,35 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
 
         return recorded_url
 
-    def _handle_custom_record(self, method, type_):
-        self.url = self.path
+    def _special_request(self, method, type_):
+        try:
+            self.url = self.path
 
-        if 'Content-Length' in self.headers and 'Content-Type' in self.headers:
-            request_data = self.rfile.read(int(self.headers['Content-Length']))
+            if (method == 'PUTMETA' and 'Content-Length' in self.headers 
+                    and 'Content-Type' in self.headers):
+                request_data = self.rfile.read(int(self.headers['Content-Length']))
 
-            warcprox_meta = self.headers.get('Warcprox-Meta')
+                warcprox_meta = self.headers.get('Warcprox-Meta')
 
-            rec_custom = RecordedUrl(url=self.url,
-                                     request_data=request_data,
-                                     response_recorder=None,
-                                     remote_ip=b'',
-                                     warcprox_meta=warcprox_meta,
-                                     content_type=self.headers['Content-Type'].encode('latin1'),
-                                     custom_type=type_,
-                                     method=method,
-                                     status=204, size=len(request_data))
+                rec_custom = RecordedUrl(url=self.url,
+                                         request_data=request_data,
+                                         response_recorder=None,
+                                         remote_ip=b'',
+                                         warcprox_meta=warcprox_meta,
+                                         content_type=self.headers['Content-Type'].encode('latin1'),
+                                         custom_type=type_,
+                                         method=method,
+                                         status=204, size=len(request_data))
 
-            self.server.recorded_url_q.put(rec_custom)
-            self.send_response(204, 'OK')
-        else:
-            self.send_error(400, 'Bad request')
+                self.server.recorded_url_q.put(rec_custom)
+                self.send_response(204, 'OK')
+            else:
+                self.send_error(400, 'Bad request')
 
-        self.end_headers()
+            self.end_headers()
+        except:
+            self.logger.error("uncaught except in _special_request", exc_info=True)
+            raise
 
     def log_error(self, fmt, *args):
         # logging better handled elsewhere?

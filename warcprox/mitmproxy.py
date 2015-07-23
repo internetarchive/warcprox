@@ -117,10 +117,10 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
     def do_COMMAND(self):
         if not self.is_connect:
             if self.command == 'PUTMETA':
-                self._prepare_custom_record(method=self.command, type_='metadata')
+                self._special_request(method=self.command, type_='metadata')
                 return
             # if self.command == 'PUTRES':
-            #     self._handle_custom_record(type_='resource')
+            #     self._special_request(type_='resource')
             #     return
 
             try:
@@ -137,7 +137,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
 
         self._proxy_request()
 
-    def _handle_custom_record(self, method, type_):
+    def _special_request(self, method, type_):
         raise Exception('Not supported')
 
     def _proxy_request(self):
