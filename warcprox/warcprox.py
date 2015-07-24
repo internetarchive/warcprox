@@ -48,7 +48,7 @@ class ProxyingRecorder(object):
 
     logger = logging.getLogger("warcprox.warcprox.ProxyingRecorder")
 
-    def __init__(self, fp, proxy_dest, digest_algorithm='sha1'):
+    def __init__(self, fp, proxy_dest, digest_algorithm='sha1', url=None):
         self.fp = fp
         # "The file has no name, and will cease to exist when it is closed."
         self.tempfile = tempfile.SpooledTemporaryFile(max_size=512*1024)
@@ -60,6 +60,7 @@ class ProxyingRecorder(object):
         self._proxy_dest_conn_open = True
         self._prev_hunk_last_two_bytes = b''
         self.len = 0
+        self.url = url
 
     def _update_payload_digest(self, hunk):
         if self.payload_digest is None:
@@ -103,8 +104,8 @@ class ProxyingRecorder(object):
                 self.proxy_dest.sendall(hunk)
             except BaseException as e:
                 self._proxy_dest_conn_open = False
-                self.logger.warn('{} sending data to proxy client'.format(e))
-                self.logger.info('will continue downloading from remote server without sending to client')
+                self.logger.warn('{} sending data to proxy client for url {}'.format(e, self.url))
+                self.logger.info('will continue downloading from remote server without sending to client {}'.format(self.url))
 
         self.len += len(hunk)
 
@@ -140,12 +141,13 @@ class ProxyingRecorder(object):
 
 class ProxyingRecordingHTTPResponse(http_client.HTTPResponse):
 
-    def __init__(self, sock, debuglevel=0, method=None, proxy_dest=None, digest_algorithm='sha1'):
+    def __init__(self, sock, debuglevel=0, method=None, proxy_dest=None, digest_algorithm='sha1', url=None):
         http_client.HTTPResponse.__init__(self, sock, debuglevel=debuglevel, method=method)
+        self.url = url
 
         # Keep around extra reference to self.fp because HTTPResponse sets
         # self.fp=None after it finishes reading, but we still need it
-        self.recorder = ProxyingRecorder(self.fp, proxy_dest, digest_algorithm)
+        self.recorder = ProxyingRecorder(self.fp, proxy_dest, digest_algorithm, url=url)
         self.fp = self.recorder
 
 
@@ -193,7 +195,8 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         # Proxy and record the response
         h = ProxyingRecordingHTTPResponse(self._proxy_sock,
                 proxy_dest=self.connection,
-                digest_algorithm=self.server.digest_algorithm)
+                digest_algorithm=self.server.digest_algorithm,
+                url=self.url)
         h.begin()
 
         buf = h.read(8192)

@@ -14,6 +14,10 @@ import hashlib
 import argparse
 import os
 import socket
+import pprint
+import traceback
+import signal
+import threading
 
 import certauth.certauth
 
@@ -76,6 +80,18 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
     return arg_parser
 
 
+def dump_state(signum=None, frame=None):
+    pp = pprint.PrettyPrinter(indent=4)
+    state_strs = []
+
+    for th in threading.enumerate():
+        state_strs.append(str(th))
+        stack = traceback.format_stack(sys._current_frames()[th.ident])
+        state_strs.append("".join(stack))
+
+    logging.warn("dumping state (caught signal {})\n{}".format(signum, "\n".join(state_strs)))
+
+
 def main(argv=sys.argv):
     arg_parser = _build_arg_parser(prog=os.path.basename(argv[0]))
     args = arg_parser.parse_args(args=argv[1:])
@@ -133,6 +149,11 @@ def main(argv=sys.argv):
             default_warc_writer=default_warc_writer)
 
     controller = warcprox.controller.WarcproxController(proxy, warc_writer_thread, playback_proxy)
+
+    signal.signal(signal.SIGTERM, lambda a,b: controller.stop.set())
+    signal.signal(signal.SIGINT, lambda a,b: controller.stop.set())
+    signal.signal(signal.SIGQUIT, dump_state)
+
     controller.run_until_shutdown()
 
 

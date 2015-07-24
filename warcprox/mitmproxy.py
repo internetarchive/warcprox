@@ -83,13 +83,13 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             self._transition_to_ssl()
         except Exception as e:
             try:
-                self.logger.error("problem with connect line {}: {}".format(repr(self.requestline), e))
+                self.logger.error("problem with connect line {}: {}".format(repr(self.requestline), e), exc_info=True)
                 if type(e) is socket.timeout:
                     self.send_error(504, str(e))
                 else:
                     self.send_error(500, str(e))
             except Exception as f:
-                self.logger.warn("failed to send error response ({}) to proxy client: {}".format(e, f))
+                self.logger.warn("failed to send error response ({}) to proxy client: {}".format(e, f), exc_info=True)
             return
 
         # Reload!

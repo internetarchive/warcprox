@@ -4,7 +4,6 @@ from __future__ import absolute_import
 
 import logging
 import threading
-import signal
 import time
 
 import warcprox.warcprox
@@ -36,12 +35,10 @@ class WarcproxController(object):
 
         self.playback_proxy = playback_proxy
 
-
     def run_until_shutdown(self):
-        """Start warcprox and run until shut down.
-
-        If running in the main thread, SIGTERM initiates a graceful shutdown.
-        Otherwise, call warcprox_controller.stop.set().
+        """
+        Start warcprox and run until shut down. Call
+        warcprox_controller.stop.set() to initiate graceful shutdown.
         """
         proxy_thread = threading.Thread(target=self.proxy.serve_forever, name='ProxyThread')
         proxy_thread.start()
@@ -54,15 +51,10 @@ class WarcproxController(object):
         self.stop = threading.Event()
 
         try:
-            signal.signal(signal.SIGTERM, self.stop.set)
-            self.logger.info('SIGTERM will initiate graceful shutdown')
-        except ValueError:
-            pass
-
-        try:
             while not self.stop.is_set():
                 time.sleep(0.5)
         except:
+            self.logger.critical("fatal exception, shutting down", exc_info=1)
             pass
         finally:
             self.warc_writer_thread.stop.set()

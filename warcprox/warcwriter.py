@@ -252,7 +252,10 @@ class WarcWriter:
         except:
             payload_digest = "-"
         mimetype = self._decode(recorded_url.content_type)
-        mimetype = mimetype[:mimetype.find(";")]
+        if mimetype:
+            n = mimetype.find(";")
+            if n >= 0:
+                mimetype = mimetype[:n]
         
         # 2015-07-17T22:32:23.672Z     1         58 dns:www.dhss.delaware.gov P http://www.dhss.delaware.gov/dhss/ text/dns #045 20150717223214881+316 sha1:63UTPB7GTWIHAGIK3WWL76E57BBTJGAK http://www.dhss.delaware.gov/dhss/ - {"warcFileOffset":2964,"warcFilename":"ARCHIVEIT-1303-WEEKLY-JOB165158-20150717223222113-00000.warc.gz"}
         self.logger.info("{} {} {} {} {} size={} {} {} offset={}".format(
@@ -327,32 +330,34 @@ class WarcWriterThread(threading.Thread):
         w.write_records(recorded_url)
 
     def run(self):
-        self.logger.info('WarcWriterThread starting, directory={} gzip={} rollover_size={} rollover_idle_time={} prefix={} port={}'.format(
-                os.path.abspath(self.default_warc_writer.directory), self.default_warc_writer.gzip, self.default_warc_writer.rollover_size,
-                self.default_warc_writer.rollover_idle_time, self.default_warc_writer.prefix, self.default_warc_writer.port))
+        try:
+            self.logger.info('WarcWriterThread starting, directory={} gzip={} rollover_size={} rollover_idle_time={} prefix={} port={}'.format(
+                    os.path.abspath(self.default_warc_writer.directory), self.default_warc_writer.gzip, self.default_warc_writer.rollover_size,
+                    self.default_warc_writer.rollover_idle_time, self.default_warc_writer.prefix, self.default_warc_writer.port))
 
-        self._last_sync = time.time()
+            self._last_sync = time.time()
 
-        while not self.stop.is_set():
-            try:
-                recorded_url = self.recorded_url_q.get(block=True, timeout=0.5)
-                self.write_records(recorded_url)
-            except queue.Empty:
-                self.default_warc_writer.maybe_idle_rollover()
-                for w in self.warc_writers.values():
-                    w.maybe_idle_rollover()
+            while not self.stop.is_set():
+                try:
+                    recorded_url = self.recorded_url_q.get(block=True, timeout=0.5)
+                    self.write_records(recorded_url)
+                except queue.Empty:
+                    self.default_warc_writer.maybe_idle_rollover()
+                    for w in self.warc_writers.values():
+                        w.maybe_idle_rollover()
 
-                # XXX prob doesn't belong here (do we need it at all?)
-                if time.time() - self._last_sync > 60:
-                    if self.default_warc_writer.dedup_db:
-                        self.default_warc_writer.dedup_db.sync()
-                    if self.default_warc_writer.playback_index_db:
-                        self.default_warc_writer.playback_index_db.sync()
-                    self._last_sync = time.time()
+                    # XXX prob doesn't belong here (do we need it at all?)
+                    if time.time() - self._last_sync > 60:
+                        if self.default_warc_writer.dedup_db:
+                            self.default_warc_writer.dedup_db.sync()
+                        if self.default_warc_writer.playback_index_db:
+                            self.default_warc_writer.playback_index_db.sync()
+                        self._last_sync = time.time()
 
-        self.logger.info('WarcWriterThread shutting down')
-        self.default_warc_writer.close_writer()
-        for w in self.warc_writers.values():
-            w.close_writer()
-
+            self.logger.info('WarcWriterThread shutting down')
+            self.default_warc_writer.close_writer()
+            for w in self.warc_writers.values():
+                w.close_writer()
+        except:
+            self.logger.critical("WarcWriterThread shutting down after unexpected error", exc_info=True)
 
