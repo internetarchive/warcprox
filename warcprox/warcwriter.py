@@ -226,6 +226,12 @@ class WarcWriter:
 
         return self._f
 
+    def _decode(self, x):
+        if isinstance(x, bytes):
+            return x.decode("utf-8")
+        else:
+            return x
+
     def _final_tasks(self, recorded_url, recordset, recordset_offset):
         if (self.dedup_db is not None
                 and recordset[0].get_header(warctools.WarcRecord.TYPE) == warctools.WarcRecord.RESPONSE
@@ -245,11 +251,20 @@ class WarcWriter:
             payload_digest = recordset[0].get_header(warctools.WarcRecord.PAYLOAD_DIGEST).decode("utf-8")
         except:
             payload_digest = "-"
+        mimetype = self._decode(recorded_url.content_type)
+        mimetype = mimetype[:mimetype.find(";")]
+        
         # 2015-07-17T22:32:23.672Z     1         58 dns:www.dhss.delaware.gov P http://www.dhss.delaware.gov/dhss/ text/dns #045 20150717223214881+316 sha1:63UTPB7GTWIHAGIK3WWL76E57BBTJGAK http://www.dhss.delaware.gov/dhss/ - {"warcFileOffset":2964,"warcFilename":"ARCHIVEIT-1303-WEEKLY-JOB165158-20150717223222113-00000.warc.gz"}
-        self.logger.info("{} {} {} size={} {} {} offset={}".format(
-            recorded_url.status, recorded_url.method,
-            recorded_url.url.decode('utf-8'), recorded_url.size,
-            payload_digest, self._f_finalname, recordset_offset))
+        self.logger.info("{} {} {} {} {} size={} {} {} offset={}".format(
+            self._decode(recorded_url.client_ip),
+            self._decode(recorded_url.status), 
+            self._decode(recorded_url.method),
+            self._decode(recorded_url.url),
+            mimetype,
+            recorded_url.size,
+            self._decode(payload_digest), 
+            self._decode(self._f_finalname), 
+            recordset_offset))
 
     def write_records(self, recorded_url):
         recordset = self.build_warc_records(recorded_url)

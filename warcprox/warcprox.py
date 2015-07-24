@@ -210,8 +210,11 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
 
         recorded_url = RecordedUrl(url=self.url, request_data=req,
                 response_recorder=h.recorder, remote_ip=remote_ip,
-                warcprox_meta=warcprox_meta, method=self.command,
-                status=h.status, size=h.recorder.len)
+                warcprox_meta=warcprox_meta, 
+                status=h.status, size=h.recorder.len,
+                client_ip=self.client_address[0],
+                content_type=h.getheader("Content-Type"),
+                method=self.command)
         self.server.recorded_url_q.put(recorded_url)
 
         return recorded_url
@@ -233,8 +236,9 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                                          warcprox_meta=warcprox_meta,
                                          content_type=self.headers['Content-Type'].encode('latin1'),
                                          custom_type=type_,
-                                         method=method,
-                                         status=204, size=len(request_data))
+                                         status=204, size=len(request_data),
+                                         client_ip=self.client_address[0],
+                                         method=method)
 
                 self.server.recorded_url_q.put(rec_custom)
                 self.send_response(204, 'OK')
@@ -254,10 +258,11 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         # logging better handled elsewhere?
         pass
 
+
 class RecordedUrl(object):
     def __init__(self, url, request_data, response_recorder, remote_ip,
             warcprox_meta=None, content_type=None, custom_type=None,
-            method=None, status=None, size=None):
+            status=None, size=None, client_ip=None, method=None):
         # XXX should test what happens with non-ascii url (when does
         # url-encoding happen?)
         if type(url) is not bytes:
@@ -281,9 +286,10 @@ class RecordedUrl(object):
         self.content_type = content_type
         self.custom_type = custom_type
 
-        self.method = method
         self.status = status
         self.size = size
+        self.client_ip = client_ip
+        self.method = method
 
 class WarcProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
     logger = logging.getLogger("warcprox.warcprox.WarcProxy")

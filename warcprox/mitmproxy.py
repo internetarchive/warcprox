@@ -32,7 +32,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             self.url = self.path
             u = urllib_parse.urlparse(self.url)
             if u.scheme != 'http':
-                raise Exception('Unknown scheme %s' % repr(u.scheme))
+                raise Exception('unable to parse request "{}" as a proxy request'.format(self.requestline))
             self.hostname = u.hostname
             self.port = u.port or 80
             self.path = urllib_parse.urlunparse(
@@ -83,6 +83,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             self._transition_to_ssl()
         except Exception as e:
             try:
+                self.logger.error("problem with connect line {}: {}".format(repr(self.requestline), e))
                 if type(e) is socket.timeout:
                     self.send_error(504, str(e))
                 else:
@@ -129,13 +130,18 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 self._connect_to_host()
                 assert self.url
             except Exception as e:
+                self.logger.error("problem processing request {}: {}".format(repr(self.requestline), e))
                 self.send_error(500, str(e))
                 return
         else:
             # if self.is_connect we already connected in do_CONNECT
             self.url = self._construct_tunneled_url()
 
-        self._proxy_request()
+        try:
+            self._proxy_request()
+        except:
+            self.logger.error("exception from {}".format(self._proxy_request), exc_info=True)
+            raise
 
     def _special_request(self, method, type_):
         raise Exception('Not supported')
@@ -146,13 +152,5 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
     def __getattr__(self, item):
         if item.startswith('do_'):
             return self.do_COMMAND
-
-    def log_error(self, fmt, *args):
-        self.logger.error("{0} - - [{1}] {2}".format(self.address_string(),
-            self.log_date_time_string(), fmt % args))
-
-    def log_message(self, fmt, *args):
-        self.logger.info("{} {} - - [{}] {}".format(self.__class__.__name__,
-            self.address_string(), self.log_date_time_string(), fmt % args))
 
 
