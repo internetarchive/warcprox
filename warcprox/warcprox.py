@@ -212,6 +212,11 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         h.close()
         self._proxy_sock.close()
 
+        # XXX Close connection to proxy client. Doing this because we were
+        # seeing some connection hangs and this seems to solve that problem.
+        # Not clear what the correct, optimal behavior is.
+        self.connection.close()
+
         recorded_url = RecordedUrl(url=self.url, request_data=req,
                 response_recorder=h.recorder, remote_ip=remote_ip,
                 warcprox_meta=warcprox_meta, 
