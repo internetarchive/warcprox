@@ -36,6 +36,7 @@ import traceback
 import hashlib
 import json
 import socket
+from hanzo import warctools
 
 from certauth.certauth import CertificateAuthority
 import warcprox.mitmproxy
@@ -179,7 +180,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         if 'Content-Length' in self.headers:
             req += self.rfile.read(int(self.headers['Content-Length']))
 
-        self.logger.debug('req={}'.format(repr(req)))
+        self.logger.debug('sending to remote server req={}'.format(repr(req)))
 
         # Send it down the pipe!
         self._proxy_sock.sendall(req)
@@ -222,12 +223,17 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
 
         return recorded_url
 
-    def _special_request(self, method, type_):
+    # deprecated
+    def do_PUTMETA(self):
+        self.do_WARCPROX_WRITE_RECORD(warc_type=warctools.WarcRecord.METADATA)
+
+    def do_WARCPROX_WRITE_RECORD(self, warc_type=None):
         try:
             self.url = self.path
 
-            if (method == 'PUTMETA' and 'Content-Length' in self.headers 
-                    and 'Content-Type' in self.headers):
+            if ('Content-Length' in self.headers and 'Content-Type' in self.headers
+                    and (warc_type or 'WARC-Type' in self.headers)):
+                # stream this?
                 request_data = self.rfile.read(int(self.headers['Content-Length']))
 
                 warcprox_meta = self.headers.get('Warcprox-Meta')
@@ -238,10 +244,10 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                                          remote_ip=b'',
                                          warcprox_meta=warcprox_meta,
                                          content_type=self.headers['Content-Type'].encode('latin1'),
-                                         custom_type=type_,
+                                         custom_type=warc_type or self.headers['WARC-Type'],
                                          status=204, size=len(request_data),
                                          client_ip=self.client_address[0],
-                                         method=method)
+                                         method=self.command)
 
                 self.server.recorded_url_q.put(rec_custom)
                 self.send_response(204, 'OK')
@@ -250,7 +256,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
 
             self.end_headers()
         except:
-            self.logger.error("uncaught except in _special_request", exc_info=True)
+            self.logger.error("uncaught exception in do_WARCPROX_WRITE_RECORD", exc_info=True)
             raise
 
     def log_error(self, fmt, *args):

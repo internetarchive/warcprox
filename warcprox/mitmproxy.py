@@ -83,7 +83,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             self._transition_to_ssl()
         except Exception as e:
             try:
-                self.logger.error("problem with connect line {}: {}".format(repr(self.requestline), e), exc_info=True)
+                self.logger.error("problem handling {}: {}".format(repr(self.requestline), e), exc_info=True)
                 if type(e) is socket.timeout:
                     self.send_error(504, str(e))
                 else:
@@ -117,13 +117,6 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
 
     def do_COMMAND(self):
         if not self.is_connect:
-            if self.command == 'PUTMETA':
-                self._special_request(method=self.command, type_='metadata')
-                return
-            # if self.command == 'PUTRES':
-            #     self._special_request(type_='resource')
-            #     return
-
             try:
                 # Connect to destination
                 self._determine_host_port()

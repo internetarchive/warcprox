@@ -145,8 +145,9 @@ def main(argv=sys.argv):
             dedup_db=dedup_db, digest_algorithm=args.digest_algorithm,
             playback_index_db=playback_index_db,
             rollover_idle_time=int(args.rollover_idle_time) if args.rollover_idle_time is not None else None)
+    writer_pool=warcprox.warcwriter.WarcWriterPool(default_warc_writer)
     warc_writer_thread = warcprox.warcwriter.WarcWriterThread(recorded_url_q=recorded_url_q,
-            default_warc_writer=default_warc_writer)
+            writer_pool=writer_pool)
 
     controller = warcprox.controller.WarcproxController(proxy, warc_writer_thread, playback_proxy)
 
