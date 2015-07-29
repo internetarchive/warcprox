@@ -193,28 +193,6 @@ def playback_proxies(warcprox_):
     playback_proxy = 'http://localhost:{}'.format(warcprox_.playback_proxy.server_port)
     return {'http':playback_proxy, 'https':playback_proxy}
 
-# def tearDown(self):
-#     logging.info('stopping warcprox')
-#     self.warcprox.stop.set()
-# 
-#     logging.info('stopping http and https daemons')
-#     self.http_daemon.shutdown()
-#     self.https_daemon.shutdown()
-#     self.http_daemon.server_close()
-#     self.https_daemon.server_close()
-# 
-#     self.http_daemon_thread.join()
-#     self.https_daemon_thread.join()
-#     self.warcprox_thread.join()
-# 
-#     for f in (self.__cert, self._ca_file, self._ca_dir, self._warcs_dir, self._playback_index_db_file, self._dedup_db_file):
-#         if os.path.isdir(f):
-#             logging.info('deleting directory {}'.format(f))
-#             shutil.rmtree(f)
-#         else:
-#             logging.info('deleting file {}'.format(f))
-#             os.unlink(f)
-
 def test_httpds_no_proxy(http_daemon, https_daemon):
     url = 'http://localhost:{}/'.format(http_daemon.server_port)
     response = requests.get(url)
