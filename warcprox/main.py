@@ -57,6 +57,8 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
             default=False, help='write digests in Base32 instead of hex')
     arg_parser.add_argument('-j', '--dedup-db-file', dest='dedup_db_file',
             default='./warcprox-dedup.db', help='persistent deduplication database file; empty string or /dev/null disables deduplication')
+    arg_parser.add_argument('--stats-db-file', dest='stats_db_file',
+            default='./warcprox-stats.db', help='persistent statistics database file; empty string or /dev/null disables deduplication')
     arg_parser.add_argument('-P', '--playback-port', dest='playback_port',
             default=None, help='port to listen on for instant playback')
     arg_parser.add_argument('--playback-index-db-file', dest='playback_index_db_file',
@@ -112,6 +114,12 @@ def main(argv=sys.argv):
     else:
         dedup_db = warcprox.dedup.DedupDb(args.dedup_db_file)
 
+    if args.stats_db_file in (None, '', '/dev/null'):
+        logging.info('statistics tracking disabled')
+        stats_db = None
+    else:
+        stats_db = warcprox.stats.StatsDb(args.stats_db_file)
+
     recorded_url_q = queue.Queue()
 
     ca_name = 'Warcprox CA on {}'.format(socket.gethostname())[:64]
@@ -121,7 +129,8 @@ def main(argv=sys.argv):
     proxy = warcprox.warcproxy.WarcProxy(
             server_address=(args.address, int(args.port)), ca=ca,
             recorded_url_q=recorded_url_q,
-            digest_algorithm=args.digest_algorithm)
+            digest_algorithm=args.digest_algorithm,
+            stats_db=stats_db)
 
     if args.playback_port is not None:
         playback_index_db = warcprox.playback.PlaybackIndexDb(args.playback_index_db_file)
@@ -141,7 +150,8 @@ def main(argv=sys.argv):
     writer_pool=warcprox.writer.WarcWriterPool(default_warc_writer)
     warc_writer_thread = warcprox.writerthread.WarcWriterThread(
             recorded_url_q=recorded_url_q, writer_pool=writer_pool,
-            dedup_db=dedup_db, playback_index_db=playback_index_db)
+            dedup_db=dedup_db, playback_index_db=playback_index_db,
+            stats_db=stats_db)
 
     controller = warcprox.controller.WarcproxController(proxy, warc_writer_thread, playback_proxy)
 

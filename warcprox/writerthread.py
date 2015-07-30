@@ -22,7 +22,7 @@ import warcprox
 class WarcWriterThread(threading.Thread):
     logger = logging.getLogger("warcprox.warcproxwriter.WarcWriterThread")
 
-    def __init__(self, recorded_url_q=None, writer_pool=None, dedup_db=None, playback_index_db=None):
+    def __init__(self, recorded_url_q=None, writer_pool=None, dedup_db=None, playback_index_db=None, stats_db=None):
         """recorded_url_q is a queue.Queue of warcprox.warcprox.RecordedUrl."""
         threading.Thread.__init__(self, name='WarcWriterThread')
         self.recorded_url_q = recorded_url_q
@@ -33,6 +33,7 @@ class WarcWriterThread(threading.Thread):
             self.writer_pool = WarcWriterPool()
         self.dedup_db = dedup_db
         self.playback_index_db = playback_index_db
+        self.stats_db = stats_db
         self._last_sync = time.time()
 
     def run(self):
@@ -106,7 +107,12 @@ class WarcWriterThread(threading.Thread):
             _decode(records[0].warc_filename), 
             records[0].offset))
 
+    def _update_stats(self, recorded_url, records):
+        if self.stats_db:
+            self.stats_db.tally(recorded_url, records)
+
     def _final_tasks(self, recorded_url, records):
         self._save_dedup_info(recorded_url, records)
         self._save_playback_info(recorded_url, records)
+        self._update_stats(recorded_url, records)
         self._log(recorded_url, records)

@@ -153,13 +153,38 @@ class ProxyingRecordingHTTPResponse(http_client.HTTPResponse):
 
 
 class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
+    # self.server is WarcProxy
     logger = logging.getLogger("warcprox.warcprox.WarcProxyHandler")
+
+    def _enforce_limits(self, warcprox_meta):
+        self.logger.info("warcprox_meta=%s", warcprox_meta)
+        if (warcprox_meta and "stats" in warcprox_meta 
+                and "limits" in warcprox_meta["stats"]):
+            self.logger.info("warcprox_meta['stats']['limits']=%s", warcprox_meta['stats']['limits'])
+            for item in warcprox_meta["stats"]["limits"].items():
+                self.logger.info("item=%s", item)
+                key, limit = item
+                self.logger.info("limit %s=%d", key, limit)
+                bucket0, bucket1, bucket2 = key.rsplit(".", 2)
+                self.logger.info("%s::%s::%s", bucket0, bucket1, bucket2)
+                value = self.server.stats_db.value(bucket0, bucket1, bucket2)
+                self.logger.info("stats value is %s", value)
+                if value and value >= limit:
+                    self.send_error(420, "Limit reached")
+                    self.connection.close()
+                    return
 
     def _proxy_request(self):
         # Build request
         req_str = '{} {} {}\r\n'.format(self.command, self.path, self.request_version)
 
-        warcprox_meta = self.headers.get('Warcprox-Meta')
+        warcprox_meta = None
+        raw_warcprox_meta = self.headers.get('Warcprox-Meta')
+        if raw_warcprox_meta:
+            warcprox_meta = json.loads(raw_warcprox_meta)
+
+        if self._enforce_limits(warcprox_meta):
+            return
 
         # Swallow headers that don't make sense to forward on, i.e. most
         # hop-by-hop headers, see http://tools.ietf.org/html/rfc2616#section-13.5
@@ -241,7 +266,10 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 # stream this?
                 request_data = self.rfile.read(int(self.headers['Content-Length']))
 
-                warcprox_meta = self.headers.get('Warcprox-Meta')
+                warcprox_meta = None
+                raw_warcprox_meta = self.headers.get('Warcprox-Meta')
+                if raw_warcprox_meta:
+                    warcprox_meta = json.loads(raw_warcprox_meta)
 
                 rec_custom = RecordedUrl(url=self.url,
                                          request_data=request_data,
@@ -295,7 +323,7 @@ class RecordedUrl:
         self.response_recorder = response_recorder
 
         if warcprox_meta:
-            self.warcprox_meta = json.loads(warcprox_meta)
+            self.warcprox_meta = warcprox_meta
         else:
             self.warcprox_meta = {}
 
@@ -319,7 +347,8 @@ class WarcProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
 
     def __init__(self, server_address=('localhost', 8000),
             req_handler_class=WarcProxyHandler, bind_and_activate=True,
-            ca=None, recorded_url_q=None, digest_algorithm='sha1'):
+            ca=None, recorded_url_q=None, digest_algorithm='sha1',
+            stats_db=None):
         http_server.HTTPServer.__init__(self, server_address, req_handler_class, bind_and_activate)
 
         self.digest_algorithm = digest_algorithm
@@ -336,6 +365,8 @@ class WarcProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
             self.recorded_url_q = recorded_url_q
         else:
             self.recorded_url_q = queue.Queue()
+
+        self.stats_db = stats_db
 
     def server_activate(self):
         http_server.HTTPServer.server_activate(self)

@@ -8,6 +8,7 @@ import warcprox.mitmproxy as mitmproxy
 import warcprox.writer as writer
 import warcprox.warc as warc
 import warcprox.writerthread as writerthread
+import warcprox.stats as stats
 
 def digest_str(hash_obj, base32):
     import base64
