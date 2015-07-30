@@ -157,22 +157,28 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
     logger = logging.getLogger("warcprox.warcprox.WarcProxyHandler")
 
     def _enforce_limits(self, warcprox_meta):
-        self.logger.info("warcprox_meta=%s", warcprox_meta)
         if (warcprox_meta and "stats" in warcprox_meta 
                 and "limits" in warcprox_meta["stats"]):
-            self.logger.info("warcprox_meta['stats']['limits']=%s", warcprox_meta['stats']['limits'])
+            # self.logger.info("warcprox_meta['stats']['limits']=%s", warcprox_meta['stats']['limits'])
             for item in warcprox_meta["stats"]["limits"].items():
-                self.logger.info("item=%s", item)
                 key, limit = item
-                self.logger.info("limit %s=%d", key, limit)
                 bucket0, bucket1, bucket2 = key.rsplit(".", 2)
-                self.logger.info("%s::%s::%s", bucket0, bucket1, bucket2)
                 value = self.server.stats_db.value(bucket0, bucket1, bucket2)
-                self.logger.info("stats value is %s", value)
                 if value and value >= limit:
-                    self.send_error(420, "Limit reached")
+                    self.logger.info('sending "420 Limit reached" %s=%s', key, limit)
+                    body = "request rejected by warcprox: reached limit {}={}\n".format(key, limit).encode("utf-8")
+                    self.send_response(420, "Limit reached")
+                    self.send_header("Content-Type", "text/plain;charset=utf-8")
+                    self.send_header("Connection", "close")
+                    self.send_header("Content-Length", len(body))
+                    response_meta = {"reached-limit":{key:limit}, "stats":{bucket0: self.server.stats_db.value(bucket0)}}
+                    self.send_header("Warcprox-Meta", json.dumps(response_meta, separators=(",",":")))
+                    self.end_headers()
+                    if self.command != "HEAD":
+                        self.wfile.write(body)
                     self.connection.close()
-                    return
+                    return True
+        return False
 
     def _proxy_request(self):
         # Build request

@@ -404,13 +404,16 @@ def test_limits(http_daemon, archiving_proxies):
         assert response.headers['warcprox-test-header'] == 'a!'
         assert response.content == b'I am the warcprox test payload! bbbbbbbbbb!\n'
 
+    # XXX give warc writer thread a chance to update stats
+    time.sleep(2.0)
+
     response = requests.get(url, proxies=archiving_proxies, headers=headers, stream=True)
     assert response.status_code == 420
     assert response.reason == "Limit reached"
-    # response_meta = {"stats":{"job1":{"total":{"urls":10},"new":{"urls":1},"revisit":{"urls":9}}}}
-    # assert json.loads(headers["warcprox-meta"]) == response_meta
-    # assert response.headers["content-type"] == "text/plain;charset=utf-8"
-    # assert response.raw.data == b"request rejected by warcprox: reached limit job1.total.urls=10\n"
+    expected_response_meta = {'reached-limit': {'job1.total.urls': 10}, 'stats': {'job1': {'revisit': {'wire_bytes': 1215, 'urls': 9}, 'total': {'wire_bytes': 1350, 'urls': 10}, 'new': {'wire_bytes': 135, 'urls': 1}}}}
+    assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
+    assert response.headers["content-type"] == "text/plain;charset=utf-8"
+    assert response.raw.data == b"request rejected by warcprox: reached limit job1.total.urls=10\n"
 
 if __name__ == '__main__':
     pytest.main()
