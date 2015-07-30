@@ -14,6 +14,7 @@ import os
 import shutil
 import requests
 import re
+import json
 
 try:
     import http.server as http_server
@@ -27,11 +28,10 @@ except ImportError:
 
 import certauth.certauth
 
-import warcprox.controller
-import warcprox.warcprox
-import warcprox.playback
-import warcprox.warcwriter
-import warcprox.dedup
+import warcprox
+
+logging.basicConfig(stream=sys.stdout, level=logging.INFO,
+        format='%(asctime)s %(process)d %(levelname)s %(threadName)s %(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s')
 
 class _TestHttpRequestHandler(http_server.BaseHTTPRequestHandler):
     def do_GET(self):
@@ -138,7 +138,7 @@ def warcprox_(request):
 
     recorded_url_q = queue.Queue()
 
-    proxy = warcprox.warcprox.WarcProxy(server_address=('localhost', 0), ca=ca,
+    proxy = warcprox.warcproxy.WarcProxy(server_address=('localhost', 0), ca=ca,
             recorded_url_q=recorded_url_q)
 
     warcs_dir = tempfile.mkdtemp(prefix='warcprox-test-warcs-')
@@ -155,12 +155,12 @@ def warcprox_(request):
     dedup_db_file = f.name
     dedup_db = warcprox.dedup.DedupDb(dedup_db_file)
 
-    default_warc_writer = warcprox.warcwriter.WarcWriter(directory=warcs_dir,
-            port=proxy.server_port, dedup_db=dedup_db,
-            playback_index_db=playback_index_db)
-    writer_pool = warcprox.warcwriter.WarcWriterPool(default_warc_writer)
-    warc_writer_thread = warcprox.warcwriter.WarcWriterThread(recorded_url_q=recorded_url_q,
-            writer_pool=writer_pool)
+    default_warc_writer = warcprox.writer.WarcWriter(directory=warcs_dir,
+            port=proxy.server_port)
+    writer_pool = warcprox.writer.WarcWriterPool(default_warc_writer)
+    warc_writer_thread = warcprox.writerthread.WarcWriterThread(
+            recorded_url_q=recorded_url_q, writer_pool=writer_pool,
+            dedup_db=dedup_db, playback_index_db=playback_index_db)
 
     warcprox_ = warcprox.controller.WarcproxController(proxy, warc_writer_thread, playback_proxy)
     logging.info('starting warcprox')
@@ -224,7 +224,6 @@ def _poll_playback_until(playback_proxies, url, status, timeout_sec):
         if response.status_code == status:
             break
         time.sleep(0.5)
-
     return response
 
 def test_archive_and_playback_http_url(http_daemon, archiving_proxies, playback_proxies):
@@ -276,7 +275,7 @@ def test_dedup_http(http_daemon, warcprox_, archiving_proxies, playback_proxies)
     assert response.content == b'404 Not in Archive\n'
 
     # check not in dedup db
-    dedup_lookup = warcprox_.warc_writer_thread.writer_pool.default_warc_writer.dedup_db.lookup(b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
+    dedup_lookup = warcprox_.warc_writer_thread.dedup_db.lookup(b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
     assert dedup_lookup is None
 
     # archive
@@ -293,7 +292,7 @@ def test_dedup_http(http_daemon, warcprox_, archiving_proxies, playback_proxies)
 
     # check in dedup db
     # {u'i': u'<urn:uuid:e691dc0f-4bb9-4ad8-9afb-2af836aa05e4>', u'u': u'https://localhost:62841/c/d', u'd': u'2013-11-22T00:14:37Z'}
-    dedup_lookup = warcprox_.warc_writer_thread.writer_pool.default_warc_writer.dedup_db.lookup(b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
+    dedup_lookup = warcprox_.warc_writer_thread.dedup_db.lookup(b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
     assert dedup_lookup['u'] == url.encode('ascii')
     assert re.match(br'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$', dedup_lookup['i'])
     assert re.match(br'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$', dedup_lookup['d'])
@@ -314,7 +313,7 @@ def test_dedup_http(http_daemon, warcprox_, archiving_proxies, playback_proxies)
     time.sleep(2.0)
 
     # check in dedup db (no change from prev)
-    dedup_lookup = warcprox_.warc_writer_thread.writer_pool.default_warc_writer.dedup_db.lookup(b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
+    dedup_lookup = warcprox_.warc_writer_thread.dedup_db.lookup(b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
     assert dedup_lookup['u'] == url.encode('ascii')
     assert dedup_lookup['i'] == record_id
     assert dedup_lookup['d'] == dedup_date
@@ -337,7 +336,7 @@ def test_dedup_https(https_daemon, warcprox_, archiving_proxies, playback_proxie
     assert response.content == b'404 Not in Archive\n'
 
     # check not in dedup db
-    dedup_lookup = warcprox_.warc_writer_thread.writer_pool.default_warc_writer.dedup_db.lookup(b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
+    dedup_lookup = warcprox_.warc_writer_thread.dedup_db.lookup(b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
     assert dedup_lookup is None
 
     # archive
@@ -354,7 +353,7 @@ def test_dedup_https(https_daemon, warcprox_, archiving_proxies, playback_proxie
 
     # check in dedup db
     # {u'i': u'<urn:uuid:e691dc0f-4bb9-4ad8-9afb-2af836aa05e4>', u'u': u'https://localhost:62841/c/d', u'd': u'2013-11-22T00:14:37Z'}
-    dedup_lookup = warcprox_.warc_writer_thread.writer_pool.default_warc_writer.dedup_db.lookup(b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
+    dedup_lookup = warcprox_.warc_writer_thread.dedup_db.lookup(b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
     assert dedup_lookup['u'] == url.encode('ascii')
     assert re.match(br'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$', dedup_lookup['i'])
     assert re.match(br'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$', dedup_lookup['d'])
@@ -375,7 +374,7 @@ def test_dedup_https(https_daemon, warcprox_, archiving_proxies, playback_proxie
     time.sleep(2.0)
 
     # check in dedup db (no change from prev)
-    dedup_lookup = warcprox_.warc_writer_thread.writer_pool.default_warc_writer.dedup_db.lookup(b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
+    dedup_lookup = warcprox_.warc_writer_thread.dedup_db.lookup(b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
     assert dedup_lookup['u'] == url.encode('ascii')
     assert dedup_lookup['i'] == record_id
     assert dedup_lookup['d'] == dedup_date
@@ -387,6 +386,25 @@ def test_dedup_https(https_daemon, warcprox_, archiving_proxies, playback_proxie
     assert response.headers['warcprox-test-header'] == 'g!'
     assert response.content == b'I am the warcprox test payload! hhhhhhhhhh!\n'
     # XXX how to check dedup was used?
+
+def test_limits(http_daemon, archiving_proxies):
+    url = 'http://localhost:{}/a/b'.format(http_daemon.server_port)
+    request_meta = {"stats":{"classifiers":["job1"]},"limits":{"job1.total.urls":10}}
+    headers = {"Warcprox-Meta": json.dumps(request_meta)}
+
+    for i in range(10):
+        response = requests.get(url, proxies=archiving_proxies, headers=headers, stream=True)
+        assert response.status_code == 200
+        assert response.headers['warcprox-test-header'] == 'a!'
+        assert response.content == b'I am the warcprox test payload! bbbbbbbbbb!\n'
+
+    response = requests.get(url, proxies=archiving_proxies, headers=headers, stream=True)
+    assert response.status_code == 420
+    assert response.reason == "Limit Reached"
+    response_meta = {"stats":{"job1":{"total":{"urls":10},"new":{"urls":1},"revisit":{"urls":9}}}}
+    assert json.loads(headers["warcprox-meta"]) == response_meta
+    assert response.headers["content-type"] == "text/plain;charset=utf-8"
+    assert response.raw.data == b"request rejected by warcprox: reached limit job1.total.urls=10\n"
 
 if __name__ == '__main__':
     pytest.main()
