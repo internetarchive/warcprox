@@ -226,6 +226,8 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 method=self.command)
         self.server.recorded_url_q.put(recorded_url)
 
+        return recorded_url
+
     # deprecated
     def do_PUTMETA(self):
         self.do_WARCPROX_WRITE_RECORD(warc_type=warctools.WarcRecord.METADATA)
