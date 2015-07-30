@@ -14,6 +14,7 @@ import logging
 import os
 import json
 from hanzo import warctools
+import warcprox
 
 class DedupDb(object):
     logger = logging.getLogger("warcprox.dedup.DedupDb")
@@ -44,17 +45,21 @@ class DedupDb(object):
         json_value = json.dumps(py_value, separators=(',',':'))
 
         self.db[key] = json_value.encode('utf-8')
-        self.logger.debug('dedup db saved {}:{}'.format(key, json_value))
+        self.logger.debug('dedup db saved %s:%s', key, json_value)
 
     def lookup(self, key):
+        result = None
         if key in self.db:
             json_result = self.db[key]
             result = json.loads(json_result.decode('utf-8'))
             result['i'] = result['i'].encode('latin1')
             result['u'] = result['u'].encode('latin1')
             result['d'] = result['d'].encode('latin1')
-            return result
-        else:
-            return None
+        self.logger.debug('dedup db lookup of key=%s returning %s', key, result)
+        return result
 
+def decorate_with_dedup_info(dedup_db, recorded_url, base32=False):
+    if recorded_url.response_recorder.payload_digest:
+        key = warcprox.digest_str(recorded_url.response_recorder.payload_digest, base32)
+        recorded_url.dedup_info = dedup_db.lookup(key)
 

@@ -5,9 +5,7 @@ from __future__ import absolute_import
 import logging
 import threading
 import time
-
-import warcprox.warcprox
-import warcprox.warcwriter
+import warcprox
 
 class WarcproxController(object):
     logger = logging.getLogger("warcprox.controller.WarcproxController")
@@ -61,8 +59,8 @@ class WarcproxController(object):
             self.proxy.shutdown()
             self.proxy.server_close()
 
-            if self.warc_writer_thread.writer_pool.default_warc_writer.dedup_db is not None:
-                self.warc_writer_thread.writer_pool.default_warc_writer.dedup_db.close()
+            if self.warc_writer_thread.dedup_db is not None:
+                self.warc_writer_thread.dedup_db.close()
 
             if self.playback_proxy is not None:
                 self.playback_proxy.shutdown()

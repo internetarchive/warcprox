@@ -5,7 +5,7 @@ from setuptools.command.test import test as TestCommand
 import sys
 import setuptools 
 
-VERSION_BYTES = b'1.4'
+VERSION_BYTES = b'1.5'
 
 def full_version_bytes():
     import subprocess, time

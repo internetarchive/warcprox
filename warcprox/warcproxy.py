@@ -39,7 +39,7 @@ import socket
 from hanzo import warctools
 
 from certauth.certauth import CertificateAuthority
-import warcprox
+import warcprox.mitmproxy
 
 class ProxyingRecorder(object):
     """
@@ -153,7 +153,7 @@ class ProxyingRecordingHTTPResponse(http_client.HTTPResponse):
 
 
 class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
-    logger = logging.getLogger("warcprox.warcproxy.WarcProxyHandler")
+    logger = logging.getLogger("warcprox.warcprox.WarcProxyHandler")
 
     def _proxy_request(self):
         # Build request
@@ -226,8 +226,6 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 method=self.command)
         self.server.recorded_url_q.put(recorded_url)
 
-        return recorded_url
-
     # deprecated
     def do_PUTMETA(self):
         self.do_WARCPROX_WRITE_RECORD(warc_type=warctools.WarcRecord.METADATA)
@@ -274,6 +272,8 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
 
 
 class RecordedUrl:
+    logger = logging.getLogger("warcprox.warcproxy.RecordedUrl")
+
     def __init__(self, url, request_data, response_recorder, remote_ip,
             warcprox_meta=None, content_type=None, custom_type=None,
             status=None, size=None, client_ip=None, method=None):
@@ -306,7 +306,7 @@ class RecordedUrl:
         self.method = method
 
     def __del__(self):
-        self.logger.info("finished with %s", self)
+        self.logger.debug("finished with %s", self)
         if self.response_recorder:
             self.response_recorder.tempfile.close()
             self.response_recorder = None

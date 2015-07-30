@@ -18,14 +18,8 @@ import pprint
 import traceback
 import signal
 import threading
-
 import certauth.certauth
-
-import warcprox.playback
-import warcprox.dedup
-import warcprox.warcwriter
-import warcprox.warcprox
-import warcprox.controller
+import warcprox
 
 def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
     arg_parser = argparse.ArgumentParser(prog=prog,
@@ -124,7 +118,7 @@ def main(argv=sys.argv):
     ca = certauth.certauth.CertificateAuthority(args.cacert, args.certs_dir,
                                                 ca_name=ca_name)
 
-    proxy = warcprox.warcprox.WarcProxy(
+    proxy = warcprox.warcproxy.WarcProxy(
             server_address=(args.address, int(args.port)), ca=ca,
             recorded_url_q=recorded_url_q,
             digest_algorithm=args.digest_algorithm)
@@ -139,15 +133,15 @@ def main(argv=sys.argv):
         playback_index_db = None
         playback_proxy = None
 
-    default_warc_writer = warcprox.warcwriter.WarcWriter(directory=args.directory,
+    default_warc_writer = warcprox.writer.WarcWriter(directory=args.directory,
             gzip=args.gzip, prefix=args.prefix, port=int(args.port),
             rollover_size=int(args.size), base32=args.base32,
-            dedup_db=dedup_db, digest_algorithm=args.digest_algorithm,
-            playback_index_db=playback_index_db,
+            digest_algorithm=args.digest_algorithm,
             rollover_idle_time=int(args.rollover_idle_time) if args.rollover_idle_time is not None else None)
-    writer_pool=warcprox.warcwriter.WarcWriterPool(default_warc_writer)
-    warc_writer_thread = warcprox.warcwriter.WarcWriterThread(recorded_url_q=recorded_url_q,
-            writer_pool=writer_pool)
+    writer_pool=warcprox.writer.WarcWriterPool(default_warc_writer)
+    warc_writer_thread = warcprox.writerthread.WarcWriterThread(
+            recorded_url_q=recorded_url_q, writer_pool=writer_pool,
+            dedup_db=dedup_db, playback_index_db=playback_index_db)
 
     controller = warcprox.controller.WarcproxController(proxy, warc_writer_thread, playback_proxy)
 
