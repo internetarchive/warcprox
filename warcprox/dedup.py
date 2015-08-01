@@ -59,7 +59,7 @@ class DedupDb(object):
         return result
 
 def decorate_with_dedup_info(dedup_db, recorded_url, base32=False):
-    if recorded_url.response_recorder.payload_digest:
+    if recorded_url.response_recorder and recorded_url.response_recorder.payload_digest:
         key = warcprox.digest_str(recorded_url.response_recorder.payload_digest, base32)
         recorded_url.dedup_info = dedup_db.lookup(key)
 

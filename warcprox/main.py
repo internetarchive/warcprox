@@ -58,7 +58,7 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
     arg_parser.add_argument('-j', '--dedup-db-file', dest='dedup_db_file',
             default='./warcprox-dedup.db', help='persistent deduplication database file; empty string or /dev/null disables deduplication')
     arg_parser.add_argument('--stats-db-file', dest='stats_db_file',
-            default='./warcprox-stats.db', help='persistent statistics database file; empty string or /dev/null disables deduplication')
+            default='./warcprox-stats.db', help='persistent statistics database file; empty string or /dev/null disables statistics tracking')
     arg_parser.add_argument('-P', '--playback-port', dest='playback_port',
             default=None, help='port to listen on for instant playback')
     arg_parser.add_argument('--playback-index-db-file', dest='playback_index_db_file',

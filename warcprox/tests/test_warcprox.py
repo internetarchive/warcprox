@@ -409,7 +409,7 @@ def test_limits(http_daemon, archiving_proxies):
 
     response = requests.get(url, proxies=archiving_proxies, headers=headers, stream=True)
     assert response.status_code == 420
-    assert response.reason == "Limit reached"
+    assert response.reason == "Reached limit"
     expected_response_meta = {'reached-limit': {'job1.total.urls': 10}, 'stats': {'job1': {'revisit': {'wire_bytes': 1215, 'urls': 9}, 'total': {'wire_bytes': 1350, 'urls': 10}, 'new': {'wire_bytes': 135, 'urls': 1}}}}
     assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
     assert response.headers["content-type"] == "text/plain;charset=utf-8"

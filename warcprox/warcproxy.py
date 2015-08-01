@@ -165,9 +165,9 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 bucket0, bucket1, bucket2 = key.rsplit(".", 2)
                 value = self.server.stats_db.value(bucket0, bucket1, bucket2)
                 if value and value >= limit:
-                    self.logger.info('sending "420 Limit reached" %s=%s', key, limit)
+                    self.logger.info('sending "420 Reached limit" %s=%s', key, limit)
                     body = "request rejected by warcprox: reached limit {}={}\n".format(key, limit).encode("utf-8")
-                    self.send_response(420, "Limit reached")
+                    self.send_response(420, "Reached limit")
                     self.send_header("Content-Type", "text/plain;charset=utf-8")
                     self.send_header("Connection", "close")
                     self.send_header("Content-Length", len(body))
