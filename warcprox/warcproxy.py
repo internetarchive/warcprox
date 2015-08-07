@@ -127,6 +127,9 @@ class ProxyingRecorder(object):
         self._update(hunk)
         return hunk
 
+    def flush(self):
+        return self.fp.flush()
+
     def close(self):
         return self.fp.close()
 
@@ -195,10 +198,10 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         # hop-by-hop headers, see http://tools.ietf.org/html/rfc2616#section-13.5
         # self.headers is an email.message.Message, which is case-insensitive
         # and doesn't throw KeyError in __delitem__
-        for h in ('Connection', 'Proxy-Connection', 'Keep-Alive',
+        for key in ('Connection', 'Proxy-Connection', 'Keep-Alive',
                 'Proxy-Authenticate', 'Proxy-Authorization', 'Upgrade',
                 'Warcprox-Meta'):
-            del self.headers[h]
+            del self.headers[key]
 
         # Add headers to the request
         # XXX in at least python3.3 str(self.headers) uses \n not \r\n :(
@@ -210,51 +213,59 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         if 'Content-Length' in self.headers:
             req += self.rfile.read(int(self.headers['Content-Length']))
 
-        self.logger.debug('sending to remote server req={}'.format(repr(req)))
+        try:
+            self.logger.debug('sending to remote server req=%s', repr(req))
 
-        # Send it down the pipe!
-        self._proxy_sock.sendall(req)
+            # Send it down the pipe!
+            self._proxy_sock.sendall(req)
 
-        # We want HTTPResponse's smarts about http and handling of
-        # non-compliant servers. But HTTPResponse.read() doesn't return the raw
-        # bytes read from the server, it unchunks them if they're chunked, and
-        # might do other stuff. We want to send the raw bytes back to the
-        # client. So we ignore the values returned by h.read() below. Instead
-        # the ProxyingRecordingHTTPResponse takes care of sending the raw bytes
-        # to the proxy client.
+            # We want HTTPResponse's smarts about http and handling of
+            # non-compliant servers. But HTTPResponse.read() doesn't return the raw
+            # bytes read from the server, it unchunks them if they're chunked, and
+            # might do other stuff. We want to send the raw bytes back to the
+            # client. So we ignore the values returned by prox_rec_res.read() below. Instead
+            # the ProxyingRecordingHTTPResponse takes care of sending the raw bytes
+            # to the proxy client.
 
-        # Proxy and record the response
-        h = ProxyingRecordingHTTPResponse(self._proxy_sock,
-                proxy_dest=self.connection,
-                digest_algorithm=self.server.digest_algorithm,
-                url=self.url)
-        h.begin()
+            # Proxy and record the response
+            prox_rec_res = ProxyingRecordingHTTPResponse(self._proxy_sock,
+                    proxy_dest=self.connection,
+                    digest_algorithm=self.server.digest_algorithm,
+                    url=self.url)
+            prox_rec_res.begin()
 
-        buf = h.read(8192)
-        while buf != b'':
-            buf = h.read(8192)
+            remote_ip=self._proxy_sock.getpeername()[0]
 
-        self.log_request(h.status, h.recorder.len)
+            buf = prox_rec_res.read(8192)
+            while buf != b'':
+                buf = prox_rec_res.read(8192)
 
-        remote_ip = self._proxy_sock.getpeername()[0]
+            recorded_url = RecordedUrl(url=self.url, request_data=req,
+                    response_recorder=prox_rec_res.recorder,
+                    remote_ip=remote_ip, warcprox_meta=warcprox_meta,
+                    status=prox_rec_res.status, size=prox_rec_res.recorder.len,
+                    client_ip=self.client_address[0],
+                    content_type=prox_rec_res.getheader("Content-Type"),
+                    method=self.command)
+            self.server.recorded_url_q.put(recorded_url)
 
-        # Let's close off the remote end
-        h.close()
-        self._proxy_sock.close()
+            self.log_request(prox_rec_res.status, prox_rec_res.recorder.len)
+        except socket.timeout as e:
+            self.logger.warn("%s proxying %s", repr(e), self.url)
+        except BaseException as e:
+            self.logger.error("%s proxying %s", repr(e), self.url, exc_info=True)
+        finally:
+            # Let's close off the remote end
+            prox_rec_res.close()
+            self._proxy_sock.close()
 
-        # XXX Close connection to proxy client. Doing this because we were
-        # seeing some connection hangs and this seems to solve that problem.
-        # Not clear what the correct, optimal behavior is.
-        self.connection.close()
-
-        recorded_url = RecordedUrl(url=self.url, request_data=req,
-                response_recorder=h.recorder, remote_ip=remote_ip,
-                warcprox_meta=warcprox_meta, 
-                status=h.status, size=h.recorder.len,
-                client_ip=self.client_address[0],
-                content_type=h.getheader("Content-Type"),
-                method=self.command)
-        self.server.recorded_url_q.put(recorded_url)
+            # XXX Close connection to proxy client. Doing this because we were
+            # seeing some connection hangs and this seems to solve that problem.
+            # Not clear what the correct, optimal behavior is. One thing we
+            # should probably(?) do is add "Connection: close" to response
+            # headers. Right now the response is passed through blindly as raw
+            # bytes so it's not completely trivial to do that.
+            self.connection.close()
 
         return recorded_url
 
