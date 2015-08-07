@@ -157,10 +157,9 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
     logger = logging.getLogger("warcprox.warcprox.WarcProxyHandler")
 
     def _enforce_limits(self, warcprox_meta):
-        if (warcprox_meta and "stats" in warcprox_meta 
-                and "limits" in warcprox_meta["stats"]):
-            # self.logger.info("warcprox_meta['stats']['limits']=%s", warcprox_meta['stats']['limits'])
-            for item in warcprox_meta["stats"]["limits"].items():
+        if (warcprox_meta and "limits" in warcprox_meta):
+            # self.logger.info("warcprox_meta['limits']=%s", warcprox_meta['limits'])
+            for item in warcprox_meta["limits"].items():
                 key, limit = item
                 bucket0, bucket1, bucket2 = key.rsplit(".", 2)
                 value = self.server.stats_db.value(bucket0, bucket1, bucket2)

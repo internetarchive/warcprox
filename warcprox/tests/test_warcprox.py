@@ -395,7 +395,7 @@ def test_dedup_https(https_daemon, warcprox_, archiving_proxies, playback_proxie
 
 def test_limits(http_daemon, archiving_proxies):
     url = 'http://localhost:{}/a/b'.format(http_daemon.server_port)
-    request_meta = {"stats":{"buckets":["job1"],"limits":{"job1.total.urls":10}}}
+    request_meta = {"stats":{"buckets":["job1"]},"limits":{"job1.total.urls":10}}
     headers = {"Warcprox-Meta": json.dumps(request_meta)}
 
     for i in range(10):
