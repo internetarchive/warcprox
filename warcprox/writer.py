@@ -9,6 +9,8 @@ import time
 import warcprox
 import os
 import socket
+import string
+import random
 
 class WarcWriter:
     logger = logging.getLogger("warcprox.writer.WarcWriter")
@@ -35,6 +37,8 @@ class WarcWriter:
         self._f_finalname = None
         self._serial = 0
 
+        self._randomtoken = "".join(random.Random().sample(string.digits + string.ascii_lowercase, 8))
+
         if not os.path.exists(directory):
             self.logger.info("warc destination directory {} doesn't exist, creating it".format(directory))
             os.mkdir(directory)
@@ -53,15 +57,15 @@ class WarcWriter:
             self._fpath = None
             self._f = None
 
-    # <!-- <property name="template" value="${prefix}-${timestamp17}-${serialno}-${heritrix.pid}~${heritrix.hostname}~${heritrix.port}" /> -->
+    # h3 default <!-- <property name="template" value="${prefix}-${timestamp17}-${serialno}-${heritrix.pid}~${heritrix.hostname}~${heritrix.port}" /> -->
+    # ${prefix}-${timestamp17}-${randomtoken}-${serialno}.warc.gz"
     def _writer(self):
         if self._fpath and os.path.getsize(self._fpath) > self.rollover_size:
             self.close_writer()
 
         if self._f == None:
-            self._f_finalname = '{}-{}-{:05d}-{}-{}-{}.warc{}'.format(
-                    self.prefix, self.timestamp17(), self._serial, os.getpid(),
-                    socket.gethostname(), self.port, '.gz' if self.gzip else '')
+            self._f_finalname = '{}-{}-{:05d}-{}.warc{}'.format(
+                    self.prefix, self.timestamp17(), self._serial, self._randomtoken, '.gz' if self.gzip else '')
             self._fpath = os.path.sep.join([self.directory, self._f_finalname + '.open'])
 
             self._f = open(self._fpath, 'wb')
