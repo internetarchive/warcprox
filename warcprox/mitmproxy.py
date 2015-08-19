@@ -136,9 +136,6 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             self.logger.error("exception from {}".format(self._proxy_request), exc_info=True)
             raise
 
-    def _special_request(self, method, type_):
-        raise Exception('Not supported')
-
     def _proxy_request(self):
         raise Exception('_proxy_request() not implemented in MitmProxyHandler, must be implemented in subclass!')
 

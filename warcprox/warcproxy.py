@@ -213,6 +213,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         if 'Content-Length' in self.headers:
             req += self.rfile.read(int(self.headers['Content-Length']))
 
+        prox_rec_res = None
         try:
             self.logger.debug('sending to remote server req=%s', repr(req))
 
@@ -256,7 +257,8 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
             self.logger.error("%s proxying %s", repr(e), self.url, exc_info=True)
         finally:
             # Let's close off the remote end
-            prox_rec_res.close()
+            if prox_rec_res:
+                prox_rec_res.close()
             self._proxy_sock.close()
 
             # XXX Close connection to proxy client. Doing this because we were
