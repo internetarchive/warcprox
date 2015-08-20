@@ -59,7 +59,7 @@ class _TestHttpRequestHandler(http_server.BaseHTTPRequestHandler):
         self.connection.sendall(headers)
         self.connection.sendall(payload)
 
-@pytest.fixture()
+@pytest.fixture(scope="module")
 def cert(request):
     f = tempfile.NamedTemporaryFile(prefix='warcprox-test-https-', suffix='.pem', delete=False)
 
@@ -92,7 +92,7 @@ def cert(request):
     finally:
         f.close()
 
-@pytest.fixture()
+@pytest.fixture(scope="module")
 def http_daemon(request):
     http_daemon = http_server.HTTPServer(('localhost', 0),
             RequestHandlerClass=_TestHttpRequestHandler)
@@ -110,7 +110,7 @@ def http_daemon(request):
 
     return http_daemon
 
-@pytest.fixture()
+@pytest.fixture(scope="module")
 def https_daemon(request, cert):
     # http://www.piware.de/2011/01/creating-an-https-server-in-python/
     https_daemon = http_server.HTTPServer(('localhost', 0),
@@ -131,7 +131,7 @@ def https_daemon(request, cert):
 
     return https_daemon
 
-@pytest.fixture()
+@pytest.fixture(scope="module")
 def dedup_db(request, rethinkdb_servers):
     if rethinkdb_servers:
         servers = rethinkdb_servers.split(",")
@@ -156,7 +156,7 @@ def dedup_db(request, rethinkdb_servers):
 
     return ddb
 
-@pytest.fixture()
+@pytest.fixture(scope="module")
 def warcprox_(request, dedup_db):
     f = tempfile.NamedTemporaryFile(prefix='warcprox-test-ca-', suffix='.pem', delete=True)
     f.close() # delete it, or CertificateAuthority will try to read it
@@ -212,12 +212,12 @@ def warcprox_(request, dedup_db):
 
     return warcprox_
 
-@pytest.fixture()
+@pytest.fixture(scope="module")
 def archiving_proxies(warcprox_):
     archiving_proxy = 'http://localhost:{}'.format(warcprox_.proxy.server_port)
     return {'http':archiving_proxy, 'https':archiving_proxy}
 
-@pytest.fixture()
+@pytest.fixture(scope="module")
 def playback_proxies(warcprox_):
     playback_proxy = 'http://localhost:{}'.format(warcprox_.playback_proxy.server_port)
     return {'http':playback_proxy, 'https':playback_proxy}
@@ -417,15 +417,15 @@ def test_dedup_https(https_daemon, warcprox_, archiving_proxies, playback_proxie
     # XXX how to check dedup was used?
 
 def test_limits(http_daemon, archiving_proxies):
-    url = 'http://localhost:{}/a/b'.format(http_daemon.server_port)
+    url = 'http://localhost:{}/i/j'.format(http_daemon.server_port)
     request_meta = {"stats":{"buckets":["job1"]},"limits":{"job1.total.urls":10}}
     headers = {"Warcprox-Meta": json.dumps(request_meta)}
 
     for i in range(10):
         response = requests.get(url, proxies=archiving_proxies, headers=headers, stream=True)
         assert response.status_code == 200
-        assert response.headers['warcprox-test-header'] == 'a!'
-        assert response.content == b'I am the warcprox test payload! bbbbbbbbbb!\n'
+        assert response.headers['warcprox-test-header'] == 'i!'
+        assert response.content == b'I am the warcprox test payload! jjjjjjjjjj!\n'
 
     # XXX give warc writer thread a chance to update stats
     time.sleep(2.0)
