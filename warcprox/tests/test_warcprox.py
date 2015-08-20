@@ -15,6 +15,9 @@ import shutil
 import requests
 import re
 import json
+import rethinkdb
+r = rethinkdb
+import random
 
 try:
     import http.server as http_server
@@ -129,7 +132,32 @@ def https_daemon(request, cert):
     return https_daemon
 
 @pytest.fixture()
-def warcprox_(request):
+def dedup_db(request, rethinkdb_servers):
+    if rethinkdb_servers:
+        servers = rethinkdb_servers.split(",")
+        db = 'warcprox_test_' + "".join(random.sample("abcdefghijklmnopqrstuvwxyz0123456789_",8))
+        ddb = warcprox.dedup.RethinkDedupDb(servers, db)
+    else:
+        f = tempfile.NamedTemporaryFile(prefix='warcprox-test-dedup-', suffix='.db', delete=False)
+        f.close()
+        dedup_db_file = f.name
+        ddb = warcprox.dedup.DedupDb(dedup_db_file)
+
+    def fin():
+        if rethinkdb_servers:
+            logging.info('dropping rethinkdb database {}'.format(db))
+            with ddb._random_server_connection() as conn:
+                result = r.db_drop(db).run(conn)
+                logging.info("result=%s", result)
+        else:
+            logging.info('deleting file {}'.format(dedup_db_file))
+            os.unlink(dedup_db_file)
+    request.addfinalizer(fin)
+
+    return ddb
+
+@pytest.fixture()
+def warcprox_(request, dedup_db):
     f = tempfile.NamedTemporaryFile(prefix='warcprox-test-ca-', suffix='.pem', delete=True)
     f.close() # delete it, or CertificateAuthority will try to read it
     ca_file = f.name
@@ -155,11 +183,6 @@ def warcprox_(request):
     playback_proxy = warcprox.playback.PlaybackProxy(server_address=('localhost', 0), ca=ca,
             playback_index_db=playback_index_db, warcs_dir=warcs_dir)
 
-    f = tempfile.NamedTemporaryFile(prefix='warcprox-test-dedup-', suffix='.db', delete=False)
-    f.close()
-    dedup_db_file = f.name
-    dedup_db = warcprox.dedup.DedupDb(dedup_db_file)
-
     default_warc_writer = warcprox.writer.WarcWriter(directory=warcs_dir,
             port=proxy.server_port)
     writer_pool = warcprox.writer.WarcWriterPool(default_warc_writer)
@@ -178,7 +201,7 @@ def warcprox_(request):
         logging.info('stopping warcprox')
         warcprox_.stop.set()
         warcprox_thread.join()
-        for f in (ca_file, ca_dir, warcs_dir, playback_index_db_file, dedup_db_file, stats_db_file):
+        for f in (ca_file, ca_dir, warcs_dir, playback_index_db_file, stats_db_file):
             if os.path.isdir(f):
                 logging.info('deleting directory {}'.format(f))
                 shutil.rmtree(f)
@@ -297,13 +320,13 @@ def test_dedup_http(http_daemon, warcprox_, archiving_proxies, playback_proxies)
     assert response.content == b'I am the warcprox test payload! ffffffffff!\n'
 
     # check in dedup db
-    # {u'i': u'<urn:uuid:e691dc0f-4bb9-4ad8-9afb-2af836aa05e4>', u'u': u'https://localhost:62841/c/d', u'd': u'2013-11-22T00:14:37Z'}
+    # {u'id': u'<urn:uuid:e691dc0f-4bb9-4ad8-9afb-2af836aa05e4>', u'url': u'https://localhost:62841/c/d', u'date': u'2013-11-22T00:14:37Z'}
     dedup_lookup = warcprox_.warc_writer_thread.dedup_db.lookup(b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
-    assert dedup_lookup['u'] == url.encode('ascii')
-    assert re.match(br'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$', dedup_lookup['i'])
-    assert re.match(br'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$', dedup_lookup['d'])
-    record_id = dedup_lookup['i']
-    dedup_date = dedup_lookup['d']
+    assert dedup_lookup['url'] == url.encode('ascii')
+    assert re.match(br'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$', dedup_lookup['id'])
+    assert re.match(br'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$', dedup_lookup['date'])
+    record_id = dedup_lookup['id']
+    dedup_date = dedup_lookup['date']
 
     # need revisit to have a later timestamp than original, else playing
     # back the latest record might not hit the revisit
@@ -320,9 +343,9 @@ def test_dedup_http(http_daemon, warcprox_, archiving_proxies, playback_proxies)
 
     # check in dedup db (no change from prev)
     dedup_lookup = warcprox_.warc_writer_thread.dedup_db.lookup(b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
-    assert dedup_lookup['u'] == url.encode('ascii')
-    assert dedup_lookup['i'] == record_id
-    assert dedup_lookup['d'] == dedup_date
+    assert dedup_lookup['url'] == url.encode('ascii')
+    assert dedup_lookup['id'] == record_id
+    assert dedup_lookup['date'] == dedup_date
 
     # test playback
     logging.debug('testing playback of revisit of {}'.format(url))
@@ -358,13 +381,13 @@ def test_dedup_https(https_daemon, warcprox_, archiving_proxies, playback_proxie
     assert response.content == b'I am the warcprox test payload! hhhhhhhhhh!\n'
 
     # check in dedup db
-    # {u'i': u'<urn:uuid:e691dc0f-4bb9-4ad8-9afb-2af836aa05e4>', u'u': u'https://localhost:62841/c/d', u'd': u'2013-11-22T00:14:37Z'}
+    # {u'id': u'<urn:uuid:e691dc0f-4bb9-4ad8-9afb-2af836aa05e4>', u'url': u'https://localhost:62841/c/d', u'date': u'2013-11-22T00:14:37Z'}
     dedup_lookup = warcprox_.warc_writer_thread.dedup_db.lookup(b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
-    assert dedup_lookup['u'] == url.encode('ascii')
-    assert re.match(br'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$', dedup_lookup['i'])
-    assert re.match(br'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$', dedup_lookup['d'])
-    record_id = dedup_lookup['i']
-    dedup_date = dedup_lookup['d']
+    assert dedup_lookup['url'] == url.encode('ascii')
+    assert re.match(br'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$', dedup_lookup['id'])
+    assert re.match(br'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$', dedup_lookup['date'])
+    record_id = dedup_lookup['id']
+    dedup_date = dedup_lookup['date']
 
     # need revisit to have a later timestamp than original, else playing
     # back the latest record might not hit the revisit
@@ -381,9 +404,9 @@ def test_dedup_https(https_daemon, warcprox_, archiving_proxies, playback_proxie
 
     # check in dedup db (no change from prev)
     dedup_lookup = warcprox_.warc_writer_thread.dedup_db.lookup(b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
-    assert dedup_lookup['u'] == url.encode('ascii')
-    assert dedup_lookup['i'] == record_id
-    assert dedup_lookup['d'] == dedup_date
+    assert dedup_lookup['url'] == url.encode('ascii')
+    assert dedup_lookup['id'] == record_id
+    assert dedup_lookup['date'] == dedup_date
 
     # test playback
     logging.debug('testing playback of revisit of {}'.format(url))
