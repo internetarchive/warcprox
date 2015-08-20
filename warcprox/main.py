@@ -20,6 +20,7 @@ import signal
 import threading
 import certauth.certauth
 import warcprox
+import re
 
 def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
     arg_parser = argparse.ArgumentParser(prog=prog,
@@ -55,7 +56,10 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
             default='sha1', help='digest algorithm, one of {}'.format(', '.join(hash_algos)))
     arg_parser.add_argument('--base32', dest='base32', action='store_true',
             default=False, help='write digests in Base32 instead of hex')
-    arg_parser.add_argument('-j', '--dedup-db-file', dest='dedup_db_file',
+    group = arg_parser.add_mutually_exclusive_group()
+    group.add_argument('--dedup-rethinkdb-url', dest='dedup_rethinkdb_url',
+            help='persistent deduplication rethink db url, e.g. rethinkdb://db0.foo.org,db0.foo.org:38015,db1.foo.org/warcprox/dedup')
+    group.add_argument('-j', '--dedup-db-file', dest='dedup_db_file',
             default='./warcprox-dedup.db', help='persistent deduplication database file; empty string or /dev/null disables deduplication')
     arg_parser.add_argument('--stats-db-file', dest='stats_db_file',
             default='./warcprox-stats.db', help='persistent statistics database file; empty string or /dev/null disables statistics tracking')
@@ -108,7 +112,17 @@ def main(argv=sys.argv):
         logging.fatal(e)
         exit(1)
 
-    if args.dedup_db_file in (None, '', '/dev/null'):
+    if args.dedup_rethinkdb_url:
+        m = re.fullmatch(r"rethinkdb://([^/]+)/([^/]+)/([^/]+)", args.dedup_rethinkdb_url)
+        if m:
+            servers = m.group(1).split(",")
+            db = m.group(2)
+            table = m.group(3)
+            dedup_db = warcprox.dedup.RethinkDedupDb(servers, db, table)
+        else:
+            logging.fatal("failed to parse dedup rethinkdb url %s", args.dedup_rethinkdb_url)
+            exit(1)
+    elif args.dedup_db_file in (None, '', '/dev/null'):
         logging.info('deduplication disabled')
         dedup_db = None
     else:

@@ -70,7 +70,7 @@ class WarcWriterThread(threading.Thread):
                 and recorded_url.response_recorder.payload_size() > 0):
             key = warcprox.digest_str(recorded_url.response_recorder.payload_digest, 
                     self.writer_pool.default_warc_writer.record_builder.base32)
-            self.dedup_db.save(key, records[0], records[0].offset)
+            self.dedup_db.save(key, records[0])
 
     def _save_playback_info(self, recorded_url, records):
         if self.playback_index_db is not None:
