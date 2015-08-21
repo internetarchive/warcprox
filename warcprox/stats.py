@@ -174,7 +174,7 @@ class RethinkStatsDb:
                     bucket_stats["new"]["urls"] += 1
                     bucket_stats["new"]["wire_bytes"] += recorded_url.size
 
-                self.logger.info("saving %s", bucket_stats)
+                self.logger.debug("saving %s", bucket_stats)
                 result = r.db(self.db).table(self.table).insert(bucket_stats, conflict="replace").run(conn)
                 if sorted(result.values()) != [0,0,0,0,0,1] or [result["deleted"],result["skipped"],result["errors"]] != [0,0,0]:
                     raise Exception("unexpected result %s saving %s", result, record)
