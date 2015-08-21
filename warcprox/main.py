@@ -56,11 +56,6 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
             default='sha1', help='digest algorithm, one of {}'.format(', '.join(hash_algos)))
     arg_parser.add_argument('--base32', dest='base32', action='store_true',
             default=False, help='write digests in Base32 instead of hex')
-    group = arg_parser.add_mutually_exclusive_group()
-    group.add_argument('--dedup-rethinkdb-url', dest='dedup_rethinkdb_url',
-            help='persistent deduplication rethink db url, e.g. rethinkdb://db0.foo.org,db0.foo.org:38015,db1.foo.org/warcprox/dedup')
-    group.add_argument('-j', '--dedup-db-file', dest='dedup_db_file',
-            default='./warcprox-dedup.db', help='persistent deduplication database file; empty string or /dev/null disables deduplication')
     arg_parser.add_argument('--stats-db-file', dest='stats_db_file',
             default='./warcprox-stats.db', help='persistent statistics database file; empty string or /dev/null disables statistics tracking')
     arg_parser.add_argument('-P', '--playback-port', dest='playback_port',
@@ -68,6 +63,13 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
     arg_parser.add_argument('--playback-index-db-file', dest='playback_index_db_file',
             default='./warcprox-playback-index.db',
             help='playback index database file (only used if --playback-port is specified)')
+    group = arg_parser.add_mutually_exclusive_group()
+    group.add_argument('-j', '--dedup-db-file', dest='dedup_db_file',
+            default='./warcprox-dedup.db', help='persistent deduplication database file; empty string or /dev/null disables deduplication')
+    group.add_argument('--rethinkdb-servers', dest='rethinkdb_servers',
+            help='rethinkdb servers, used for dedup and stats if specified; e.g. db0.foo.org,db0.foo.org:38015,db1.foo.org')
+    arg_parser.add_argument('--rethinkdb-db', dest='rethinkdb_db', default="warcprox",
+            help='rethinkdb database name (ignored unless --rethinkdb-servers is specified)')
     arg_parser.add_argument('--version', action='version',
             version="warcprox {}".format(warcprox.version_str))
     arg_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true')
@@ -112,23 +114,18 @@ def main(argv=sys.argv):
         logging.fatal(e)
         exit(1)
 
-    if args.dedup_rethinkdb_url:
-        m = re.fullmatch(r"rethinkdb://([^/]+)/([^/]+)/([^/]+)", args.dedup_rethinkdb_url)
-        if m:
-            servers = m.group(1).split(",")
-            db = m.group(2)
-            table = m.group(3)
-            dedup_db = warcprox.dedup.RethinkDedupDb(servers, db, table)
-        else:
-            logging.fatal("failed to parse dedup rethinkdb url %s", args.dedup_rethinkdb_url)
-            exit(1)
+    if args.rethinkdb_servers:
+        dedup_db = warcprox.dedup.RethinkDedupDb(args.rethinkdb_servers.split(","), args.rethinkdb_db)
     elif args.dedup_db_file in (None, '', '/dev/null'):
         logging.info('deduplication disabled')
         dedup_db = None
     else:
         dedup_db = warcprox.dedup.DedupDb(args.dedup_db_file)
 
-    if args.stats_db_file in (None, '', '/dev/null'):
+
+    if args.rethinkdb_servers:
+        stats_db = warcprox.stats.RethinkStatsDb(args.rethinkdb_servers.split(","), args.rethinkdb_db)
+    elif args.stats_db_file in (None, '', '/dev/null'):
         logging.info('statistics tracking disabled')
         stats_db = None
     else:

@@ -135,7 +135,7 @@ def https_daemon(request, cert):
 def dedup_db(request, rethinkdb_servers):
     if rethinkdb_servers:
         servers = rethinkdb_servers.split(",")
-        db = 'warcprox_test_' + "".join(random.sample("abcdefghijklmnopqrstuvwxyz0123456789_",8))
+        db = 'warcprox_test_dedup_' + "".join(random.sample("abcdefghijklmnopqrstuvwxyz0123456789_",8))
         ddb = warcprox.dedup.RethinkDedupDb(servers, db)
     else:
         f = tempfile.NamedTemporaryFile(prefix='warcprox-test-dedup-', suffix='.db', delete=False)
@@ -157,7 +157,32 @@ def dedup_db(request, rethinkdb_servers):
     return ddb
 
 @pytest.fixture(scope="module")
-def warcprox_(request, dedup_db):
+def stats_db(request, rethinkdb_servers):
+    if rethinkdb_servers:
+        servers = rethinkdb_servers.split(",")
+        db = 'warcprox_test_stats_' + "".join(random.sample("abcdefghijklmnopqrstuvwxyz0123456789_",8))
+        sdb = warcprox.stats.RethinkStatsDb(servers, db)
+    else:
+        f = tempfile.NamedTemporaryFile(prefix='warcprox-test-stats-', suffix='.db', delete=False)
+        f.close()
+        stats_db_file = f.name
+        sdb = warcprox.stats.StatsDb(stats_db_file)
+
+    def fin():
+        if rethinkdb_servers:
+            logging.info('dropping rethinkdb database {}'.format(db))
+            with sdb._random_server_connection() as conn:
+                result = r.db_drop(db).run(conn)
+                logging.info("result=%s", result)
+        else:
+            logging.info('deleting file {}'.format(stats_db_file))
+            os.unlink(stats_db_file)
+    request.addfinalizer(fin)
+
+    return sdb
+
+@pytest.fixture(scope="module")
+def warcprox_(request, dedup_db, stats_db):
     f = tempfile.NamedTemporaryFile(prefix='warcprox-test-ca-', suffix='.pem', delete=True)
     f.close() # delete it, or CertificateAuthority will try to read it
     ca_file = f.name
@@ -165,11 +190,6 @@ def warcprox_(request, dedup_db):
     ca = certauth.certauth.CertificateAuthority(ca_file, ca_dir, 'warcprox-test')
 
     recorded_url_q = queue.Queue()
-
-    f = tempfile.NamedTemporaryFile(prefix='warcprox-test-stats-', suffix='.db', delete=False)
-    f.close()
-    stats_db_file = f.name
-    stats_db = warcprox.stats.StatsDb(stats_db_file)
 
     proxy = warcprox.warcproxy.WarcProxy(server_address=('localhost', 0), ca=ca,
             recorded_url_q=recorded_url_q, stats_db=stats_db)
@@ -201,7 +221,7 @@ def warcprox_(request, dedup_db):
         logging.info('stopping warcprox')
         warcprox_.stop.set()
         warcprox_thread.join()
-        for f in (ca_file, ca_dir, warcs_dir, playback_index_db_file, stats_db_file):
+        for f in (ca_file, ca_dir, warcs_dir, playback_index_db_file):
             if os.path.isdir(f):
                 logging.info('deleting directory {}'.format(f))
                 shutil.rmtree(f)
@@ -433,7 +453,7 @@ def test_limits(http_daemon, archiving_proxies):
     response = requests.get(url, proxies=archiving_proxies, headers=headers, stream=True)
     assert response.status_code == 420
     assert response.reason == "Reached limit"
-    expected_response_meta = {'reached-limit': {'job1.total.urls': 10}, 'stats': {'job1': {'revisit': {'wire_bytes': 1215, 'urls': 9}, 'total': {'wire_bytes': 1350, 'urls': 10}, 'new': {'wire_bytes': 135, 'urls': 1}}}}
+    expected_response_meta = {'reached-limit': {'job1.total.urls': 10}, 'stats': {'job1': {'bucket': 'job1', 'revisit': {'wire_bytes': 1215, 'urls': 9}, 'total': {'wire_bytes': 1350, 'urls': 10}, 'new': {'wire_bytes': 135, 'urls': 1}}}}
     assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
     assert response.headers["content-type"] == "text/plain;charset=utf-8"
     assert response.raw.data == b"request rejected by warcprox: reached limit job1.total.urls=10\n"
