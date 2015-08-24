@@ -16,9 +16,10 @@ class WarcWriter:
     logger = logging.getLogger("warcprox.writer.WarcWriter")
 
     # port is only used for warc filename
-    def __init__(self, directory='./warcs', rollover_size=1000000000,
-            gzip=False, prefix='WARCPROX', port=0, digest_algorithm='sha1',
-            base32=False, rollover_idle_time=None):
+    def __init__(self, prefix='WARCPROX', directory='./warcs',
+            rollover_size=1000000000, gzip=False, port=0,
+            digest_algorithm='sha1', base32=False, rollover_idle_time=None,
+            options=warcprox.Options()):
 
         self.rollover_size = rollover_size
         self.rollover_idle_time = rollover_idle_time
@@ -114,17 +115,14 @@ class WarcWriter:
 class WarcWriterPool:
     logger = logging.getLogger("warcprox.writer.WarcWriterPool")
 
-    def __init__(self, default_warc_writer=None):
+    def __init__(self, default_warc_writer=None, options=warcprox.Options()):
         if default_warc_writer:
             self.default_warc_writer = default_warc_writer
         else:
-            self.default_warc_writer = WarcWriter()
+            self.default_warc_writer = WarcWriter(options=options)
         self.warc_writers = {}  # {prefix:WarcWriter}
         self._last_sync = time.time()
-
-        self.logger.info('directory={} gzip={} rollover_size={} rollover_idle_time={} prefix={} port={}'.format(
-                os.path.abspath(self.default_warc_writer.directory), self.default_warc_writer.gzip, self.default_warc_writer.rollover_size,
-                self.default_warc_writer.rollover_idle_time, self.default_warc_writer.prefix, self.default_warc_writer.port))
+        self.options = options
 
     # chooses writer for filename specified by warcprox_meta["warc-prefix"] if set
     def _writer(self, recorded_url):
@@ -133,14 +131,7 @@ class WarcWriterPool:
             # self.logger.info("recorded_url.warcprox_meta={} for {}".format(recorded_url.warcprox_meta, recorded_url.url))
             prefix = recorded_url.warcprox_meta["warc-prefix"]
             if not prefix in self.warc_writers:
-                self.warc_writers[prefix] = WarcWriter(prefix=prefix,
-                        directory=self.default_warc_writer.directory,
-                        rollover_size=self.default_warc_writer.rollover_size,
-                        rollover_idle_time=self.default_warc_writer.rollover_idle_time,
-                        gzip=self.default_warc_writer.gzip,
-                        port=self.default_warc_writer.port,
-                        digest_algorithm=self.default_warc_writer.record_builder.digest_algorithm,
-                        base32=self.default_warc_writer.record_builder.base32)
+                self.warc_writers[prefix] = WarcWriter(prefix=prefix, options=self.options)
             w = self.warc_writers[prefix]
         return w
 

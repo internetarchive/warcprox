@@ -17,6 +17,7 @@ from hanzo import warctools
 import rethinkdb
 r = rethinkdb
 import random
+import warcprox
 
 def _empty_bucket(bucket):
     return {
@@ -41,13 +42,14 @@ def _empty_bucket(bucket):
 class StatsDb:
     logger = logging.getLogger("warcprox.stats.StatsDb")
 
-    def __init__(self, dbm_file='./warcprox-stats.db'):
+    def __init__(self, dbm_file='./warcprox-stats.db', options=warcprox.Options()):
         if os.path.exists(dbm_file):
             self.logger.info('opening existing stats database {}'.format(dbm_file))
         else:
             self.logger.info('creating new stats database {}'.format(dbm_file))
 
         self.db = dbm_gnu.open(dbm_file, 'c')
+        self.options = options
 
     def close(self):
         self.db.close()
@@ -70,6 +72,9 @@ class StatsDb:
                 return bucket0_stats
         else:
             return None
+
+    def notify(self, recorded_url, records):
+        self.tally(recorded_url, records)
 
     def tally(self, recorded_url, records):
         buckets = ["__all__"]
@@ -102,13 +107,14 @@ class StatsDb:
 class RethinkStatsDb:
     logger = logging.getLogger("warcprox.stats.RethinkStatsDb")
 
-    def __init__(self, servers=["localhost"], db="warcprox", table="stats", shards=3, replicas=3):
+    def __init__(self, servers=["localhost"], db="warcprox", table="stats", shards=3, replicas=3, options=warcprox.Options()):
         self.servers = servers
         self.db = db
         self.table = table
         self.shards = shards
         self.replicas = replicas
         self._ensure_db_table()
+        self.options = options
 
     # https://github.com/rethinkdb/rethinkdb-example-webpy-blog/blob/master/model.py
     # "Best practices: Managing connections: a connection per request"
@@ -178,4 +184,7 @@ class RethinkStatsDb:
                 result = r.db(self.db).table(self.table).insert(bucket_stats, conflict="replace").run(conn)
                 if sorted(result.values()) != [0,0,0,0,0,1] or [result["deleted"],result["skipped"],result["errors"]] != [0,0,0]:
                     raise Exception("unexpected result %s saving %s", result, record)
+
+    def notify(self, recorded_url, records):
+        self.tally(recorded_url, records)
 

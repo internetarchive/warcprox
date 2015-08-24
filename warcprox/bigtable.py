@@ -45,3 +45,20 @@ class RethinkCaptures:
                 # r.db(self.db).table(self.table).index_create("timestamp").run(conn)
                 # r.db(self.db).table(self.table).index_create("sha1base32").run(conn)
 
+    def notify(self, recorded_url, records):
+        canon_surt = surt.surt(recorded_url.url, trailing_comma=True, host_massage=False)
+        entry = {
+            # id only specified for rethinkdb partitioning
+            "id": "{} {}".format(canon_surt[:20], record.id.decode("utf-8")[10:-1]),
+            "abbr_canon_surt": canon_surt[:150],
+            "timestamp": re.sub(r"[^0-9]", "", record.date.decode("utf-8")),
+            "url": record.url.decode("utf-8"),
+            "offset": offset,
+            "filename": os.path.basename(warc_file),
+            "warc_type": record.type.decode("utf-8"),
+            "warc_id": record.id.decode("utf-8"),
+            "sha1base32": record.get_header(b'WARC-Payload-Digest').decode("utf-8")[5:],
+            # mimetype
+            # response_code
+            # http_method
+        }

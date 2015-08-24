@@ -22,13 +22,14 @@ import random
 class DedupDb(object):
     logger = logging.getLogger("warcprox.dedup.DedupDb")
 
-    def __init__(self, dbm_file='./warcprox-dedup.db'):
+    def __init__(self, dbm_file='./warcprox-dedup.db', options=warcprox.Options()):
         if os.path.exists(dbm_file):
             self.logger.info('opening existing deduplication database {}'.format(dbm_file))
         else:
             self.logger.info('creating new deduplication database {}'.format(dbm_file))
 
         self.db = dbm_gnu.open(dbm_file, 'c')
+        self.options = options
 
     def close(self):
         self.db.close()
@@ -61,6 +62,15 @@ class DedupDb(object):
         self.logger.debug('dedup db lookup of key=%s returning %s', key, result)
         return result
 
+    def notify(self, recorded_url, records):
+        if (records[0].get_header(warctools.WarcRecord.TYPE) == warctools.WarcRecord.RESPONSE
+                and recorded_url.response_recorder.payload_size() > 0):
+            key = warcprox.digest_str(recorded_url.response_recorder.payload_digest, 
+                    self.options.base32)
+            self.save(key, records[0])
+
+
+
 def decorate_with_dedup_info(dedup_db, recorded_url, base32=False):
     if recorded_url.response_recorder and recorded_url.response_recorder.payload_digest:
         key = warcprox.digest_str(recorded_url.response_recorder.payload_digest, base32)
@@ -69,13 +79,14 @@ def decorate_with_dedup_info(dedup_db, recorded_url, base32=False):
 class RethinkDedupDb:
     logger = logging.getLogger("warcprox.dedup.RethinkDedupDb")
 
-    def __init__(self, servers=["localhost"], db="warcprox", table="dedup", shards=3, replicas=3):
+    def __init__(self, servers=["localhost"], db="warcprox", table="dedup", shards=3, replicas=3, options=warcprox.Options()):
         self.servers = servers
         self.db = db
         self.table = table
         self.shards = shards
         self.replicas = replicas
         self._ensure_db_table()
+        self.options = options
 
     # https://github.com/rethinkdb/rethinkdb-example-webpy-blog/blob/master/model.py
     # "Best practices: Managing connections: a connection per request"
@@ -125,3 +136,10 @@ class RethinkDedupDb:
                     result[x] = result[x].encode("utf-8")
             self.logger.debug('dedup db lookup of key=%s returning %s', key, result)
             return result
+
+    def notify(self, recorded_url, records):
+        if (records[0].get_header(warctools.WarcRecord.TYPE) == warctools.WarcRecord.RESPONSE
+                and recorded_url.response_recorder.payload_size() > 0):
+            key = warcprox.digest_str(recorded_url.response_recorder.payload_digest, 
+                    self.options.base32)
+            self.save(key, records[0])

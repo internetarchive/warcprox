@@ -208,8 +208,7 @@ def warcprox_(request, dedup_db, stats_db):
     writer_pool = warcprox.writer.WarcWriterPool(default_warc_writer)
     warc_writer_thread = warcprox.writerthread.WarcWriterThread(
             recorded_url_q=recorded_url_q, writer_pool=writer_pool,
-            dedup_db=dedup_db, playback_index_db=playback_index_db,
-            stats_db=stats_db)
+            dedup_db=dedup_db, listeners=[dedup_db, playback_index_db, stats_db])
 
     warcprox_ = warcprox.controller.WarcproxController(proxy, warc_writer_thread, playback_proxy)
     logging.info('starting warcprox')

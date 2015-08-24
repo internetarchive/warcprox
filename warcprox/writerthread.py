@@ -22,7 +22,7 @@ import warcprox
 class WarcWriterThread(threading.Thread):
     logger = logging.getLogger("warcprox.warcproxwriter.WarcWriterThread")
 
-    def __init__(self, recorded_url_q=None, writer_pool=None, dedup_db=None, playback_index_db=None, stats_db=None):
+    def __init__(self, recorded_url_q=None, writer_pool=None, dedup_db=None, listeners=None, options=warcprox.Options()):
         """recorded_url_q is a queue.Queue of warcprox.warcprox.RecordedUrl."""
         threading.Thread.__init__(self, name='WarcWriterThread')
         self.recorded_url_q = recorded_url_q
@@ -32,9 +32,8 @@ class WarcWriterThread(threading.Thread):
         else:
             self.writer_pool = WarcWriterPool()
         self.dedup_db = dedup_db
-        self.playback_index_db = playback_index_db
-        self.stats_db = stats_db
-        self._last_sync = time.time()
+        self.listeners = listeners
+        self.options = options
 
     def run(self):
         try:
@@ -42,39 +41,17 @@ class WarcWriterThread(threading.Thread):
                 try:
                     recorded_url = self.recorded_url_q.get(block=True, timeout=0.5)
                     if self.dedup_db:
-                        warcprox.dedup.decorate_with_dedup_info(self.dedup_db, recorded_url, 
-                                base32=self.writer_pool.default_warc_writer.record_builder.base32)
+                        warcprox.dedup.decorate_with_dedup_info(self.dedup_db,
+                                recorded_url, base32=self.options.base32)
                     records = self.writer_pool.write_records(recorded_url)
                     self._final_tasks(recorded_url, records)
                 except queue.Empty:
                     self.writer_pool.maybe_idle_rollover()
-                    self._sync()
 
             self.logger.info('WarcWriterThread shutting down')
             self.writer_pool.close_writers()
         except:
             self.logger.critical("WarcWriterThread shutting down after unexpected error", exc_info=True)
-
-    def _sync(self):
-        # XXX prob doesn't belong here (do we need it at all?)
-        if time.time() - self._last_sync > 60:
-            if self.dedup_db:
-                self.dedup_db.sync()
-            if self.playback_index_db:
-                self.playback_index_db.sync()
-            self._last_sync = time.time()
-
-    def _save_dedup_info(self, recorded_url, records):
-        if (self.dedup_db 
-                and records[0].get_header(warctools.WarcRecord.TYPE) == warctools.WarcRecord.RESPONSE
-                and recorded_url.response_recorder.payload_size() > 0):
-            key = warcprox.digest_str(recorded_url.response_recorder.payload_digest, 
-                    self.writer_pool.default_warc_writer.record_builder.base32)
-            self.dedup_db.save(key, records[0])
-
-    def _save_playback_info(self, recorded_url, records):
-        if self.playback_index_db is not None:
-            self.playback_index_db.save(records[0].warc_filename, records, records[0].offset)
 
     # closest thing we have to heritrix crawl log at the moment
     def _log(self, recorded_url, records):
@@ -107,12 +84,8 @@ class WarcWriterThread(threading.Thread):
             _decode(records[0].warc_filename), 
             records[0].offset))
 
-    def _update_stats(self, recorded_url, records):
-        if self.stats_db:
-            self.stats_db.tally(recorded_url, records)
-
     def _final_tasks(self, recorded_url, records):
-        self._save_dedup_info(recorded_url, records)
-        self._save_playback_info(recorded_url, records)
-        self._update_stats(recorded_url, records)
+        if self.listeners:
+            for listener in self.listeners:
+                listener.notify(recorded_url, records)
         self._log(recorded_url, records)

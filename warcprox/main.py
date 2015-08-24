@@ -27,7 +27,7 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
             description='warcprox - WARC writing MITM HTTP/S proxy',
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     arg_parser.add_argument('-p', '--port', dest='port', default='8000',
-            help='port to listen on')
+            type=int, help='port to listen on')
     arg_parser.add_argument('-b', '--address', dest='address',
             default='localhost', help='address to listen on')
     arg_parser.add_argument('-c', '--cacert', dest='cacert',
@@ -59,7 +59,7 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
     arg_parser.add_argument('--stats-db-file', dest='stats_db_file',
             default='./warcprox-stats.db', help='persistent statistics database file; empty string or /dev/null disables statistics tracking')
     arg_parser.add_argument('-P', '--playback-port', dest='playback_port',
-            default=None, help='port to listen on for instant playback')
+            type=int, default=None, help='port to listen on for instant playback')
     arg_parser.add_argument('--playback-index-db-file', dest='playback_index_db_file',
             default='./warcprox-playback-index.db',
             help='playback index database file (only used if --playback-port is specified)')
@@ -70,6 +70,9 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
             help='rethinkdb servers, used for dedup and stats if specified; e.g. db0.foo.org,db0.foo.org:38015,db1.foo.org')
     arg_parser.add_argument('--rethinkdb-db', dest='rethinkdb_db', default="warcprox",
             help='rethinkdb database name (ignored unless --rethinkdb-servers is specified)')
+    arg_parser.add_argument('--rethinkdb-big-table',
+            dest='rethinkdb_big_table', action='store_true', default=False,
+            help='use a big rethinkdb table called "captures", instead of a small table called "dedup"; table is suitable for use as index for playback (ignored unless --rethinkdb-servers is specified)')
     arg_parser.add_argument('--version', action='version',
             version="warcprox {}".format(warcprox.version_str))
     arg_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true')
@@ -97,6 +100,7 @@ def dump_state(signum=None, frame=None):
 def main(argv=sys.argv):
     arg_parser = _build_arg_parser(prog=os.path.basename(argv[0]))
     args = arg_parser.parse_args(args=argv[1:])
+    options = warcprox.Options(**vars(args))
 
     if args.verbose:
         loglevel = logging.DEBUG
@@ -114,22 +118,31 @@ def main(argv=sys.argv):
         logging.fatal(e)
         exit(1)
 
+    listeners = []
     if args.rethinkdb_servers:
-        dedup_db = warcprox.dedup.RethinkDedupDb(args.rethinkdb_servers.split(","), args.rethinkdb_db)
+        if args.rethinkdb_big_table:
+            captures_db = warcprox.bigtable.RethinkCaptures(args.rethinkdb_servers.split(","), args.rethinkdb_db, options=options)
+            dedup_db = warcprox.bigtable.RethinkCapturesDedup(bigtable, options=options)
+            listeners.append(captures_db)
+        else:
+            dedup_db = warcprox.dedup.RethinkDedupDb(args.rethinkdb_servers.split(","), args.rethinkdb_db, options=options)
+            listeners.append(dedup_db)
     elif args.dedup_db_file in (None, '', '/dev/null'):
         logging.info('deduplication disabled')
         dedup_db = None
     else:
-        dedup_db = warcprox.dedup.DedupDb(args.dedup_db_file)
-
+        dedup_db = warcprox.dedup.DedupDb(args.dedup_db_file, options=options)
+        listeners.append(dedup_db)
 
     if args.rethinkdb_servers:
-        stats_db = warcprox.stats.RethinkStatsDb(args.rethinkdb_servers.split(","), args.rethinkdb_db)
+        stats_db = warcprox.stats.RethinkStatsDb(args.rethinkdb_servers.split(","), args.rethinkdb_db, options=options)
+        listeners.append(stats_db)
     elif args.stats_db_file in (None, '', '/dev/null'):
         logging.info('statistics tracking disabled')
         stats_db = None
     else:
-        stats_db = warcprox.stats.StatsDb(args.stats_db_file)
+        stats_db = warcprox.stats.StatsDb(args.stats_db_file, options=options)
+        listeners.append(stats_db)
 
     recorded_url_q = queue.Queue()
 
@@ -138,33 +151,29 @@ def main(argv=sys.argv):
                                                 ca_name=ca_name)
 
     proxy = warcprox.warcproxy.WarcProxy(
-            server_address=(args.address, int(args.port)), ca=ca,
+            server_address=(args.address, args.port), ca=ca,
             recorded_url_q=recorded_url_q,
             digest_algorithm=args.digest_algorithm,
-            stats_db=stats_db)
+            stats_db=stats_db, options=options)
 
     if args.playback_port is not None:
-        playback_index_db = warcprox.playback.PlaybackIndexDb(args.playback_index_db_file)
-        playback_server_address=(args.address, int(args.playback_port))
-        playback_proxy = warcprox.playback.PlaybackProxy(server_address=playback_server_address,
-                ca=ca, playback_index_db=playback_index_db,
-                warcs_dir=args.directory)
+        playback_index_db = warcprox.playback.PlaybackIndexDb(args.playback_index_db_file, options=options)
+        playback_proxy = warcprox.playback.PlaybackProxy(
+                server_address=(args.address, args.playback_port), ca=ca,
+                playback_index_db=playback_index_db, warcs_dir=args.directory,
+                options=options)
+        listeners.append(playback_index_db)
     else:
         playback_index_db = None
         playback_proxy = None
 
-    default_warc_writer = warcprox.writer.WarcWriter(directory=args.directory,
-            gzip=args.gzip, prefix=args.prefix, port=int(args.port),
-            rollover_size=int(args.size), base32=args.base32,
-            digest_algorithm=args.digest_algorithm,
-            rollover_idle_time=int(args.rollover_idle_time) if args.rollover_idle_time is not None else None)
-    writer_pool=warcprox.writer.WarcWriterPool(default_warc_writer)
+    default_warc_writer = warcprox.writer.WarcWriter(args.prefix, options=options)
+    writer_pool = warcprox.writer.WarcWriterPool(default_warc_writer, options=options)
     warc_writer_thread = warcprox.writerthread.WarcWriterThread(
             recorded_url_q=recorded_url_q, writer_pool=writer_pool,
-            dedup_db=dedup_db, playback_index_db=playback_index_db,
-            stats_db=stats_db)
+            dedup_db=dedup_db, listeners=listeners, options=options)
 
-    controller = warcprox.controller.WarcproxController(proxy, warc_writer_thread, playback_proxy)
+    controller = warcprox.controller.WarcproxController(proxy, warc_writer_thread, playback_proxy, options=options)
 
     signal.signal(signal.SIGTERM, lambda a,b: controller.stop.set())
     signal.signal(signal.SIGINT, lambda a,b: controller.stop.set())

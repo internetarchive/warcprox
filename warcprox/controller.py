@@ -10,7 +10,7 @@ import warcprox
 class WarcproxController(object):
     logger = logging.getLogger("warcprox.controller.WarcproxController")
 
-    def __init__(self, proxy=None, warc_writer_thread=None, playback_proxy=None):
+    def __init__(self, proxy=None, warc_writer_thread=None, playback_proxy=None, options=warcprox.Options()):
         """
         Create warcprox controller.
 
@@ -32,6 +32,7 @@ class WarcproxController(object):
             self.warc_writer_thread = warcprox.warcwriter.WarcWriterThread(recorded_url_q=self.proxy.recorded_url_q)
 
         self.playback_proxy = playback_proxy
+        self.options = options
 
     def run_until_shutdown(self):
         """

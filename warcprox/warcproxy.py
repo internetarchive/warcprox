@@ -39,7 +39,7 @@ import socket
 from hanzo import warctools
 
 from certauth.certauth import CertificateAuthority
-import warcprox.mitmproxy
+import warcprox
 
 class ProxyingRecorder(object):
     """
@@ -349,7 +349,7 @@ class SingleThreadedWarcProxy(http_server.HTTPServer):
     def __init__(self, server_address=('localhost', 8000),
             req_handler_class=WarcProxyHandler, bind_and_activate=True,
             ca=None, recorded_url_q=None, digest_algorithm='sha1',
-            stats_db=None):
+            stats_db=None, options=warcprox.Options()):
         http_server.HTTPServer.__init__(self, server_address, req_handler_class, bind_and_activate)
 
         self.digest_algorithm = digest_algorithm
@@ -368,6 +368,8 @@ class SingleThreadedWarcProxy(http_server.HTTPServer):
             self.recorded_url_q = queue.Queue()
 
         self.stats_db = stats_db
+
+        self.options = options
 
     def server_activate(self):
         http_server.HTTPServer.server_activate(self)

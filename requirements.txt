@@ -1,0 +1,4 @@
+certauth>=1.1.0
+rethinkdb
+git+https://github.com/internetarchive/warctools.git
+git+https://github.com/nlevitt/surt.git@py3
