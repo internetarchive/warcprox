@@ -131,25 +131,62 @@ def https_daemon(request, cert):
 
     return https_daemon
 
+# @pytest.fixture(scope="module")
+# def options(request):
+#     return warcprox.Options(base32=True)
+
 @pytest.fixture(scope="module")
-def dedup_db(request, rethinkdb_servers):
+def captures_db(request, rethinkdb_servers, rethinkdb_big_table):
+    captures_db = None
     if rethinkdb_servers:
         servers = rethinkdb_servers.split(",")
-        db = 'warcprox_test_dedup_' + "".join(random.sample("abcdefghijklmnopqrstuvwxyz0123456789_",8))
-        ddb = warcprox.dedup.RethinkDedupDb(servers, db)
-    else:
+        if rethinkdb_big_table:
+            db = 'warcprox_test_captures_' + "".join(random.sample("abcdefghijklmnopqrstuvwxyz0123456789_",8))
+            captures_db = warcprox.bigtable.RethinkCaptures(servers, db)
+
+    def fin():
+        if captures_db:
+            logging.info('dropping rethinkdb database {}'.format(db))
+            with captures_db._random_server_connection() as conn:
+                result = r.db_drop(db).run(conn)
+                logging.info("result=%s", result)
+    request.addfinalizer(fin)
+
+    return captures_db
+
+@pytest.fixture(scope="module")
+def rethink_dedup_db(request, rethinkdb_servers, captures_db):
+    ddb = None
+    if rethinkdb_servers:
+        if captures_db:
+            ddb = warcprox.bigtable.RethinkCapturesDedup(captures_db)
+        else:
+            servers = rethinkdb_servers.split(",")
+            db = 'warcprox_test_dedup_' + "".join(random.sample("abcdefghijklmnopqrstuvwxyz0123456789_",8))
+            ddb = warcprox.dedup.RethinkDedupDb(servers, db)
+
+    def fin():
+        if not captures_db:
+            logging.info('dropping rethinkdb database {}'.format(db))
+            with ddb._random_server_connection() as conn:
+                result = r.db_drop(db).run(conn)
+                logging.info("result=%s", result)
+    request.addfinalizer(fin)
+
+    return ddb
+
+@pytest.fixture(scope="module")
+def dedup_db(request, rethink_dedup_db):
+    dedup_db_file = None
+    ddb = rethink_dedup_db
+    if not ddb:
         f = tempfile.NamedTemporaryFile(prefix='warcprox-test-dedup-', suffix='.db', delete=False)
         f.close()
         dedup_db_file = f.name
         ddb = warcprox.dedup.DedupDb(dedup_db_file)
 
     def fin():
-        if rethinkdb_servers:
-            logging.info('dropping rethinkdb database {}'.format(db))
-            with ddb._random_server_connection() as conn:
-                result = r.db_drop(db).run(conn)
-                logging.info("result=%s", result)
-        else:
+        if dedup_db_file:
             logging.info('deleting file {}'.format(dedup_db_file))
             os.unlink(dedup_db_file)
     request.addfinalizer(fin)
@@ -182,7 +219,7 @@ def stats_db(request, rethinkdb_servers):
     return sdb
 
 @pytest.fixture(scope="module")
-def warcprox_(request, dedup_db, stats_db):
+def warcprox_(request, captures_db, dedup_db, stats_db):
     f = tempfile.NamedTemporaryFile(prefix='warcprox-test-ca-', suffix='.pem', delete=True)
     f.close() # delete it, or CertificateAuthority will try to read it
     ca_file = f.name
@@ -208,7 +245,7 @@ def warcprox_(request, dedup_db, stats_db):
     writer_pool = warcprox.writer.WarcWriterPool(default_warc_writer)
     warc_writer_thread = warcprox.writerthread.WarcWriterThread(
             recorded_url_q=recorded_url_q, writer_pool=writer_pool,
-            dedup_db=dedup_db, listeners=[dedup_db, playback_index_db, stats_db])
+            dedup_db=dedup_db, listeners=[captures_db or dedup_db, playback_index_db, stats_db])
 
     warcprox_ = warcprox.controller.WarcproxController(proxy, warc_writer_thread, playback_proxy)
     logging.info('starting warcprox')

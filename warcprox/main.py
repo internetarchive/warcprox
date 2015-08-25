@@ -122,7 +122,7 @@ def main(argv=sys.argv):
     if args.rethinkdb_servers:
         if args.rethinkdb_big_table:
             captures_db = warcprox.bigtable.RethinkCaptures(args.rethinkdb_servers.split(","), args.rethinkdb_db, options=options)
-            dedup_db = warcprox.bigtable.RethinkCapturesDedup(bigtable, options=options)
+            dedup_db = warcprox.bigtable.RethinkCapturesDedup(captures_db, options=options)
             listeners.append(captures_db)
         else:
             dedup_db = warcprox.dedup.RethinkDedupDb(args.rethinkdb_servers.split(","), args.rethinkdb_db, options=options)

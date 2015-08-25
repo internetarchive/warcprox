@@ -70,7 +70,6 @@ class DedupDb(object):
             self.save(key, records[0])
 
 
-
 def decorate_with_dedup_info(dedup_db, recorded_url, base32=False):
     if recorded_url.response_recorder and recorded_url.response_recorder.payload_digest:
         key = warcprox.digest_str(recorded_url.response_recorder.payload_digest, base32)
@@ -123,7 +122,7 @@ class RethinkDedupDb:
         record = {'key':k,'url':url,'date':date,'id':record_id}
         with self._random_server_connection() as conn:
             result = r.db(self.db).table(self.table).insert(record,conflict="replace").run(conn)
-            if sorted(result.values()) != [0,0,0,0,0,1] or [result["deleted"],result["skipped"],result["errors"]] != [0,0,0]:
+            if sorted(result.values()) != [0,0,0,0,0,1] and [result["deleted"],result["skipped"],result["errors"]] != [0,0,0]:
                 raise Exception("unexpected result %s saving %s", result, record)
             self.logger.debug('dedup db saved %s:%s', key, record)
 
