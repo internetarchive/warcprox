@@ -13,22 +13,18 @@ try:
     import http.server as http_server
 except ImportError:
     import BaseHTTPServer as http_server
-
 try:
     import socketserver
 except ImportError:
     import SocketServer as socketserver
-
 try:
     import queue
 except ImportError:
     import Queue as queue
-
 try:
     import http.client as http_client
 except ImportError:
     import httplib as http_client
-
 import logging
 import re
 import tempfile
@@ -37,9 +33,9 @@ import hashlib
 import json
 import socket
 from hanzo import warctools
-
 from certauth.certauth import CertificateAuthority
 import warcprox
+import datetime
 
 class ProxyingRecorder(object):
     """
@@ -208,6 +204,9 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         try:
             self.logger.debug('sending to remote server req=%s', repr(req))
 
+            # warc-date "shall represent the instant that data capture for record creation began"
+            timestamp = datetime.datetime.utcnow()
+
             # Send it down the pipe!
             self._proxy_sock.sendall(req)
 
@@ -238,7 +237,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                     status=prox_rec_res.status, size=prox_rec_res.recorder.len,
                     client_ip=self.client_address[0],
                     content_type=prox_rec_res.getheader("Content-Type"),
-                    method=self.command)
+                    method=self.command, timestamp=timestamp)
             self.server.recorded_url_q.put(recorded_url)
 
             self.log_request(prox_rec_res.status, prox_rec_res.recorder.len)
@@ -264,6 +263,8 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
 
             if ('Content-Length' in self.headers and 'Content-Type' in self.headers
                     and (warc_type or 'WARC-Type' in self.headers)):
+                timestamp = datetime.datetime.utcnow()
+
                 # stream this?
                 request_data = self.rfile.read(int(self.headers['Content-Length']))
 
@@ -281,7 +282,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                                          custom_type=warc_type or self.headers['WARC-Type'],
                                          status=204, size=len(request_data),
                                          client_ip=self.client_address[0],
-                                         method=self.command)
+                                         method=self.command, timestamp=timestamp)
 
                 self.server.recorded_url_q.put(rec_custom)
                 self.send_response(204, 'OK')
@@ -307,7 +308,8 @@ class RecordedUrl:
 
     def __init__(self, url, request_data, response_recorder, remote_ip,
             warcprox_meta=None, content_type=None, custom_type=None,
-            status=None, size=None, client_ip=None, method=None):
+            status=None, size=None, client_ip=None, method=None,
+            timestamp=None):
         # XXX should test what happens with non-ascii url (when does
         # url-encoding happen?)
         if type(url) is not bytes:
@@ -335,6 +337,7 @@ class RecordedUrl:
         self.size = size
         self.client_ip = client_ip
         self.method = method
+        self.timestamp = timestamp
 
     def __del__(self):
         self.logger.debug("finished with %s", self)

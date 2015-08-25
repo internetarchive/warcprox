@@ -9,7 +9,7 @@ import socket
 import hanzo.httptools
 from hanzo import warctools
 import warcprox
-from datetime import datetime
+import datetime
 
 class WarcRecordBuilder:
     logger = logging.getLogger("warcprox.warc.WarcRecordBuilder")
@@ -50,7 +50,7 @@ class WarcRecordBuilder:
 
     def build_warc_records(self, recorded_url):
         """Returns a tuple of hanzo.warctools.warc.WarcRecord (principal_record, ...)"""
-        warc_date = warctools.warc.warc_datetime_str(datetime.utcnow())
+        warc_date = warctools.warc.warc_datetime_str(recorded_url.timestamp)
 
         if recorded_url.response_recorder:
             principal_record = self._build_response_principal_record(recorded_url, warc_date)
@@ -73,7 +73,7 @@ class WarcRecordBuilder:
         refers_to_date=None, payload_digest=None):
 
         if warc_date is None:
-            warc_date = warctools.warc.warc_datetime_str(datetime.utcnow())
+            warc_date = warctools.warc.warc_datetime_str(datetime.datetime.utcnow())
 
         record_id = warctools.WarcRecord.random_warc_uuid()
 
@@ -123,7 +123,7 @@ class WarcRecordBuilder:
         return record
 
     def build_warcinfo_record(self, filename):
-        warc_record_date = warctools.warc.warc_datetime_str(datetime.utcnow())
+        warc_record_date = warctools.warc.warc_datetime_str(datetime.datetime.utcnow())
         record_id = warctools.WarcRecord.random_warc_uuid()
 
         headers = []
