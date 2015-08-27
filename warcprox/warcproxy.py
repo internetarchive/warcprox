@@ -349,13 +349,11 @@ class RecordedUrl:
 class SingleThreadedWarcProxy(http_server.HTTPServer):
     logger = logging.getLogger("warcprox.warcproxy.WarcProxy")
 
-    def __init__(self, server_address=('localhost', 8000),
-            req_handler_class=WarcProxyHandler, bind_and_activate=True,
-            ca=None, recorded_url_q=None, digest_algorithm='sha1',
-            stats_db=None, options=warcprox.Options()):
-        http_server.HTTPServer.__init__(self, server_address, req_handler_class, bind_and_activate)
+    def __init__(self, ca=None, recorded_url_q=None, stats_db=None, options=warcprox.Options()):
+        server_address = (options.address or 'localhost', options.port if options.port is not None else 8000)
+        http_server.HTTPServer.__init__(self, server_address, WarcProxyHandler, bind_and_activate=True)
 
-        self.digest_algorithm = digest_algorithm
+        self.digest_algorithm = options.digest_algorithm or 'sha1'
 
         if ca is not None:
             self.ca = ca

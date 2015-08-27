@@ -13,25 +13,22 @@ import string
 import random
 
 class WarcWriter:
-    logger = logging.getLogger("warcprox.writer.WarcWriter")
+    logger = logging.getLogger('warcprox.writer.WarcWriter')
 
-    # port is only used for warc filename
-    def __init__(self, prefix='WARCPROX', directory='./warcs',
-            rollover_size=1000000000, gzip=False, port=0,
-            digest_algorithm='sha1', base32=False, rollover_idle_time=None,
-            options=warcprox.Options()):
+    def __init__(self, options=warcprox.Options()):
 
-        self.rollover_size = rollover_size
-        self.rollover_idle_time = rollover_idle_time
+        self.rollover_size = options.rollover_size or 1000000000
+        self.rollover_idle_time = options.rollover_idle_time or None
         self._last_activity = time.time()
 
-        self.gzip = gzip
+        self.gzip = options.gzip or False
+        digest_algorithm = options.digest_algorithm or 'sha1'
+        base32 = options.base32
         self.record_builder = warcprox.warc.WarcRecordBuilder(digest_algorithm=digest_algorithm, base32=base32)
 
         # warc path and filename stuff
-        self.directory = directory
-        self.prefix = prefix
-        self.port = port
+        self.directory = options.directory or './warcs'
+        self.prefix = options.prefix or 'warcprox'
 
         self._f = None
         self._fpath = None
@@ -40,9 +37,9 @@ class WarcWriter:
 
         self._randomtoken = "".join(random.Random().sample(string.digits + string.ascii_lowercase, 8))
 
-        if not os.path.exists(directory):
-            self.logger.info("warc destination directory {} doesn't exist, creating it".format(directory))
-            os.mkdir(directory)
+        if not os.path.exists(self.directory):
+            self.logger.info("warc destination directory {} doesn't exist, creating it".format(self.directory))
+            os.mkdir(self.directory)
 
     def timestamp17(self):
         now = datetime.utcnow()
@@ -115,11 +112,8 @@ class WarcWriter:
 class WarcWriterPool:
     logger = logging.getLogger("warcprox.writer.WarcWriterPool")
 
-    def __init__(self, default_warc_writer=None, options=warcprox.Options()):
-        if default_warc_writer:
-            self.default_warc_writer = default_warc_writer
-        else:
-            self.default_warc_writer = WarcWriter(options=options)
+    def __init__(self, options=warcprox.Options()):
+        self.default_warc_writer = WarcWriter(options=options)
         self.warc_writers = {}  # {prefix:WarcWriter}
         self._last_sync = time.time()
         self.options = options
@@ -129,10 +123,11 @@ class WarcWriterPool:
         w = self.default_warc_writer
         if recorded_url.warcprox_meta and "warc-prefix" in recorded_url.warcprox_meta:
             # self.logger.info("recorded_url.warcprox_meta={} for {}".format(recorded_url.warcprox_meta, recorded_url.url))
-            prefix = recorded_url.warcprox_meta["warc-prefix"]
-            if not prefix in self.warc_writers:
-                self.warc_writers[prefix] = WarcWriter(prefix=prefix, options=self.options)
-            w = self.warc_writers[prefix]
+            options = warcprox.Options(**vars(self.options))
+            options.prefix = recorded_url.warcprox_meta["warc-prefix"]
+            if not options.prefix in self.warc_writers:
+                self.warc_writers[options.prefix] = WarcWriter(options=options)
+            w = self.warc_writers[options.prefix]
         return w
 
     def write_records(self, recorded_url):

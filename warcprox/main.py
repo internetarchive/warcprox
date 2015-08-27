@@ -43,10 +43,10 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
     arg_parser.add_argument('-n', '--prefix', dest='prefix',
             default='WARCPROX', help='WARC filename prefix')
     arg_parser.add_argument('-s', '--size', dest='size',
-            default=1000*1000*1000,
+            default=1000*1000*1000, type=int,
             help='WARC file rollover size threshold in bytes')
     arg_parser.add_argument('--rollover-idle-time',
-            dest='rollover_idle_time', default=None,
+            dest='rollover_idle_time', default=None, type=int,
             help="WARC file rollover idle time threshold in seconds (so that Friday's last open WARC doesn't sit there all weekend waiting for more data)")
     try:
         hash_algos = hashlib.algorithms_guaranteed
@@ -150,10 +150,7 @@ def main(argv=sys.argv):
     ca = certauth.certauth.CertificateAuthority(args.cacert, args.certs_dir,
                                                 ca_name=ca_name)
 
-    proxy = warcprox.warcproxy.WarcProxy(
-            server_address=(args.address, args.port), ca=ca,
-            recorded_url_q=recorded_url_q,
-            digest_algorithm=args.digest_algorithm,
+    proxy = warcprox.warcproxy.WarcProxy(ca=ca, recorded_url_q=recorded_url_q,
             stats_db=stats_db, options=options)
 
     if args.playback_port is not None:
@@ -167,8 +164,7 @@ def main(argv=sys.argv):
         playback_index_db = None
         playback_proxy = None
 
-    default_warc_writer = warcprox.writer.WarcWriter(args.prefix, options=options)
-    writer_pool = warcprox.writer.WarcWriterPool(default_warc_writer, options=options)
+    writer_pool = warcprox.writer.WarcWriterPool(options=options)
     warc_writer_thread = warcprox.writerthread.WarcWriterThread(
             recorded_url_q=recorded_url_q, writer_pool=writer_pool,
             dedup_db=dedup_db, listeners=listeners, options=options)

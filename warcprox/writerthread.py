@@ -34,18 +34,21 @@ class WarcWriterThread(threading.Thread):
         self.dedup_db = dedup_db
         self.listeners = listeners
         self.options = options
+        self.idle = None
 
     def run(self):
         try:
             while not self.stop.is_set():
                 try:
                     recorded_url = self.recorded_url_q.get(block=True, timeout=0.5)
+                    self.idle = None
                     if self.dedup_db:
                         warcprox.dedup.decorate_with_dedup_info(self.dedup_db,
                                 recorded_url, base32=self.options.base32)
                     records = self.writer_pool.write_records(recorded_url)
                     self._final_tasks(recorded_url, records)
                 except queue.Empty:
+                    self.idle = time.time()
                     self.writer_pool.maybe_idle_rollover()
 
             self.logger.info('WarcWriterThread shutting down')

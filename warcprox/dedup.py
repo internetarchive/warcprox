@@ -40,10 +40,12 @@ class DedupDb(object):
         except:
             pass
 
-    def save(self, key, response_record):
+    def save(self, digest_key, response_record, bucket=""):
         record_id = response_record.get_header(warctools.WarcRecord.ID).decode('latin1')
         url = response_record.get_header(warctools.WarcRecord.URL).decode('latin1')
         date = response_record.get_header(warctools.WarcRecord.DATE).decode('latin1')
+
+        key = digest_key + b"|" + bucket.encode("utf-8")
 
         py_value = {'id':record_id, 'url':url, 'date':date}
         json_value = json.dumps(py_value, separators=(',',':'))
@@ -51,8 +53,9 @@ class DedupDb(object):
         self.db[key] = json_value.encode('utf-8')
         self.logger.debug('dedup db saved %s:%s', key, json_value)
 
-    def lookup(self, key):
+    def lookup(self, digest_key, bucket=""):
         result = None
+        key = digest_key + b"|" + bucket.encode("utf-8")
         if key in self.db:
             json_result = self.db[key]
             result = json.loads(json_result.decode('utf-8'))
@@ -65,15 +68,21 @@ class DedupDb(object):
     def notify(self, recorded_url, records):
         if (records[0].get_header(warctools.WarcRecord.TYPE) == warctools.WarcRecord.RESPONSE
                 and recorded_url.response_recorder.payload_size() > 0):
-            key = warcprox.digest_str(recorded_url.response_recorder.payload_digest, 
+            digest_key = warcprox.digest_str(recorded_url.response_recorder.payload_digest, 
                     self.options.base32)
-            self.save(key, records[0])
+            if recorded_url.warcprox_meta and "captures-bucket" in recorded_url.warcprox_meta:
+                self.save(digest_key, records[0], bucket=recorded_url.warcprox_meta["captures-bucket"])
+            else:
+                self.save(digest_key, records[0])
 
 
 def decorate_with_dedup_info(dedup_db, recorded_url, base32=False):
     if recorded_url.response_recorder and recorded_url.response_recorder.payload_digest:
-        key = warcprox.digest_str(recorded_url.response_recorder.payload_digest, base32)
-        recorded_url.dedup_info = dedup_db.lookup(key)
+        digest_key = warcprox.digest_str(recorded_url.response_recorder.payload_digest, base32)
+        if recorded_url.warcprox_meta and "captures-bucket" in recorded_url.warcprox_meta:
+            recorded_url.dedup_info = dedup_db.lookup(digest_key, recorded_url.warcprox_meta["captures-bucket"])
+        else:
+            recorded_url.dedup_info = dedup_db.lookup(digest_key)
 
 class RethinkDedupDb:
     logger = logging.getLogger("warcprox.dedup.RethinkDedupDb")
@@ -114,8 +123,9 @@ class RethinkDedupDb:
     def sync(self):
         pass
 
-    def save(self, key, response_record):
-        k = key.decode("utf-8") if isinstance(key, bytes) else key
+    def save(self, digest_key, response_record, bucket=""):
+        k = digest_key.decode("utf-8") if isinstance(digest_key, bytes) else digest_key
+        k = "{}|{}".format(k, bucket)
         record_id = response_record.get_header(warctools.WarcRecord.ID).decode('latin1')
         url = response_record.get_header(warctools.WarcRecord.URL).decode('latin1')
         date = response_record.get_header(warctools.WarcRecord.DATE).decode('latin1')
@@ -124,21 +134,25 @@ class RethinkDedupDb:
             result = r.db(self.db).table(self.table).insert(record,conflict="replace").run(conn)
             if sorted(result.values()) != [0,0,0,0,0,1] and [result["deleted"],result["skipped"],result["errors"]] != [0,0,0]:
                 raise Exception("unexpected result %s saving %s", result, record)
-            self.logger.debug('dedup db saved %s:%s', key, record)
+            self.logger.debug('dedup db saved %s:%s', k, record)
 
-    def lookup(self, key):
-        k = key.decode("utf-8") if isinstance(key, bytes) else key
+    def lookup(self, digest_key, bucket=""):
+        k = digest_key.decode("utf-8") if isinstance(digest_key, bytes) else digest_key
+        k = "{}|{}".format(k, bucket)
         with self._random_server_connection() as conn:
             result = r.db(self.db).table(self.table).get(k).run(conn)
             if result:
                 for x in result:
                     result[x] = result[x].encode("utf-8")
-            self.logger.debug('dedup db lookup of key=%s returning %s', key, result)
+            self.logger.debug('dedup db lookup of key=%s returning %s', k, result)
             return result
 
     def notify(self, recorded_url, records):
         if (records[0].get_header(warctools.WarcRecord.TYPE) == warctools.WarcRecord.RESPONSE
                 and recorded_url.response_recorder.payload_size() > 0):
-            key = warcprox.digest_str(recorded_url.response_recorder.payload_digest, 
+            digest_key = warcprox.digest_str(recorded_url.response_recorder.payload_digest, 
                     self.options.base32)
-            self.save(key, records[0])
+            if recorded_url.warcprox_meta and "captures-bucket" in recorded_url.warcprox_meta:
+                self.save(digest_key, records[0], bucket=recorded_url.warcprox_meta["captures-bucket"])
+            else:
+                self.save(digest_key, records[0])

@@ -18,6 +18,7 @@ import json
 import rethinkdb
 r = rethinkdb
 import random
+from hanzo import warctools
 
 try:
     import http.server as http_server
@@ -166,11 +167,12 @@ def rethink_dedup_db(request, rethinkdb_servers, captures_db):
             ddb = warcprox.dedup.RethinkDedupDb(servers, db)
 
     def fin():
-        if not captures_db:
-            logging.info('dropping rethinkdb database {}'.format(db))
-            with ddb._random_server_connection() as conn:
-                result = r.db_drop(db).run(conn)
-                logging.info("result=%s", result)
+        if rethinkdb_servers:
+            if not captures_db:
+                logging.info('dropping rethinkdb database {}'.format(db))
+                with ddb._random_server_connection() as conn:
+                    result = r.db_drop(db).run(conn)
+                    logging.info("result=%s", result)
     request.addfinalizer(fin)
 
     return ddb
@@ -228,26 +230,27 @@ def warcprox_(request, captures_db, dedup_db, stats_db):
 
     recorded_url_q = queue.Queue()
 
-    proxy = warcprox.warcproxy.WarcProxy(server_address=('localhost', 0), ca=ca,
-            recorded_url_q=recorded_url_q, stats_db=stats_db)
+    options = warcprox.Options(port=0, playback_port=0)
+    proxy = warcprox.warcproxy.WarcProxy(ca=ca, recorded_url_q=recorded_url_q,
+            stats_db=stats_db, options=options)
+    options.port = proxy.server_port
 
-    warcs_dir = tempfile.mkdtemp(prefix='warcprox-test-warcs-')
+    options.directory = tempfile.mkdtemp(prefix='warcprox-test-warcs-')
 
     f = tempfile.NamedTemporaryFile(prefix='warcprox-test-playback-index-', suffix='.db', delete=False)
     f.close()
     playback_index_db_file = f.name
     playback_index_db = warcprox.playback.PlaybackIndexDb(playback_index_db_file)
-    playback_proxy = warcprox.playback.PlaybackProxy(server_address=('localhost', 0), ca=ca,
-            playback_index_db=playback_index_db, warcs_dir=warcs_dir)
+    playback_proxy = warcprox.playback.PlaybackProxy(ca=ca,
+            playback_index_db=playback_index_db, options=options)
+    options.playback_proxy = playback_proxy.server_port
 
-    default_warc_writer = warcprox.writer.WarcWriter(directory=warcs_dir,
-            port=proxy.server_port)
-    writer_pool = warcprox.writer.WarcWriterPool(default_warc_writer)
+    writer_pool = warcprox.writer.WarcWriterPool(options)
     warc_writer_thread = warcprox.writerthread.WarcWriterThread(
             recorded_url_q=recorded_url_q, writer_pool=writer_pool,
             dedup_db=dedup_db, listeners=[captures_db or dedup_db, playback_index_db, stats_db])
 
-    warcprox_ = warcprox.controller.WarcproxController(proxy, warc_writer_thread, playback_proxy)
+    warcprox_ = warcprox.controller.WarcproxController(proxy, warc_writer_thread, playback_proxy, options)
     logging.info('starting warcprox')
     warcprox_thread = threading.Thread(name='WarcproxThread',
             target=warcprox_.run_until_shutdown)
@@ -257,7 +260,7 @@ def warcprox_(request, captures_db, dedup_db, stats_db):
         logging.info('stopping warcprox')
         warcprox_.stop.set()
         warcprox_thread.join()
-        for f in (ca_file, ca_dir, warcs_dir, playback_index_db_file):
+        for f in (ca_file, ca_dir, options.directory, playback_index_db_file):
             if os.path.isdir(f):
                 logging.info('deleting directory {}'.format(f))
                 shutil.rmtree(f)
@@ -394,8 +397,9 @@ def test_dedup_http(http_daemon, warcprox_, archiving_proxies, playback_proxies)
     assert response.headers['warcprox-test-header'] == 'e!'
     assert response.content == b'I am the warcprox test payload! ffffffffff!\n'
 
-    # XXX need to give warc writer thread a chance, and we don't have any change to poll for :-\
-    time.sleep(2.0)
+    # wait for writer thread to process
+    while not warcprox_.warc_writer_thread.idle:
+        time.sleep(0.5)
 
     # check in dedup db (no change from prev)
     dedup_lookup = warcprox_.warc_writer_thread.dedup_db.lookup(b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
@@ -455,8 +459,9 @@ def test_dedup_https(https_daemon, warcprox_, archiving_proxies, playback_proxie
     assert response.headers['warcprox-test-header'] == 'g!'
     assert response.content == b'I am the warcprox test payload! hhhhhhhhhh!\n'
 
-    # XXX need to give warc writer thread a chance, and we don't have any change to poll for :-\
-    time.sleep(2.0)
+    # wait for writer thread to process
+    while not warcprox_.warc_writer_thread.idle:
+        time.sleep(0.5)
 
     # check in dedup db (no change from prev)
     dedup_lookup = warcprox_.warc_writer_thread.dedup_db.lookup(b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
@@ -472,7 +477,7 @@ def test_dedup_https(https_daemon, warcprox_, archiving_proxies, playback_proxie
     assert response.content == b'I am the warcprox test payload! hhhhhhhhhh!\n'
     # XXX how to check dedup was used?
 
-def test_limits(http_daemon, archiving_proxies):
+def test_limits(http_daemon, warcprox_, archiving_proxies):
     url = 'http://localhost:{}/i/j'.format(http_daemon.server_port)
     request_meta = {"stats":{"buckets":["job1"]},"limits":{"job1.total.urls":10}}
     headers = {"Warcprox-Meta": json.dumps(request_meta)}
@@ -483,8 +488,9 @@ def test_limits(http_daemon, archiving_proxies):
         assert response.headers['warcprox-test-header'] == 'i!'
         assert response.content == b'I am the warcprox test payload! jjjjjjjjjj!\n'
 
-    # XXX give warc writer thread a chance to update stats
-    time.sleep(2.0)
+    # wait for writer thread to process
+    while not warcprox_.warc_writer_thread.idle:
+        time.sleep(0.5)
 
     response = requests.get(url, proxies=archiving_proxies, headers=headers, stream=True)
     assert response.status_code == 420
@@ -493,6 +499,124 @@ def test_limits(http_daemon, archiving_proxies):
     assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
     assert response.headers["content-type"] == "text/plain;charset=utf-8"
     assert response.raw.data == b"request rejected by warcprox: reached limit job1.total.urls=10\n"
+
+def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, playback_proxies):
+    url1 = 'http://localhost:{}/k/l'.format(http_daemon.server_port)
+    url2 = 'https://localhost:{}/k/l'.format(https_daemon.server_port)
+
+    # archive url1 bucket_a
+    headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"test_dedup_buckets","captures-bucket":"bucket_a"})}
+    response = requests.get(url1, proxies=archiving_proxies, verify=False, headers=headers)
+    assert response.status_code == 200
+    assert response.headers['warcprox-test-header'] == 'k!'
+    assert response.content == b'I am the warcprox test payload! llllllllll!\n'
+
+    # wait for writer thread to process
+    while not warcprox_.warc_writer_thread.idle:
+        time.sleep(0.5)
+
+    # check url1 in dedup db bucket_a
+    dedup_lookup = warcprox_.warc_writer_thread.dedup_db.lookup(b'sha1:bc3fac8847c9412f49d955e626fb58a76befbf81', bucket="bucket_a")
+    assert dedup_lookup['url'] == url1.encode('ascii')
+    assert re.match(br'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$', dedup_lookup['id'])
+    assert re.match(br'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$', dedup_lookup['date'])
+    record_id = dedup_lookup['id']
+    dedup_date = dedup_lookup['date']
+
+    # check url1 not in dedup db bucket_b
+    dedup_lookup = warcprox_.warc_writer_thread.dedup_db.lookup(b'sha1:bc3fac8847c9412f49d955e626fb58a76befbf81', bucket="bucket_b")
+    assert dedup_lookup is None
+
+    # archive url2 bucket_b
+    headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"test_dedup_buckets","captures-bucket":"bucket_b"})}
+    response = requests.get(url2, proxies=archiving_proxies, verify=False, headers=headers)
+    assert response.status_code == 200
+    assert response.headers['warcprox-test-header'] == 'k!'
+    assert response.content == b'I am the warcprox test payload! llllllllll!\n'
+
+    # wait for writer thread to process
+    while not warcprox_.warc_writer_thread.idle:
+        time.sleep(0.5)
+
+    # check url2 in dedup db bucket_b
+    dedup_lookup = warcprox_.warc_writer_thread.dedup_db.lookup(b'sha1:bc3fac8847c9412f49d955e626fb58a76befbf81', bucket="bucket_b")
+    assert dedup_lookup['url'] == url2.encode('ascii')
+    assert re.match(br'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$', dedup_lookup['id'])
+    assert re.match(br'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$', dedup_lookup['date'])
+    record_id = dedup_lookup['id']
+    dedup_date = dedup_lookup['date']
+
+    # archive url2 bucket_a
+    headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"test_dedup_buckets","captures-bucket":"bucket_a"})}
+    response = requests.get(url2, proxies=archiving_proxies, verify=False, headers=headers)
+    assert response.status_code == 200
+    assert response.headers['warcprox-test-header'] == 'k!'
+    assert response.content == b'I am the warcprox test payload! llllllllll!\n'
+
+    # archive url1 bucket_b
+    headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"test_dedup_buckets","captures-bucket":"bucket_b"})}
+    response = requests.get(url1, proxies=archiving_proxies, verify=False, headers=headers)
+    assert response.status_code == 200
+    assert response.headers['warcprox-test-header'] == 'k!'
+    assert response.content == b'I am the warcprox test payload! llllllllll!\n'
+
+    # wait for writer thread to process
+    while not warcprox_.warc_writer_thread.idle:
+        time.sleep(0.5)
+
+    # close the warc
+    assert warcprox_.warc_writer_thread.writer_pool.warc_writers["test_dedup_buckets"]
+    writer = warcprox_.warc_writer_thread.writer_pool.warc_writers["test_dedup_buckets"]
+    warc_path = os.path.join(writer.directory, writer._f_finalname)
+    warcprox_.warc_writer_thread.writer_pool.warc_writers["test_dedup_buckets"].close_writer()
+    assert os.path.exists(warc_path)
+    
+    # read the warc
+    fh = warctools.ArchiveRecord.open_archive(warc_path)
+    record_iter = fh.read_records(limit=None, offsets=True)
+    try:
+        (offset, record, errors) = next(record_iter)
+        assert record.type == b'warcinfo'
+        
+        # url1 bucket_a
+        (offset, record, errors) = next(record_iter)
+        assert record.type == b'response'
+        assert record.url == url1.encode('ascii')
+        assert record.content[1] == b'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nwarcprox-test-header: k!\r\nContent-Length: 44\r\n\r\nI am the warcprox test payload! llllllllll!\n'
+        (offset, record, errors) = next(record_iter)
+        assert record.type == b'request'
+
+        # url2 bucket_b
+        (offset, record, errors) = next(record_iter)
+        assert record.type == b'response'
+        assert record.url == url2.encode('ascii')
+        assert record.content[1] == b'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nwarcprox-test-header: k!\r\nContent-Length: 44\r\n\r\nI am the warcprox test payload! llllllllll!\n'
+        (offset, record, errors) = next(record_iter)
+        assert record.type == b'request'
+
+        # url2 bucket_a (revisit)
+        (offset, record, errors) = next(record_iter)
+        assert record.type == b'revisit'
+        assert record.url == url2.encode('ascii')
+        assert record.content[1] == b'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nwarcprox-test-header: k!\r\nContent-Length: 44\r\n\r\n'
+        (offset, record, errors) = next(record_iter)
+        assert record.type == b'request'
+
+        # url1 bucket_b (revisit)
+        (offset, record, errors) = next(record_iter)
+        assert record.type == b'revisit'
+        assert record.url == url1.encode('ascii')
+        assert record.content[1] == b'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nwarcprox-test-header: k!\r\nContent-Length: 44\r\n\r\n'
+        (offset, record, errors) = next(record_iter)
+        assert record.type == b'request'
+
+        # that's all folks
+        assert next(record_iter)[1] == None
+        assert next(record_iter, None) == None
+
+    finally:
+        fh.close()
+
 
 if __name__ == '__main__':
     pytest.main()
