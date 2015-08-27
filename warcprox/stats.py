@@ -108,34 +108,22 @@ class RethinkStatsDb:
     logger = logging.getLogger("warcprox.stats.RethinkStatsDb")
 
     def __init__(self, servers=["localhost"], db="warcprox", table="stats", shards=3, replicas=3, options=warcprox.Options()):
-        self.servers = servers
-        self.db = db
+        self.r = warcprox.Rethinker(servers, db)
         self.table = table
         self.shards = shards
         self.replicas = replicas
         self._ensure_db_table()
         self.options = options
 
-    # https://github.com/rethinkdb/rethinkdb-example-webpy-blog/blob/master/model.py
-    # "Best practices: Managing connections: a connection per request"
-    def _random_server_connection(self):
-        server = random.choice(self.servers)
-        try:
-            host, port = server.split(":")
-            return r.connect(host=host, port=port)
-        except ValueError:
-            return r.connect(host=server)
-
     def _ensure_db_table(self):
-        with self._random_server_connection() as conn:
-            dbs = r.db_list().run(conn)
-            if not self.db in dbs:
-                self.logger.info("creating rethinkdb database %s", repr(self.db))
-                r.db_create(self.db).run(conn)
-            tables = r.db(self.db).table_list().run(conn)
-            if not self.table in tables:
-                self.logger.info("creating rethinkdb table %s in database %s", repr(self.table), repr(self.db))
-                r.db(self.db).table_create(self.table, primary_key="bucket", shards=self.shards, replicas=self.replicas).run(conn)
+        dbs = self.r.run(r.db_list())
+        if not self.r.db in dbs:
+            self.logger.info("creating rethinkdb database %s", repr(self.r.db))
+            self.r.run(r.db_create(self.r.db))
+        tables = self.r.run(r.table_list())
+        if not self.table in tables:
+            self.logger.info("creating rethinkdb table %s in database %s", repr(self.table), repr(self.r.db))
+            self.r.run(r.table_create(self.table, primary_key="bucket", shards=self.shards, replicas=self.replicas))
 
     def close(self):
         pass
@@ -145,16 +133,15 @@ class RethinkStatsDb:
 
     def value(self, bucket0="__all__", bucket1=None, bucket2=None):
         # XXX use pluck?
-        with self._random_server_connection() as conn:
-            bucket0_stats = r.db(self.db).table(self.table).get(bucket0).run(conn)
-            self.logger.debug('stats db lookup of bucket=%s returned %s', bucket0, bucket0_stats)
-            if bucket0_stats:
-                if bucket1:
-                    if bucket2:
-                        return bucket0_stats[bucket1][bucket2]
-                    else:
-                        return bucket0_stats[bucket1]
-            return bucket0_stats
+        bucket0_stats = self.r.run(r.table(self.table).get(bucket0))
+        self.logger.debug('stats db lookup of bucket=%s returned %s', bucket0, bucket0_stats)
+        if bucket0_stats:
+            if bucket1:
+                if bucket2:
+                    return bucket0_stats[bucket1][bucket2]
+                else:
+                    return bucket0_stats[bucket1]
+        return bucket0_stats
 
     def tally(self, recorded_url, records):
         buckets = ["__all__"]
@@ -166,24 +153,23 @@ class RethinkStatsDb:
         else:
             buckets.append("__unspecified__")
 
-        with self._random_server_connection() as conn:
-            for bucket in buckets:
-                bucket_stats = self.value(bucket) or _empty_bucket(bucket)
+        for bucket in buckets:
+            bucket_stats = self.value(bucket) or _empty_bucket(bucket)
 
-                bucket_stats["total"]["urls"] += 1
-                bucket_stats["total"]["wire_bytes"] += recorded_url.size
+            bucket_stats["total"]["urls"] += 1
+            bucket_stats["total"]["wire_bytes"] += recorded_url.size
 
-                if records[0].get_header(warctools.WarcRecord.TYPE) == warctools.WarcRecord.REVISIT:
-                    bucket_stats["revisit"]["urls"] += 1
-                    bucket_stats["revisit"]["wire_bytes"] += recorded_url.size
-                else:
-                    bucket_stats["new"]["urls"] += 1
-                    bucket_stats["new"]["wire_bytes"] += recorded_url.size
+            if records[0].get_header(warctools.WarcRecord.TYPE) == warctools.WarcRecord.REVISIT:
+                bucket_stats["revisit"]["urls"] += 1
+                bucket_stats["revisit"]["wire_bytes"] += recorded_url.size
+            else:
+                bucket_stats["new"]["urls"] += 1
+                bucket_stats["new"]["wire_bytes"] += recorded_url.size
 
-                self.logger.debug("saving %s", bucket_stats)
-                result = r.db(self.db).table(self.table).insert(bucket_stats, conflict="replace").run(conn)
-                if sorted(result.values()) != [0,0,0,0,0,1] or [result["deleted"],result["skipped"],result["errors"]] != [0,0,0]:
-                    raise Exception("unexpected result %s saving %s", result, record)
+            self.logger.debug("saving %s", bucket_stats)
+            result = self.r.run(r.table(self.table).insert(bucket_stats, conflict="replace"))
+            if sorted(result.values()) != [0,0,0,0,0,1] or [result["deleted"],result["skipped"],result["errors"]] != [0,0,0]:
+                raise Exception("unexpected result %s saving %s", result, record)
 
     def notify(self, recorded_url, records):
         self.tally(recorded_url, records)

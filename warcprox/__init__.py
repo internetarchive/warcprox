@@ -1,5 +1,3 @@
-# vim:set sw=4 et:
-
 from argparse import Namespace as _Namespace
 
 def digest_str(hash_obj, base32):
@@ -18,6 +16,40 @@ class Options(_Namespace):
             return super(Options, self).__getattr__(self, name)
         except AttributeError:
             return None
+
+class Rethinker:
+    import logging
+    logger = logging.getLogger("warcprox.Rethinker")
+
+    def __init__(self, servers=["localhost"], db=None):
+        self.servers = servers
+        self.db = db
+
+    # https://github.com/rethinkdb/rethinkdb-example-webpy-blog/blob/master/model.py
+    # "Best practices: Managing connections: a connection per request"
+    def _random_server_connection(self):
+        import rethinkdb as r
+        import random
+        while True:
+            server = random.choice(self.servers)
+            try:
+                try:
+                    host, port = server.split(":")
+                    return r.connect(host=host, port=port)
+                except ValueError:
+                    return r.connect(host=server)
+            except Exception as e:
+                self.logger.error("will keep trying to get a connection after failure connecting to %s", server, exc_info=True)
+                import time
+                time.sleep(0.5)
+
+    def run(self, query):
+        while True:
+            with self._random_server_connection() as conn:
+                try:
+                    return query.run(conn, db=self.db)
+                except (ReqlAvailabilityError, ReqlTimeoutError) as e:
+                    self.logger.error("will retry rethinkdb query/operation %s which failed like so:", exc_info=True)
 
 version_bytes = _read_version_bytes().strip()
 version_str = version_bytes.decode('utf-8')

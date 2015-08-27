@@ -16,52 +16,39 @@ class RethinkCaptures:
     logger = logging.getLogger("warcprox.dedup.RethinkCaptures")
 
     def __init__(self, servers=["localhost"], db="warcprox", table="captures", shards=3, replicas=3, options=warcprox.Options()):
-        self.servers = servers
-        self.db = db
+        self.r = warcprox.Rethinker(servers, db)
         self.table = table
         self.shards = shards
         self.replicas = replicas
         self.options = options
         self._ensure_db_table()
 
-    # https://github.com/rethinkdb/rethinkdb-example-webpy-blog/blob/master/model.py
-    # "Best practices: Managing connections: a connection per request"
-    def _random_server_connection(self):
-        server = random.choice(self.servers)
-        try:
-            host, port = server.split(":")
-            return r.connect(host=host, port=port)
-        except ValueError:
-            return r.connect(host=server)
-
     def _ensure_db_table(self):
-        with self._random_server_connection() as conn:
-            dbs = r.db_list().run(conn)
-            if not self.db in dbs:
-                self.logger.info("creating rethinkdb database %s", repr(self.db))
-                r.db_create(self.db).run(conn)
-            tables = r.db(self.db).table_list().run(conn)
-            if not self.table in tables:
-                self.logger.info("creating rethinkdb table %s in database %s", repr(self.table), repr(self.db))
-                r.db(self.db).table_create(self.table, shards=self.shards, replicas=self.replicas).run(conn)
-                r.db(self.db).table(self.table).index_create("abbr_canon_surt_timesamp", [r.row["abbr_canon_surt"], r.row["timestamp"]]).run(conn)
-                r.db(self.db).table(self.table).index_create("sha1_warc_type", [r.row["sha1base32"], r.row["warc_type"], r.row["bucket"]]).run(conn)
+        dbs = self.r.run(r.db_list())
+        if not self.r.db in dbs:
+            self.logger.info("creating rethinkdb database %s", repr(self.r.db))
+            self.r.run(r.db_create(self.r.db))
+        tables = self.r.run(r.table_list())
+        if not self.table in tables:
+            self.logger.info("creating rethinkdb table %s in database %s", repr(self.table), repr(self.r.db))
+            self.r.run(r.table_create(self.table, shards=self.shards, replicas=self.replicas))
+            self.r.run(r.table(self.table).index_create("abbr_canon_surt_timesamp", [r.row["abbr_canon_surt"], r.row["timestamp"]]))
+            self.r.run(r.table(self.table).index_create("sha1_warc_type", [r.row["sha1base32"], r.row["warc_type"], r.row["bucket"]]))
 
     def find_response_by_digest(self, algo, raw_digest, bucket="__unspecified__"):
         if algo != "sha1":
             raise Exception("digest type is {} but big capture table is indexed by sha1".format(algo))
         sha1base32 = base64.b32encode(raw_digest).decode("utf-8")
-        with self._random_server_connection() as conn:
-            cursor = r.db(self.db).table(self.table).get_all([sha1base32, "response", bucket], index="sha1_warc_type").run(conn)
-            results = list(cursor)
-            if len(results) > 1:
-                raise Exception("expected 0 or 1 but found %s results for sha1base32=%s", len(results), sha1base32)
-            elif len(results) == 1:
-                result = results[0]
-            else:
-                result = None
-            self.logger.info("returning %s for sha1base32=%s", result, sha1base32)
-            return result
+        cursor = self.r.run(r.table(self.table).get_all([sha1base32, "response", bucket], index="sha1_warc_type"))
+        results = list(cursor)
+        if len(results) > 1:
+            raise Exception("expected 0 or 1 but found %s results for sha1base32=%s", len(results), sha1base32)
+        elif len(results) == 1:
+            result = results[0]
+        else:
+            result = None
+        self.logger.info("returning %s for sha1base32=%s", result, sha1base32)
+        return result
 
     def notify(self, recorded_url, records):
         if not recorded_url.response_recorder:
@@ -94,11 +81,10 @@ class RethinkCaptures:
             "bucket": bucket,
         }
 
-        with self._random_server_connection() as conn:
-            result = r.db(self.db).table(self.table).insert(entry).run(conn)
-            if result["inserted"] == 1 and sorted(result.values()) != [0,0,0,0,0,1]:
-                raise Exception("unexpected result %s saving %s", result, entry)
-            self.logger.info("big capture table db saved %s", entry)
+        result = self.r.run(r.table(self.table).insert(entry))
+        if result["inserted"] == 1 and sorted(result.values()) != [0,0,0,0,0,1]:
+            raise Exception("unexpected result %s saving %s", result, entry)
+        self.logger.info("big capture table db saved %s", entry)
 
 class RethinkCapturesDedup:
     logger = logging.getLogger("warcprox.dedup.RethinkCapturesDedup")

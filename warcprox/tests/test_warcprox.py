@@ -148,9 +148,8 @@ def captures_db(request, rethinkdb_servers, rethinkdb_big_table):
     def fin():
         if captures_db:
             logging.info('dropping rethinkdb database {}'.format(db))
-            with captures_db._random_server_connection() as conn:
-                result = r.db_drop(db).run(conn)
-                logging.info("result=%s", result)
+            result = captures_db.r.run(r.db_drop(db))
+            logging.info("result=%s", result)
     request.addfinalizer(fin)
 
     return captures_db
@@ -170,9 +169,8 @@ def rethink_dedup_db(request, rethinkdb_servers, captures_db):
         if rethinkdb_servers:
             if not captures_db:
                 logging.info('dropping rethinkdb database {}'.format(db))
-                with ddb._random_server_connection() as conn:
-                    result = r.db_drop(db).run(conn)
-                    logging.info("result=%s", result)
+                result = ddb.r.run(r.db_drop(db))
+                logging.info("result=%s", result)
     request.addfinalizer(fin)
 
     return ddb
@@ -210,9 +208,8 @@ def stats_db(request, rethinkdb_servers):
     def fin():
         if rethinkdb_servers:
             logging.info('dropping rethinkdb database {}'.format(db))
-            with sdb._random_server_connection() as conn:
-                result = r.db_drop(db).run(conn)
-                logging.info("result=%s", result)
+            result = sdb.r.run(r.db_drop(db))
+            logging.info("result=%s", result)
         else:
             logging.info('deleting file {}'.format(stats_db_file))
             os.unlink(stats_db_file)

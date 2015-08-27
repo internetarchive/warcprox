@@ -88,34 +88,22 @@ class RethinkDedupDb:
     logger = logging.getLogger("warcprox.dedup.RethinkDedupDb")
 
     def __init__(self, servers=["localhost"], db="warcprox", table="dedup", shards=3, replicas=3, options=warcprox.Options()):
-        self.servers = servers
-        self.db = db
+        self.r = warcprox.Rethinker(servers, db)
         self.table = table
         self.shards = shards
         self.replicas = replicas
         self._ensure_db_table()
         self.options = options
 
-    # https://github.com/rethinkdb/rethinkdb-example-webpy-blog/blob/master/model.py
-    # "Best practices: Managing connections: a connection per request"
-    def _random_server_connection(self):
-        server = random.choice(self.servers)
-        try:
-            host, port = server.split(":")
-            return r.connect(host=host, port=port)
-        except ValueError:
-            return r.connect(host=server)
-
     def _ensure_db_table(self):
-        with self._random_server_connection() as conn:
-            dbs = r.db_list().run(conn)
-            if not self.db in dbs:
-                self.logger.info("creating rethinkdb database %s", repr(self.db))
-                r.db_create(self.db).run(conn)
-            tables = r.db(self.db).table_list().run(conn)
-            if not self.table in tables:
-                self.logger.info("creating rethinkdb table %s in database %s", repr(self.table), repr(self.db))
-                r.db(self.db).table_create(self.table, primary_key="key", shards=self.shards, replicas=self.replicas).run(conn)
+        dbs = self.r.run(r.db_list())
+        if not self.r.db in dbs:
+            self.logger.info("creating rethinkdb database %s", repr(self.r.db))
+            self.r.run(r.db_create(self.r.db))
+        tables = self.r.run(r.table_list())
+        if not self.table in tables:
+            self.logger.info("creating rethinkdb table %s in database %s", repr(self.table), repr(self.r.db))
+            self.r.run(r.table_create(self.table, primary_key="key", shards=self.shards, replicas=self.replicas))
 
     def close(self):
         pass
@@ -130,22 +118,20 @@ class RethinkDedupDb:
         url = response_record.get_header(warctools.WarcRecord.URL).decode('latin1')
         date = response_record.get_header(warctools.WarcRecord.DATE).decode('latin1')
         record = {'key':k,'url':url,'date':date,'id':record_id}
-        with self._random_server_connection() as conn:
-            result = r.db(self.db).table(self.table).insert(record,conflict="replace").run(conn)
-            if sorted(result.values()) != [0,0,0,0,0,1] and [result["deleted"],result["skipped"],result["errors"]] != [0,0,0]:
-                raise Exception("unexpected result %s saving %s", result, record)
-            self.logger.debug('dedup db saved %s:%s', k, record)
+        result = self.r.run(r.table(self.table).insert(record,conflict="replace"))
+        if sorted(result.values()) != [0,0,0,0,0,1] and [result["deleted"],result["skipped"],result["errors"]] != [0,0,0]:
+            raise Exception("unexpected result %s saving %s", result, record)
+        self.logger.debug('dedup db saved %s:%s', k, record)
 
     def lookup(self, digest_key, bucket=""):
         k = digest_key.decode("utf-8") if isinstance(digest_key, bytes) else digest_key
         k = "{}|{}".format(k, bucket)
-        with self._random_server_connection() as conn:
-            result = r.db(self.db).table(self.table).get(k).run(conn)
-            if result:
-                for x in result:
-                    result[x] = result[x].encode("utf-8")
-            self.logger.debug('dedup db lookup of key=%s returning %s', k, result)
-            return result
+        result = self.r.run(r.table(self.table).get(k))
+        if result:
+            for x in result:
+                result[x] = result[x].encode("utf-8")
+        self.logger.debug('dedup db lookup of key=%s returning %s', k, result)
+        return result
 
     def notify(self, recorded_url, records):
         if (records[0].get_header(warctools.WarcRecord.TYPE) == warctools.WarcRecord.RESPONSE
