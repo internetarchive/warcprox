@@ -48,7 +48,7 @@ class Rethinker:
             with self._random_server_connection() as conn:
                 try:
                     return query.run(conn, db=self.db)
-                except (ReqlAvailabilityError, ReqlTimeoutError) as e:
+                except (r.ReqlAvailabilityError, r.ReqlTimeoutError) as e:
                     self.logger.error("will retry rethinkdb query/operation %s which failed like so:", exc_info=True)
 
 version_bytes = _read_version_bytes().strip()

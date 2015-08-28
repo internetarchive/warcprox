@@ -13,7 +13,7 @@ import surt
 import os
 
 class RethinkCaptures:
-    logger = logging.getLogger("warcprox.dedup.RethinkCaptures")
+    logger = logging.getLogger("warcprox.bigtables.RethinkCaptures")
 
     def __init__(self, servers=["localhost"], db="warcprox", table="captures", shards=3, replicas=3, options=warcprox.Options()):
         self.r = warcprox.Rethinker(servers, db)
@@ -47,7 +47,7 @@ class RethinkCaptures:
             result = results[0]
         else:
             result = None
-        self.logger.info("returning %s for sha1base32=%s", result, sha1base32)
+        self.logger.debug("returning %s for sha1base32=%s bucket=%s", result, sha1base32, bucket)
         return result
 
     def notify(self, recorded_url, records):
@@ -84,7 +84,7 @@ class RethinkCaptures:
         result = self.r.run(r.table(self.table).insert(entry))
         if result["inserted"] == 1 and sorted(result.values()) != [0,0,0,0,0,1]:
             raise Exception("unexpected result %s saving %s", result, entry)
-        self.logger.info("big capture table db saved %s", entry)
+        self.logger.debug("big capture table db saved %s", entry)
 
 class RethinkCapturesDedup:
     logger = logging.getLogger("warcprox.dedup.RethinkCapturesDedup")
@@ -96,7 +96,6 @@ class RethinkCapturesDedup:
     def lookup(self, digest_key, bucket="__unspecified__"):
         k = digest_key.decode("utf-8") if isinstance(digest_key, bytes) else digest_key
         algo, value_str = k.split(":")
-        self.logger.info("(algo,value_str)=(%s,%s)", algo, value_str)
         if self.options.base32:
             raw_digest = base64.b32decode(value_str, casefold=True)
         else:
@@ -104,7 +103,6 @@ class RethinkCapturesDedup:
         entry = self.captures_db.find_response_by_digest(algo, raw_digest, bucket)
         if entry:
             dedup_info = {"url":entry["url"].encode("utf-8"), "date":entry["timestamp"].encode("utf-8"), "id":entry["warc_id"].encode("utf-8")}
-            self.logger.info("returning %s for digest_key=%s", dedup_info, digest_key)
             return dedup_info
         else:
             return None
