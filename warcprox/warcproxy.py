@@ -147,25 +147,25 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
     logger = logging.getLogger("warcprox.warcprox.WarcProxyHandler")
 
     def _enforce_limits(self, warcprox_meta):
-        if (warcprox_meta and "limits" in warcprox_meta):
+        if warcprox_meta and "limits" in warcprox_meta:
             # self.logger.info("warcprox_meta['limits']=%s", warcprox_meta['limits'])
             for item in warcprox_meta["limits"].items():
                 key, limit = item
                 bucket0, bucket1, bucket2 = key.rsplit(".", 2)
                 value = self.server.stats_db.value(bucket0, bucket1, bucket2)
                 if value and value >= limit:
-                    self.logger.info('sending "420 Reached limit" %s=%s', key, limit)
                     body = "request rejected by warcprox: reached limit {}={}\n".format(key, limit).encode("utf-8")
                     self.send_response(420, "Reached limit")
                     self.send_header("Content-Type", "text/plain;charset=utf-8")
                     self.send_header("Connection", "close")
                     self.send_header("Content-Length", len(body))
-                    response_meta = {"reached-limit":{key:limit}, "stats":{bucket0: self.server.stats_db.value(bucket0)}}
+                    response_meta = {"reached-limit":{key:limit}, "stats":{bucket0:self.server.stats_db.value(bucket0)}}
                     self.send_header("Warcprox-Meta", json.dumps(response_meta, separators=(",",":")))
                     self.end_headers()
                     if self.command != "HEAD":
                         self.wfile.write(body)
                     self.connection.close()
+                    self.logger.info("%s 420 %s %s -- reached limit %s=%s", self.client_address[0], self.command, self.url, key, limit)
                     return True
         return False
 

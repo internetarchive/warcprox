@@ -63,6 +63,13 @@ class RethinkCaptures:
             bucket = "__unspecified__"
 
         canon_surt = surt.surt(recorded_url.url.decode("utf-8"), trailing_comma=True, host_massage=False)
+
+        mimetype = recorded_url.content_type
+        if mimetype:
+            n = mimetype.find(";")
+            if n >= 0:
+                mimetype = mimetype[:n]
+
         entry = {
             # id only specified for rethinkdb partitioning
             "id": "{} {}".format(canon_surt[:20], records[0].id.decode("utf-8")[10:-1]),
@@ -75,10 +82,11 @@ class RethinkCaptures:
             "warc_type": records[0].type.decode("utf-8"),
             "warc_id": records[0].id.decode("utf-8"),
             "sha1base32": base64.b32encode(recorded_url.response_recorder.payload_digest.digest()).decode("utf-8"),
-            "content_type": recorded_url.content_type,
+            "content_type": mimetype,
             "response_code": recorded_url.status,
             "http_method": recorded_url.method,
             "bucket": bucket,
+            "length": records[0].length,
         }
 
         result = self.r.run(r.table(self.table).insert(entry))
