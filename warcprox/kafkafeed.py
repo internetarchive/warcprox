@@ -13,7 +13,7 @@ class CaptureFeed:
         self._producer = kafka.SimpleProducer(kafka.KafkaClient(broker_list))
 
     def notify(self, recorded_url, records):
-        if records[0].type not in ('revisit', 'response'):
+        if records[0].type not in (b'revisit', b'response'):
             return
 
         try:
