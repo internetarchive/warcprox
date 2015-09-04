@@ -68,19 +68,19 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
             default='./warcprox-dedup.db', help='persistent deduplication database file; empty string or /dev/null disables deduplication')
     group.add_argument('--rethinkdb-servers', dest='rethinkdb_servers',
             help='rethinkdb servers, used for dedup and stats if specified; e.g. db0.foo.org,db0.foo.org:38015,db1.foo.org')
-    arg_parser.add_argument('--rethinkdb-db', dest='rethinkdb_db', default="warcprox",
+    arg_parser.add_argument('--rethinkdb-db', dest='rethinkdb_db', default='warcprox',
             help='rethinkdb database name (ignored unless --rethinkdb-servers is specified)')
     arg_parser.add_argument('--rethinkdb-big-table',
             dest='rethinkdb_big_table', action='store_true', default=False,
             help='use a big rethinkdb table called "captures", instead of a small table called "dedup"; table is suitable for use as index for playback (ignored unless --rethinkdb-servers is specified)')
+    arg_parser.add_argument('--kafka-broker-list', dest='kafka_broker_list', 
+            default=None, help='kafka broker list for capture feed')
+    arg_parser.add_argument('--kafka-capture-feed-topic', dest='kafka_capture_feed_topic', 
+            default=None, help='kafka capture feed topic')
     arg_parser.add_argument('--version', action='version',
             version="warcprox {}".format(warcprox.version_str))
     arg_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true')
     arg_parser.add_argument('-q', '--quiet', dest='quiet', action='store_true')
-    # [--ispartof=warcinfo ispartof]
-    # [--description=warcinfo description]
-    # [--operator=warcinfo operator]
-    # [--httpheader=warcinfo httpheader]
 
     return arg_parser
 
@@ -143,6 +143,10 @@ def main(argv=sys.argv):
     else:
         stats_db = warcprox.stats.StatsDb(args.stats_db_file, options=options)
         listeners.append(stats_db)
+
+    if args.kafka_broker_list and args.kafka_capture_feed_topic:
+        kafka_capture_feed = warcprox.kafkafeed.CaptureFeed(args.kafka_broker_list, args.kafka_capture_feed_topic)
+        listeners.append(kafka_capture_feed)
 
     recorded_url_q = queue.Queue()
 

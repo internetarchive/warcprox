@@ -64,3 +64,4 @@ import warcprox.warc as warc
 import warcprox.writerthread as writerthread
 import warcprox.stats as stats
 import warcprox.bigtable as bigtable
+import warcprox.kafkafeed as kafkafeed
