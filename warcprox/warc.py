@@ -64,7 +64,7 @@ class WarcRecordBuilder:
             principal_record = self.build_warc_record(url=recorded_url.url,
                     warc_date=warc_date, data=recorded_url.request_data,
                     warc_type=recorded_url.custom_type,
-                    content_type=recorded_url.content_type)
+                    content_type=recorded_url.content_type.encode("latin1"))
             return (principal_record,)
 
     def build_warc_record(self, url, warc_date=None, recorder=None, data=None,

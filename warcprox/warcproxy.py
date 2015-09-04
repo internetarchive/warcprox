@@ -237,7 +237,8 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                     status=prox_rec_res.status, size=prox_rec_res.recorder.len,
                     client_ip=self.client_address[0],
                     content_type=prox_rec_res.getheader("Content-Type"),
-                    method=self.command, timestamp=timestamp)
+                    method=self.command, timestamp=timestamp,
+                    host=self.hostname, duration=datetime.datetime.utcnow()-timestamp)
             self.server.recorded_url_q.put(recorded_url)
 
             self.log_request(prox_rec_res.status, prox_rec_res.recorder.len)
@@ -278,7 +279,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                                          response_recorder=None,
                                          remote_ip=b'',
                                          warcprox_meta=warcprox_meta,
-                                         content_type=self.headers['Content-Type'].encode('latin1'),
+                                         content_type=self.headers['Content-Type'],
                                          custom_type=warc_type or self.headers['WARC-Type'],
                                          status=204, size=len(request_data),
                                          client_ip=self.client_address[0],
@@ -309,7 +310,7 @@ class RecordedUrl:
     def __init__(self, url, request_data, response_recorder, remote_ip,
             warcprox_meta=None, content_type=None, custom_type=None,
             status=None, size=None, client_ip=None, method=None,
-            timestamp=None):
+            timestamp=None, host=None, duration=None):
         # XXX should test what happens with non-ascii url (when does
         # url-encoding happen?)
         if type(url) is not bytes:
@@ -330,14 +331,24 @@ class RecordedUrl:
         else:
             self.warcprox_meta = {}
 
+        if isinstance(content_type, bytes):
+            raise Exception("content_type is not supposed to be bytes!")
         self.content_type = content_type
-        self.custom_type = custom_type
 
+        self.mimetype = content_type
+        if self.mimetype:
+            n = self.mimetype.find(";")
+            if n >= 0:
+                self.mimetype = self.mimetype[:n]
+
+        self.custom_type = custom_type
         self.status = status
         self.size = size
         self.client_ip = client_ip
         self.method = method
         self.timestamp = timestamp
+        self.host = host
+        self.duration = duration
 
     def __del__(self):
         self.logger.debug("finished with %s", self)
