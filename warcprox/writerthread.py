@@ -58,34 +58,17 @@ class WarcWriterThread(threading.Thread):
 
     # closest thing we have to heritrix crawl log at the moment
     def _log(self, recorded_url, records):
-        def _decode(x):
-            if isinstance(x, bytes):
-                return x.decode("utf-8")
-            else:
-                return x
-
         try:
             payload_digest = records[0].get_header(warctools.WarcRecord.PAYLOAD_DIGEST).decode("utf-8")
         except:
             payload_digest = "-"
-        mimetype = _decode(recorded_url.content_type)
-        if mimetype:
-            n = mimetype.find(";")
-            if n >= 0:
-                mimetype = mimetype[:n]
         
         # 2015-07-17T22:32:23.672Z     1         58 dns:www.dhss.delaware.gov P http://www.dhss.delaware.gov/dhss/ text/dns #045 20150717223214881+316 sha1:63UTPB7GTWIHAGIK3WWL76E57BBTJGAK http://www.dhss.delaware.gov/dhss/ - {"warcFileOffset":2964,"warcFilename":"ARCHIVEIT-1303-WEEKLY-JOB165158-20150717223222113-00000.warc.gz"}
         self.logger.info("{} {} {} {} {} size={} {} {} {} offset={}".format(
-            _decode(recorded_url.client_ip),
-            _decode(recorded_url.status), 
-            _decode(recorded_url.method),
-            _decode(recorded_url.url),
-            mimetype,
-            recorded_url.size,
-            _decode(payload_digest), 
-            _decode(records[0].get_header(warctools.WarcRecord.TYPE)),
-            _decode(records[0].warc_filename), 
-            records[0].offset))
+            recorded_url.client_ip, recorded_url.status, recorded_url.method,
+            recorded_url.url.decode("utf-8"), recorded_url.mimetype,
+            recorded_url.size, payload_digest, records[0].type.decode("utf-8"),
+            records[0].warc_filename, records[0].offset))
 
     def _final_tasks(self, recorded_url, records):
         if self.listeners:
