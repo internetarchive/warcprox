@@ -44,15 +44,26 @@ class Rethinker:
                 time.sleep(0.5)
 
     def run(self, query):
+        import rethinkdb as r
         while True:
             with self._random_server_connection() as conn:
                 try:
                     return query.run(conn, db=self.db)
                 except (r.ReqlAvailabilityError, r.ReqlTimeoutError) as e:
-                    self.logger.error("will retry rethinkdb query/operation %s which failed like so:", exc_info=True)
+                    self.logger.error("will retry rethinkdb query/operation %s which failed like so:", query, exc_info=True)
 
 version_bytes = _read_version_bytes().strip()
 version_str = version_bytes.decode('utf-8')
+
+def gettid():
+    try:
+        import ctypes
+        libc = ctypes.cdll.LoadLibrary('libc.so.6')
+        SYS_gettid = 186
+        tid = libc.syscall(SYS_gettid)
+        return tid
+    except:
+        logging.warn("gettid failed?")
 
 import warcprox.controller as controller
 import warcprox.playback as playback
