@@ -280,7 +280,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                                          remote_ip=b'',
                                          warcprox_meta=warcprox_meta,
                                          content_type=self.headers['Content-Type'],
-                                         custom_type=warc_type or self.headers['WARC-Type'],
+                                         custom_type=warc_type or self.headers['WARC-Type'].encode('utf-8'),
                                          status=204, size=len(request_data),
                                          client_ip=self.client_address[0],
                                          method=self.command, timestamp=timestamp)
