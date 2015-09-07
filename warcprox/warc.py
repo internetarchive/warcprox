@@ -113,9 +113,11 @@ class WarcRecordBuilder:
 
         else:
             headers.append((warctools.WarcRecord.CONTENT_LENGTH, str(len(data)).encode('latin1')))
-            block_digest = hashlib.new(self.digest_algorithm, data)
+            digest = hashlib.new(self.digest_algorithm, data)
             headers.append((warctools.WarcRecord.BLOCK_DIGEST,
-                warcprox.digest_str(block_digest, self.base32)))
+                warcprox.digest_str(digest, self.base32)))
+            headers.append((warctools.WarcRecord.PAYLOAD_DIGEST,
+                warcprox.digest_str(digest, self.base32)))
 
             content_tuple = content_type, data
             record = warctools.WarcRecord(headers=headers, content=content_tuple)

@@ -11,6 +11,7 @@ import warcprox
 import base64
 import surt
 import os
+import hashlib
 
 class RethinkCaptures:
     logger = logging.getLogger("warcprox.bigtables.RethinkCaptures")
@@ -51,11 +52,14 @@ class RethinkCaptures:
         return result
 
     def notify(self, recorded_url, records):
-        if not recorded_url.response_recorder:
-            return
-
-        if recorded_url.response_recorder.payload_digest.name != "sha1":
-            self.logger.warn("digest type is %s but big capture table is indexed by sha1", recorded_url.response_recorder.payload_digest.name)
+        if recorded_url.response_recorder:
+            if recorded_url.response_recorder.payload_digest.name == "sha1":
+                sha1base32 = base64.b32encode(recorded_url.response_recorder.payload_digest.digest()).decode("utf-8")
+            else:
+                self.logger.warn("digest type is %s but big capture table is indexed by sha1", recorded_url.response_recorder.payload_digest.name)
+        else:
+            digest = hashlib.new("sha1", records[0].content[1])
+            sha1base32 = base64.b32encode(digest.digest()).decode("utf-8")
 
         if recorded_url.warcprox_meta and "captures-bucket" in recorded_url.warcprox_meta:
             bucket = recorded_url.warcprox_meta["captures-bucket"]
@@ -75,7 +79,7 @@ class RethinkCaptures:
             "filename": os.path.basename(records[0].warc_filename),
             "warc_type": records[0].type.decode("utf-8"),
             "warc_id": records[0].id.decode("utf-8"),
-            "sha1base32": base64.b32encode(recorded_url.response_recorder.payload_digest.digest()).decode("utf-8"),
+            "sha1base32": sha1base32,
             "content_type": recorded_url.mimetype,
             "response_code": recorded_url.status,
             "http_method": recorded_url.method,
