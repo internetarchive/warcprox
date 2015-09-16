@@ -39,15 +39,23 @@ class Rethinker:
         iterating over the results, for proper support of cursors, which fetch
         from the server more than once."""
         success = False
-        while not success:
-            with self._random_server_connection() as conn:
-                try:
-                    results = query.run(conn, db=self.db)
-                    success = True
-                    for result in results:
-                        yield result
-                    if hasattr(results, 'close'):
-                        results.close()
-                except (r.ReqlAvailabilityError, r.ReqlTimeoutError) as e:
-                    self.logger.error('will retry rethinkdb query/operation %s which failed like so:', exc_info=True)
+        results = None
+        try:
+            while not success:
+                with self._random_server_connection() as conn:
+                    try:
+                        results = query.run(conn, db=self.db)
+                        success = True
+                        for result in results:
+                            yield result
+                    except (r.ReqlAvailabilityError, r.ReqlTimeoutError) as e:
+                        if not success:
+                            self.logger.error('will retry rethinkdb query/operation %s which failed like so:', exc_info=True)
+                        else:
+                            # initial query was successful, subsequent fetch
+                            # perhaps failed, only caller can know what to do
+                            raise
+        finally:
+            if results and hasattr(results, 'close'):
+                results.close()
 
