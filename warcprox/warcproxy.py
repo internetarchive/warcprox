@@ -148,11 +148,12 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
 
     def _enforce_limits(self, warcprox_meta):
         if warcprox_meta and "limits" in warcprox_meta:
-            # self.logger.info("warcprox_meta['limits']=%s", warcprox_meta['limits'])
             for item in warcprox_meta["limits"].items():
                 key, limit = item
                 bucket0, bucket1, bucket2 = key.rsplit(".", 2)
                 value = self.server.stats_db.value(bucket0, bucket1, bucket2)
+                # self.logger.debug("warcprox_meta['limits']=%s stats['%s']=%s recorded_url_q.qsize()=%s", 
+                #         warcprox_meta['limits'], key, value, self.server.recorded_url_q.qsize())
                 if value and value >= limit:
                     body = "request rejected by warcprox: reached limit {}={}\n".format(key, limit).encode("utf-8")
                     self.send_response(420, "Reached limit")
@@ -243,9 +244,9 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
 
             self.log_request(prox_rec_res.status, prox_rec_res.recorder.len)
         except socket.timeout as e:
-            self.logger.warn("%s proxying %s", repr(e), self.url)
+            self.logger.warn("%s proxying %s %s", repr(e), self.command, self.url)
         except BaseException as e:
-            self.logger.error("%s proxying %s", repr(e), self.url, exc_info=True)
+            self.logger.error("%s proxying %s %s", repr(e), self.command, self.url, exc_info=True)
         finally:
             # Let's close off the remote end
             if prox_rec_res:

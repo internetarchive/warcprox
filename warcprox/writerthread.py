@@ -38,6 +38,7 @@ class WarcWriterThread(threading.Thread):
 
     def run(self):
         try:
+            # XXX warcprox can shut down with urls to archive left in the queue
             self.setName('WarcWriterThread(tid={})'.format(warcprox.gettid()))
             while not self.stop.is_set():
                 try:

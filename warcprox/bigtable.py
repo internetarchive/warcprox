@@ -66,12 +66,14 @@ class RethinkCaptures:
         else:
             bucket = "__unspecified__"
 
-        canon_surt = surt.surt(recorded_url.url.decode("utf-8"), trailing_comma=True, host_massage=False)
+        canon_surt = surt.surt(recorded_url.url.decode("utf-8"),
+            trailing_comma=True, host_massage=False, with_scheme=True)
 
         entry = {
             # id only specified for rethinkdb partitioning
             "id": "{} {}".format(canon_surt[:20], records[0].id.decode("utf-8")[10:-1]),
             "abbr_canon_surt": canon_surt[:150],
+            "canon_surt": canon_surt,
             # "timestamp": re.sub(r"[^0-9]", "", records[0].date.decode("utf-8")),
             "timestamp": records[0].date.decode("utf-8"),
             "url": recorded_url.url.decode("utf-8"),
