@@ -1,5 +1,13 @@
 certauth>=1.1.0
 rethinkdb
 git+https://github.com/internetarchive/warctools.git
-git+https://github.com/nlevitt/surt.git@py3
 kafka-python
+
+.
+# -e .
+
+git+https://github.com/nlevitt/surt.git@py3
+# -e /home/nlevitt/workspace/surt
+
+https://github.com/nlevitt/pyrethink.git
+# -e /home/nlevitt/workspace/pyrethink

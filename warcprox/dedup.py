@@ -18,6 +18,7 @@ import warcprox
 import rethinkdb
 r = rethinkdb
 import random
+import pyrethink
 
 class DedupDb(object):
     logger = logging.getLogger("warcprox.dedup.DedupDb")
@@ -88,7 +89,7 @@ class RethinkDedupDb:
     logger = logging.getLogger("warcprox.dedup.RethinkDedupDb")
 
     def __init__(self, servers=["localhost"], db="warcprox", table="dedup", shards=3, replicas=3, options=warcprox.Options()):
-        self.r = warcprox.Rethinker(servers, db)
+        self.r = pyrethink.Rethinker(servers, db)
         self.table = table
         self.shards = shards
         self.replicas = replicas

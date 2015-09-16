@@ -16,6 +16,7 @@ import rethinkdb
 r = rethinkdb
 import random
 import warcprox
+import pyrethink
 
 def _empty_bucket(bucket):
     return {
@@ -106,7 +107,7 @@ class RethinkStatsDb:
     logger = logging.getLogger("warcprox.stats.RethinkStatsDb")
 
     def __init__(self, servers=["localhost"], db="warcprox", table="stats", shards=3, replicas=3, options=warcprox.Options()):
-        self.r = warcprox.Rethinker(servers, db)
+        self.r = pyrethink.Rethinker(servers, db)
         self.table = table
         self.shards = shards
         self.replicas = replicas

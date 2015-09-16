@@ -12,12 +12,13 @@ import base64
 import surt
 import os
 import hashlib
+import pyrethink
 
 class RethinkCaptures:
     logger = logging.getLogger("warcprox.bigtables.RethinkCaptures")
 
     def __init__(self, servers=["localhost"], db="warcprox", table="captures", shards=3, replicas=3, options=warcprox.Options()):
-        self.r = warcprox.Rethinker(servers, db)
+        self.r = pyrethink.Rethinker(servers, db)
         self.table = table
         self.shards = shards
         self.replicas = replicas
@@ -40,8 +41,8 @@ class RethinkCaptures:
         if algo != "sha1":
             raise Exception("digest type is {} but big capture table is indexed by sha1".format(algo))
         sha1base32 = base64.b32encode(raw_digest).decode("utf-8")
-        cursor = self.r.run(r.table(self.table).get_all([sha1base32, "response", bucket], index="sha1_warc_type"))
-        results = list(cursor)
+        results_iter = self.r.results_iter(r.table(self.table).get_all([sha1base32, "response", bucket], index="sha1_warc_type"))
+        results = list(results_iter)
         if len(results) > 1:
             raise Exception("expected 0 or 1 but found %s results for sha1base32=%s", len(results), sha1base32)
         elif len(results) == 1:
