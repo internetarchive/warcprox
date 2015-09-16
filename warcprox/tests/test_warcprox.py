@@ -395,6 +395,7 @@ def test_dedup_http(http_daemon, warcprox_, archiving_proxies, playback_proxies)
     assert response.content == b'I am the warcprox test payload! ffffffffff!\n'
 
     # wait for writer thread to process
+    time.sleep(0.5)
     while not warcprox_.warc_writer_thread.idle:
         time.sleep(0.5)
 
@@ -457,6 +458,7 @@ def test_dedup_https(https_daemon, warcprox_, archiving_proxies, playback_proxie
     assert response.content == b'I am the warcprox test payload! hhhhhhhhhh!\n'
 
     # wait for writer thread to process
+    time.sleep(0.5)
     while not warcprox_.warc_writer_thread.idle:
         time.sleep(0.5)
 
@@ -486,6 +488,7 @@ def test_limits(http_daemon, warcprox_, archiving_proxies):
         assert response.content == b'I am the warcprox test payload! jjjjjjjjjj!\n'
 
     # wait for writer thread to process
+    time.sleep(0.5)
     while not warcprox_.warc_writer_thread.idle:
         time.sleep(0.5)
 
@@ -509,6 +512,7 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
     assert response.content == b'I am the warcprox test payload! llllllllll!\n'
 
     # wait for writer thread to process
+    time.sleep(0.5)
     while not warcprox_.warc_writer_thread.idle:
         time.sleep(0.5)
 
@@ -532,6 +536,7 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
     assert response.content == b'I am the warcprox test payload! llllllllll!\n'
 
     # wait for writer thread to process
+    time.sleep(0.5)
     while not warcprox_.warc_writer_thread.idle:
         time.sleep(0.5)
 
@@ -558,6 +563,7 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
     assert response.content == b'I am the warcprox test payload! llllllllll!\n'
 
     # wait for writer thread to process
+    time.sleep(0.5)
     while not warcprox_.warc_writer_thread.idle:
         time.sleep(0.5)
 
