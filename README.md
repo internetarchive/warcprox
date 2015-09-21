@@ -1,4 +1,4 @@
-# pyrethink
+# rethinkstuff
 Rudimentary rethinkdb python library with some smarts (and maybe some dumbs)
 
 ## What? Why?
@@ -14,13 +14,9 @@ Not really a connection pool, because it doesn't keep any connections open, but 
 
 ## Usage
 ```
-import rethinkdb as r
-import pyrethink
-
-rr = pyrethink.Rethinker(['db0.foo.com', 'db0.foo.com:38015', 'db1.foo.com'], 'my_db')
-
-rr.run(r.table('my_table').insert({'foo':'bar','baz':2}))
-
-for result in rr.results_iter(r.table('my_table')):
+import rethinkstuff
+r = rethinkstuff.Rethinker(['db0.foo.com', 'db0.foo.com:38015', 'db1.foo.com'], 'my_db')
+r.table('my_table').insert({'foo':'bar','baz':2}).run()
+for result in r.table('my_table'):
     print("result={}".format(result))
 ```
