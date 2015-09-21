@@ -6,6 +6,7 @@ import time
 import types
 
 class RethinkerWrapper:
+    logger = logging.getLogger('rethinkstuff.RethinkerWrapper')
     def __init__(self, rethinker, wrapped):
         self.rethinker = rethinker
         self.wrapped = wrapped
@@ -22,23 +23,32 @@ class RethinkerWrapper:
             try:
                 result = self.wrapped.run(conn, db=db or self.rethinker.db)
                 if hasattr(result, "__next__"):
+                    is_iter = True
                     def gen():
                         try:
+                            yield  # empty yield, see comment below
                             for x in result:
                                 yield x
                         finally:
+                            self.logger.info("iterator finished, closing connection %s", conn)
                             conn.close()
-                    return gen()
+                    g = gen()
+                    # Start executing the generator, leaving off after the
+                    # empty yield. If we didn't do this, and the caller never
+                    # started the generator, the finally block would never run
+                    # and the connection would stay open.
+                    next(g)
+                    return g
                 else:
                     return result
             except (r.ReqlAvailabilityError, r.ReqlTimeoutError) as e:
                 pass
             finally:
                 if not is_iter:
+                    self.logger.info("closing connection %s", conn)
                     conn.close(noreply_wait=False)
 
-
-class Rethinker:
+class Rethinker(object):
     """
     >>> r = Rethinker(db="my_db")
     >>> doc = r.table("my_table").get(1).run()
