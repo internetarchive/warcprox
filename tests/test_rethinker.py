@@ -13,7 +13,7 @@ class RethinkerForTesting(rethinkstuff.Rethinker):
 
     def _random_server_connection(self):
         self.last_conn = super(RethinkerForTesting, self)._random_server_connection()
-        logging.info("self.last_conn=%s", self.last_conn)
+        # logging.info("self.last_conn=%s", self.last_conn)
         return self.last_conn
 
 def test_rethinker():
@@ -61,5 +61,6 @@ def test_rethinker():
     assert isinstance(result, types.GeneratorType)
     result = None
     gc.collect()
+    # connection should be closed after result is garbage-collected
     assert not r.last_conn.is_open()
 

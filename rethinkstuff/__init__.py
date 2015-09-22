@@ -30,7 +30,7 @@ class RethinkerWrapper:
                             for x in result:
                                 yield x
                         finally:
-                            self.logger.info("iterator finished, closing connection %s", conn)
+                            result.close()
                             conn.close()
                     g = gen()
                     # Start executing the generator, leaving off after the
@@ -45,7 +45,6 @@ class RethinkerWrapper:
                 pass
             finally:
                 if not is_iter:
-                    self.logger.info("closing connection %s", conn)
                     conn.close(noreply_wait=False)
 
 class Rethinker(object):
