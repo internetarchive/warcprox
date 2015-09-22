@@ -21,6 +21,7 @@ import threading
 import certauth.certauth
 import warcprox
 import re
+import rethinkstuff
 
 def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
     arg_parser = argparse.ArgumentParser(prog=prog,
@@ -120,12 +121,13 @@ def main(argv=sys.argv):
 
     listeners = []
     if args.rethinkdb_servers:
+        r = rethinkstuff.Rethinker(args.rethinkdb_servers.split(","), args.rethinkdb_db)
         if args.rethinkdb_big_table:
-            captures_db = warcprox.bigtable.RethinkCaptures(args.rethinkdb_servers.split(","), args.rethinkdb_db, options=options)
+            captures_db = warcprox.bigtable.RethinkCaptures(r, options=options)
             dedup_db = warcprox.bigtable.RethinkCapturesDedup(captures_db, options=options)
             listeners.append(captures_db)
         else:
-            dedup_db = warcprox.dedup.RethinkDedupDb(args.rethinkdb_servers.split(","), args.rethinkdb_db, options=options)
+            dedup_db = warcprox.dedup.RethinkDedupDb(r, options=options)
             listeners.append(dedup_db)
     elif args.dedup_db_file in (None, '', '/dev/null'):
         logging.info('deduplication disabled')
@@ -135,7 +137,7 @@ def main(argv=sys.argv):
         listeners.append(dedup_db)
 
     if args.rethinkdb_servers:
-        stats_db = warcprox.stats.RethinkStatsDb(args.rethinkdb_servers.split(","), args.rethinkdb_db, options=options)
+        stats_db = warcprox.stats.RethinkStatsDb(r, options=options)
         listeners.append(stats_db)
     elif args.stats_db_file in (None, '', '/dev/null'):
         logging.info('statistics tracking disabled')
@@ -183,5 +185,7 @@ def main(argv=sys.argv):
 
 
 if __name__ == '__main__':
+    import gc
+    gc.set_debug(gc.DEBUG_LEAK)
     main()
 

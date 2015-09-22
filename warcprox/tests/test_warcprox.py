@@ -15,9 +15,8 @@ import shutil
 import requests
 import re
 import json
-import rethinkdb
-r = rethinkdb
 import random
+import rethinkstuff
 from hanzo import warctools
 
 try:
@@ -143,12 +142,13 @@ def captures_db(request, rethinkdb_servers, rethinkdb_big_table):
         servers = rethinkdb_servers.split(",")
         if rethinkdb_big_table:
             db = 'warcprox_test_captures_' + "".join(random.sample("abcdefghijklmnopqrstuvwxyz0123456789_",8))
-            captures_db = warcprox.bigtable.RethinkCaptures(servers, db)
+            r = rethinkstuff.Rethinker(servers, db)
+            captures_db = warcprox.bigtable.RethinkCaptures(r)
 
     def fin():
         if captures_db:
             logging.info('dropping rethinkdb database {}'.format(db))
-            result = captures_db.r.run(r.db_drop(db))
+            result = captures_db.r.db_drop(db).run()
             logging.info("result=%s", result)
     request.addfinalizer(fin)
 
@@ -163,13 +163,14 @@ def rethink_dedup_db(request, rethinkdb_servers, captures_db):
         else:
             servers = rethinkdb_servers.split(",")
             db = 'warcprox_test_dedup_' + "".join(random.sample("abcdefghijklmnopqrstuvwxyz0123456789_",8))
-            ddb = warcprox.dedup.RethinkDedupDb(servers, db)
+            r = rethinkstuff.Rethinker(servers, db)
+            ddb = warcprox.dedup.RethinkDedupDb(r)
 
     def fin():
         if rethinkdb_servers:
             if not captures_db:
                 logging.info('dropping rethinkdb database {}'.format(db))
-                result = ddb.r.run(r.db_drop(db))
+                result = ddb.r.db_drop(db).run()
                 logging.info("result=%s", result)
     request.addfinalizer(fin)
 
@@ -198,7 +199,8 @@ def stats_db(request, rethinkdb_servers):
     if rethinkdb_servers:
         servers = rethinkdb_servers.split(",")
         db = 'warcprox_test_stats_' + "".join(random.sample("abcdefghijklmnopqrstuvwxyz0123456789_",8))
-        sdb = warcprox.stats.RethinkStatsDb(servers, db)
+        r = rethinkstuff.Rethinker(servers, db)
+        sdb = warcprox.stats.RethinkStatsDb(r)
     else:
         f = tempfile.NamedTemporaryFile(prefix='warcprox-test-stats-', suffix='.db', delete=False)
         f.close()
@@ -208,7 +210,7 @@ def stats_db(request, rethinkdb_servers):
     def fin():
         if rethinkdb_servers:
             logging.info('dropping rethinkdb database {}'.format(db))
-            result = sdb.r.run(r.db_drop(db))
+            result = sdb.r.db_drop(db).run()
             logging.info("result=%s", result)
         else:
             logging.info('deleting file {}'.format(stats_db_file))

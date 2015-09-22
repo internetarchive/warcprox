@@ -4,21 +4,18 @@ from __future__ import absolute_import
 
 import logging
 from hanzo import warctools
-import rethinkdb
-r = rethinkdb
 import random
 import warcprox
 import base64
 import surt
 import os
 import hashlib
-import pyrethink
 
 class RethinkCaptures:
     logger = logging.getLogger("warcprox.bigtables.RethinkCaptures")
 
-    def __init__(self, servers=["localhost"], db="warcprox", table="captures", shards=3, replicas=3, options=warcprox.Options()):
-        self.r = pyrethink.Rethinker(servers, db)
+    def __init__(self, r, table="captures", shards=3, replicas=3, options=warcprox.Options()):
+        self.r = r
         self.table = table
         self.shards = shards
         self.replicas = replicas
@@ -26,22 +23,22 @@ class RethinkCaptures:
         self._ensure_db_table()
 
     def _ensure_db_table(self):
-        dbs = self.r.run(r.db_list())
+        dbs = self.r.db_list().run()
         if not self.r.db in dbs:
             self.logger.info("creating rethinkdb database %s", repr(self.r.db))
-            self.r.run(r.db_create(self.r.db))
-        tables = self.r.run(r.table_list())
+            self.r.db_create(self.r.db).run()
+        tables = self.r.table_list().run()
         if not self.table in tables:
             self.logger.info("creating rethinkdb table %s in database %s", repr(self.table), repr(self.r.db))
-            self.r.run(r.table_create(self.table, shards=self.shards, replicas=self.replicas))
-            self.r.run(r.table(self.table).index_create("abbr_canon_surt_timesamp", [r.row["abbr_canon_surt"], r.row["timestamp"]]))
-            self.r.run(r.table(self.table).index_create("sha1_warc_type", [r.row["sha1base32"], r.row["warc_type"], r.row["bucket"]]))
+            self.r.table_create(self.table, shards=self.shards, replicas=self.replicas).run()
+            self.r.table(self.table).index_create("abbr_canon_surt_timesamp", [self.r.row["abbr_canon_surt"], self.r.row["timestamp"]]).run()
+            self.r.table(self.table).index_create("sha1_warc_type", [self.r.row["sha1base32"], self.r.row["warc_type"], self.r.row["bucket"]]).run()
 
     def find_response_by_digest(self, algo, raw_digest, bucket="__unspecified__"):
         if algo != "sha1":
             raise Exception("digest type is {} but big capture table is indexed by sha1".format(algo))
         sha1base32 = base64.b32encode(raw_digest).decode("utf-8")
-        results_iter = self.r.results_iter(r.table(self.table).get_all([sha1base32, "response", bucket], index="sha1_warc_type"))
+        results_iter = self.r.table(self.table).get_all([sha1base32, "response", bucket], index="sha1_warc_type").run()
         results = list(results_iter)
         if len(results) > 1:
             raise Exception("expected 0 or 1 but found %s results for sha1base32=%s", len(results), sha1base32)
@@ -90,7 +87,7 @@ class RethinkCaptures:
             "length": records[0].length,
         }
 
-        result = self.r.run(r.table(self.table).insert(entry))
+        result = self.r.table(self.table).insert(entry).run()
         if result["inserted"] == 1 and sorted(result.values()) != [0,0,0,0,0,1]:
             raise Exception("unexpected result %s saving %s", result, entry)
         self.logger.debug("big capture table db saved %s", entry)

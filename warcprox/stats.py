@@ -12,11 +12,8 @@ import logging
 import os
 import json
 from hanzo import warctools
-import rethinkdb
-r = rethinkdb
 import random
 import warcprox
-import pyrethink
 
 def _empty_bucket(bucket):
     return {
@@ -106,8 +103,8 @@ class StatsDb:
 class RethinkStatsDb:
     logger = logging.getLogger("warcprox.stats.RethinkStatsDb")
 
-    def __init__(self, servers=["localhost"], db="warcprox", table="stats", shards=3, replicas=3, options=warcprox.Options()):
-        self.r = pyrethink.Rethinker(servers, db)
+    def __init__(self, r, table="stats", shards=3, replicas=3, options=warcprox.Options()):
+        self.r = r
         self.table = table
         self.shards = shards
         self.replicas = replicas
@@ -115,14 +112,14 @@ class RethinkStatsDb:
         self.options = options
 
     def _ensure_db_table(self):
-        dbs = self.r.run(r.db_list())
+        dbs = self.r.db_list().run()
         if not self.r.db in dbs:
             self.logger.info("creating rethinkdb database %s", repr(self.r.db))
-            self.r.run(r.db_create(self.r.db))
-        tables = self.r.run(r.table_list())
+            self.r.db_create(self.r.db).run()
+        tables = self.r.table_list().run()
         if not self.table in tables:
             self.logger.info("creating rethinkdb table %s in database %s", repr(self.table), repr(self.r.db))
-            self.r.run(r.table_create(self.table, primary_key="bucket", shards=self.shards, replicas=self.replicas))
+            self.r.table_create(self.table, primary_key="bucket", shards=self.shards, replicas=self.replicas).run()
 
     def close(self):
         pass
@@ -132,7 +129,7 @@ class RethinkStatsDb:
 
     def value(self, bucket0="__all__", bucket1=None, bucket2=None):
         # XXX use pluck?
-        bucket0_stats = self.r.run(r.table(self.table).get(bucket0))
+        bucket0_stats = self.r.table(self.table).get(bucket0).run()
         self.logger.debug('stats db lookup of bucket=%s returned %s', bucket0, bucket0_stats)
         if bucket0_stats:
             if bucket1:
@@ -166,7 +163,7 @@ class RethinkStatsDb:
                 bucket_stats["new"]["wire_bytes"] += recorded_url.size
 
             self.logger.debug("saving %s", bucket_stats)
-            result = self.r.run(r.table(self.table).insert(bucket_stats, conflict="replace"))
+            result = self.r.table(self.table).insert(bucket_stats, conflict="replace").run()
             if sorted(result.values()) != [0,0,0,0,0,1] or [result["deleted"],result["skipped"],result["errors"]] != [0,0,0]:
                 raise Exception("unexpected result %s saving %s", result, record)
 

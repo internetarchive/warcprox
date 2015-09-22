@@ -1,5 +1,3 @@
-# vim:set sw=4 et:
-
 from __future__ import absolute_import
 
 try:
@@ -15,10 +13,7 @@ import os
 import json
 from hanzo import warctools
 import warcprox
-import rethinkdb
-r = rethinkdb
 import random
-import pyrethink
 
 class DedupDb(object):
     logger = logging.getLogger("warcprox.dedup.DedupDb")
@@ -88,8 +83,8 @@ def decorate_with_dedup_info(dedup_db, recorded_url, base32=False):
 class RethinkDedupDb:
     logger = logging.getLogger("warcprox.dedup.RethinkDedupDb")
 
-    def __init__(self, servers=["localhost"], db="warcprox", table="dedup", shards=3, replicas=3, options=warcprox.Options()):
-        self.r = pyrethink.Rethinker(servers, db)
+    def __init__(self, r, table="dedup", shards=3, replicas=3, options=warcprox.Options()):
+        self.r = r
         self.table = table
         self.shards = shards
         self.replicas = replicas
@@ -97,14 +92,14 @@ class RethinkDedupDb:
         self.options = options
 
     def _ensure_db_table(self):
-        dbs = self.r.run(r.db_list())
+        dbs = self.r.db_list().run()
         if not self.r.db in dbs:
             self.logger.info("creating rethinkdb database %s", repr(self.r.db))
-            self.r.run(r.db_create(self.r.db))
-        tables = self.r.run(r.table_list())
+            self.r.db_create(self.r.db).run()
+        tables = self.r.table_list().run()
         if not self.table in tables:
             self.logger.info("creating rethinkdb table %s in database %s", repr(self.table), repr(self.r.db))
-            self.r.run(r.table_create(self.table, primary_key="key", shards=self.shards, replicas=self.replicas))
+            self.r.table_create(self.table, primary_key="key", shards=self.shards, replicas=self.replicas).run()
 
     def close(self):
         pass
@@ -119,7 +114,7 @@ class RethinkDedupDb:
         url = response_record.get_header(warctools.WarcRecord.URL).decode('latin1')
         date = response_record.get_header(warctools.WarcRecord.DATE).decode('latin1')
         record = {'key':k,'url':url,'date':date,'id':record_id}
-        result = self.r.run(r.table(self.table).insert(record,conflict="replace"))
+        result = self.r.table(self.table).insert(record,conflict="replace").run()
         if sorted(result.values()) != [0,0,0,0,0,1] and [result["deleted"],result["skipped"],result["errors"]] != [0,0,0]:
             raise Exception("unexpected result %s saving %s", result, record)
         self.logger.debug('dedup db saved %s:%s', k, record)
@@ -127,7 +122,7 @@ class RethinkDedupDb:
     def lookup(self, digest_key, bucket=""):
         k = digest_key.decode("utf-8") if isinstance(digest_key, bytes) else digest_key
         k = "{}|{}".format(k, bucket)
-        result = self.r.run(r.table(self.table).get(k))
+        result = self.r.table(self.table).get(k).run()
         if result:
             for x in result:
                 result[x] = result[x].encode("utf-8")
