@@ -115,7 +115,6 @@ class ProxyingRecorder(object):
         else:
             return 0
 
-
 class ProxyingRecordingHTTPResponse(http_client.HTTPResponse):
 
     def __init__(self, sock, debuglevel=0, method=None, proxy_dest=None, digest_algorithm='sha1', url=None):
@@ -351,11 +350,10 @@ class RecordedUrl:
         self.host = host
         self.duration = duration
 
-    def __del__(self):
-        self.logger.debug("finished with %s", self)
-        if self.response_recorder:
-            self.response_recorder.tempfile.close()
-            self.response_recorder = None
+    # def __del__(self):
+    #     self.logger.debug("finished with %s", self)
+    #     if self.response_recorder:
+    #         del self.response_recorder
 
 
 class SingleThreadedWarcProxy(http_server.HTTPServer):

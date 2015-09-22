@@ -49,6 +49,10 @@ class WarcWriterThread(threading.Thread):
                                 recorded_url, base32=self.options.base32)
                     records = self.writer_pool.write_records(recorded_url)
                     self._final_tasks(recorded_url, records)
+
+                    # try to release resources in a timely fashion
+                    if recorded_url.response_recorder and recorded_url.response_recorder.tempfile:
+                        recorded_url.response_recorder.tempfile.close()
                 except queue.Empty:
                     self.idle = time.time()
                     self.writer_pool.maybe_idle_rollover()
