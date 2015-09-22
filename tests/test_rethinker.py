@@ -3,6 +3,8 @@ import logging
 import sys
 import types
 import gc
+import pytest
+import rethinkdb
 
 logging.basicConfig(stream=sys.stderr, level=logging.INFO,
         format="%(asctime)s %(process)d %(levelname)s %(threadName)s %(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s")
@@ -63,4 +65,9 @@ def test_rethinker():
     gc.collect()
     # connection should be closed after result is garbage-collected
     assert not r.last_conn.is_open()
+
+    with pytest.raises(rethinkdb.errors.ReqlOpFailedError):
+        r.table_create("too_many_replicas", replicas=99).run()
+    with pytest.raises(rethinkdb.errors.ReqlOpFailedError):
+        r.table_create("too_many_shards", shards=99).run()
 

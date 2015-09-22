@@ -21,7 +21,7 @@ class RethinkerWrapper:
             conn = self.rethinker._random_server_connection()
             is_iter = False
             try:
-                result = self.wrapped.run(conn, db=db or self.rethinker.db)
+                result = self.wrapped.run(conn, db=db or self.rethinker.dbname)
                 if hasattr(result, "__next__"):
                     is_iter = True
                     def gen():
@@ -41,8 +41,8 @@ class RethinkerWrapper:
                     return g
                 else:
                     return result
-            except (r.ReqlAvailabilityError, r.ReqlTimeoutError) as e:
-                pass
+            except r.ReqlTimeoutError as e:
+                time.sleep(0.5)
             finally:
                 if not is_iter:
                     conn.close(noreply_wait=False)
@@ -56,7 +56,7 @@ class Rethinker(object):
 
     def __init__(self, servers=['localhost'], db=None):
         self.servers = servers
-        self.db = db
+        self.dbname = db
 
     # https://github.com/rethinkdb/rethinkdb-example-webpy-blog/blob/master/model.py
     # "Best practices: Managing connections: a connection per request"
