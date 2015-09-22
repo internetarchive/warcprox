@@ -6,6 +6,7 @@ import tempfile
 import subprocess # to access the script from shell
 import sys
 import glob
+import distutils
 
 # will try as python 3 then default to python 2 modules
 try:
@@ -38,7 +39,7 @@ val1 = 'very first value'
 val2 = 'second value'
 
 py = sys.executable
-dump_anydbm_loc = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "bin/dump-anydbm")
+dump_anydbm_loc = distutils.spawn.find_executable("dump-anydbm")
 
 @pytest.fixture(scope="function")
 def gdbm_test_db(request):
