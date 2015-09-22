@@ -83,11 +83,11 @@ def decorate_with_dedup_info(dedup_db, recorded_url, base32=False):
 class RethinkDedupDb:
     logger = logging.getLogger("warcprox.dedup.RethinkDedupDb")
 
-    def __init__(self, r, table="dedup", shards=3, replicas=3, options=warcprox.Options()):
+    def __init__(self, r, table="dedup", shards=None, replicas=None, options=warcprox.Options()):
         self.r = r
         self.table = table
-        self.shards = shards
-        self.replicas = replicas
+        self.shards = shards or len(r.servers)
+        self.replicas = replicas or min(3, len(r.servers))
         self._ensure_db_table()
         self.options = options
 
@@ -98,7 +98,8 @@ class RethinkDedupDb:
             self.r.db_create(self.r.db).run()
         tables = self.r.table_list().run()
         if not self.table in tables:
-            self.logger.info("creating rethinkdb table %s in database %s", repr(self.table), repr(self.r.db))
+            self.logger.info("creating rethinkdb table %s in database %s shards=%s replicas=%s", 
+                             repr(self.table), repr(self.r.db), self.shards, self.replicas)
             self.r.table_create(self.table, primary_key="key", shards=self.shards, replicas=self.replicas).run()
 
     def close(self):

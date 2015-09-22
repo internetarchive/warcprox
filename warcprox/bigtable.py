@@ -14,11 +14,11 @@ import hashlib
 class RethinkCaptures:
     logger = logging.getLogger("warcprox.bigtables.RethinkCaptures")
 
-    def __init__(self, r, table="captures", shards=3, replicas=3, options=warcprox.Options()):
+    def __init__(self, r, table="captures", shards=None, replicas=None, options=warcprox.Options()):
         self.r = r
         self.table = table
-        self.shards = shards
-        self.replicas = replicas
+        self.shards = shards or len(r.servers)
+        self.replicas = replicas or min(3, len(r.servers))
         self.options = options
         self._ensure_db_table()
 
