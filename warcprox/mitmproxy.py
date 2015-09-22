@@ -133,7 +133,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         try:
             self._proxy_request()
         except:
-            self.logger.error("exception from {}".format(self._proxy_request), exc_info=True)
+            self.logger.error("exception proxying request", exc_info=True)
             raise
 
     def _proxy_request(self):
