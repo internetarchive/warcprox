@@ -14,8 +14,8 @@ RUN apt-key adv --keyserver pgp.mit.edu --recv-keys 1614552E5765227AEC39EFCFA7E0
     && apt-get update && apt-get -y install rethinkdb
 
 RUN mkdir -vp /etc/service/rethinkdb \
-    && echo "#!/bin/sh\nrethinkdb --bind 0.0.0.0 --runuser rethinkdb --rungroup rethinkdb\n" > /etc/service/rethinkdb/run \
+    && echo "#!/bin/sh\nrethinkdb --bind 0.0.0.0 --directory /tmp/rethink-data --runuser rethinkdb --rungroup rethinkdb\n" > /etc/service/rethinkdb/run \
     && chmod a+x /etc/service/rethinkdb/run
 
-RUN apt-get -y install python-virtualenv
-
+RUN apt-get -y install python-virtualenv git
+RUN apt-get -y install python-gdbm python3-gdbm libpython2.7-dev libpython3.4-dev libffi-dev libssl-dev
