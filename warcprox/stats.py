@@ -57,13 +57,19 @@ class StatsDb:
             pass
 
     def value(self, bucket0="__all__", bucket1=None, bucket2=None):
-        if bucket0 in self.db:
-            bucket0_stats = json.loads(self.db[bucket0].decode("utf-8"))
-            if bucket1:
-                if bucket2:
-                    return bucket0_stats[bucket1][bucket2]
+        # Gdbm wants str/bytes keys in python2, str/unicode keys in python3.
+        # This ugliness deals with keys that arrive as unicode in py2.
+        b0 = bucket0.encode("utf-8") if bucket0 and not isinstance(bucket0, str) else bucket0
+        b1 = bucket1.encode("utf-8") if bucket1 and not isinstance(bucket1, str) else bucket1
+        b2 = bucket2.encode("utf-8") if bucket2 and not isinstance(bucket2, str) else bucket2
+
+        if b0 in self.db:
+            bucket0_stats = json.loads(self.db[b0].decode("utf-8"))
+            if b1:
+                if b2:
+                    return bucket0_stats[b1][b2]
                 else:
-                    return bucket0_stats[bucket1]
+                    return bucket0_stats[b1]
             else:
                 return bucket0_stats
         else:
@@ -83,10 +89,13 @@ class StatsDb:
             buckets.append("__unspecified__")
 
         for bucket in buckets:
-            if bucket in self.db:
-                bucket_stats = json.loads(self.db[bucket].decode("utf-8"))
+            # Gdbm wants str/bytes keys in python2, str/unicode keys in python3.
+            # This ugliness deals with keys that arrive as unicode in py2.
+            b = bucket.encode("utf-8") if bucket and not isinstance(bucket, str) else bucket
+            if b in self.db:
+                bucket_stats = json.loads(self.db[b].decode("utf-8"))
             else:
-                bucket_stats = _empty_bucket(bucket) 
+                bucket_stats = _empty_bucket(b) 
 
             bucket_stats["total"]["urls"] += 1
             bucket_stats["total"]["wire_bytes"] += recorded_url.size
@@ -98,7 +107,7 @@ class StatsDb:
                 bucket_stats["new"]["urls"] += 1
                 bucket_stats["new"]["wire_bytes"] += recorded_url.size
 
-            self.db[bucket] = json.dumps(bucket_stats, separators=(',',':')).encode("utf-8")
+            self.db[b] = json.dumps(bucket_stats, separators=(',',':')).encode("utf-8")
 
 class RethinkStatsDb:
     logger = logging.getLogger("warcprox.stats.RethinkStatsDb")

@@ -331,8 +331,6 @@ class RecordedUrl:
         else:
             self.warcprox_meta = {}
 
-        if isinstance(content_type, bytes):
-            raise Exception("content_type is not supposed to be bytes!")
         self.content_type = content_type
 
         self.mimetype = content_type
@@ -349,11 +347,6 @@ class RecordedUrl:
         self.timestamp = timestamp
         self.host = host
         self.duration = duration
-
-    # def __del__(self):
-    #     self.logger.debug("finished with %s", self)
-    #     if self.response_recorder:
-    #         del self.response_recorder
 
 
 class SingleThreadedWarcProxy(http_server.HTTPServer):
