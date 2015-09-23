@@ -122,13 +122,13 @@ class RethinkStatsDb:
 
     def _ensure_db_table(self):
         dbs = self.r.db_list().run()
-        if not self.r.db in dbs:
-            self.logger.info("creating rethinkdb database %s", repr(self.r.db))
-            self.r.db_create(self.r.db).run()
+        if not self.r.dbname in dbs:
+            self.logger.info("creating rethinkdb database %s", repr(self.r.dbname))
+            self.r.db_create(self.r.dbname).run()
         tables = self.r.table_list().run()
         if not self.table in tables:
             self.logger.info("creating rethinkdb table %s in database %s shards=%s replicas=%s", 
-                             repr(self.table), repr(self.r.db), self.shards, self.replicas)
+                             repr(self.table), repr(self.r.dbname), self.shards, self.replicas)
             self.r.table_create(self.table, primary_key="bucket", shards=self.shards, replicas=self.replicas).run()
 
     def close(self):

@@ -24,12 +24,12 @@ class RethinkCaptures:
 
     def _ensure_db_table(self):
         dbs = self.r.db_list().run()
-        if not self.r.db in dbs:
-            self.logger.info("creating rethinkdb database %s", repr(self.r.db))
-            self.r.db_create(self.r.db).run()
+        if not self.r.dbname in dbs:
+            self.logger.info("creating rethinkdb database %s", repr(self.r.dbname))
+            self.r.db_create(self.r.dbname).run()
         tables = self.r.table_list().run()
         if not self.table in tables:
-            self.logger.info("creating rethinkdb table %s in database %s", repr(self.table), repr(self.r.db))
+            self.logger.info("creating rethinkdb table %s in database %s", repr(self.table), repr(self.r.dbname))
             self.r.table_create(self.table, shards=self.shards, replicas=self.replicas).run()
             self.r.table(self.table).index_create("abbr_canon_surt_timesamp", [self.r.row["abbr_canon_surt"], self.r.row["timestamp"]]).run()
             self.r.table(self.table).index_create("sha1_warc_type", [self.r.row["sha1base32"], self.r.row["warc_type"], self.r.row["bucket"]]).run()
