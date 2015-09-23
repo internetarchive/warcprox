@@ -5,7 +5,7 @@ import random
 import time
 import types
 
-class RethinkerWrapper:
+class RethinkerWrapper(object):
     logger = logging.getLogger('rethinkstuff.RethinkerWrapper')
     def __init__(self, rethinker, wrapped):
         self.rethinker = rethinker
@@ -14,6 +14,9 @@ class RethinkerWrapper:
     def __getattr__(self, name):
         delegate = getattr(self.wrapped, name)
         return self.rethinker.wrap(delegate)
+
+    def __repr__(self):
+        return "<RethinkerWrapper{}>".format(repr(self.wrapped))
 
     def run(self, db=None):
         self.wrapped.run  # raise AttributeError early
