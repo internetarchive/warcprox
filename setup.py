@@ -5,21 +5,6 @@ from setuptools.command.test import test as TestCommand
 import sys
 import setuptools 
 
-VERSION_BYTES = b'1.5'
-
-def full_version_bytes():
-    import subprocess, time
-    try:
-        commit_num_bytes = subprocess.check_output(['git', 'rev-list', '--count', 'HEAD']).strip()
-        return VERSION_BYTES + b'.' + commit_num_bytes
-    except subprocess.CalledProcessError:
-        return VERSION_BYTES
-
-version_bytes = full_version_bytes()
-with open('warcprox/version.txt', 'wb') as out:
-    out.write(version_bytes)
-    out.write(b'\n');
-
 # special class needs to be added to support the pytest written dump-anydbm tests
 class PyTest(TestCommand):
     def finalize_options(self):
@@ -33,7 +18,7 @@ class PyTest(TestCommand):
         sys.exit(errno)
 
 setuptools.setup(name='warcprox',
-        version=version_bytes.decode('utf-8'),
+        version='1.5.0',
         description='WARC writing MITM HTTP/S proxy',
         url='https://github.com/internetarchive/warcprox',
         author='Noah Levitt',
@@ -41,7 +26,6 @@ setuptools.setup(name='warcprox',
         long_description=open('README.rst').read(),
         license='GPL',
         packages=['warcprox'],
-        package_data={'warcprox':['version.txt']},
         install_requires=[
             'certauth>=1.1.0',
             'warctools',

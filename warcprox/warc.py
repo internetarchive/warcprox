@@ -1,5 +1,3 @@
-# vim:set sw=4 et:
-
 from __future__ import absolute_import
 
 import logging
@@ -135,7 +133,7 @@ class WarcRecordBuilder:
         headers.append((warctools.WarcRecord.DATE, warc_record_date))
 
         warcinfo_fields = []
-        warcinfo_fields.append(b'software: warcprox ' + warcprox.version_bytes)
+        warcinfo_fields.append(b'software: warcprox ' + warcprox.__version__.encode('latin1'))
         hostname = socket.gethostname()
         warcinfo_fields.append('hostname: {}'.format(hostname).encode('latin1'))
         warcinfo_fields.append('ip: {}'.format(socket.gethostbyname(hostname)).encode('latin1'))
