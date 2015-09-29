@@ -15,6 +15,9 @@ class RethinkerWrapper(object):
         delegate = getattr(self.wrapped, name)
         return self.rethinker.wrap(delegate)
 
+    def __getitem__(self, key):
+        return self.rethinker.wrap(self.wrapped.__getitem__)(key)
+
     def __repr__(self):
         return "<RethinkerWrapper{}>".format(repr(self.wrapped))
 
@@ -73,7 +76,7 @@ class Rethinker(object):
                 except ValueError:
                     return r.connect(host=server)
             except Exception as e:
-                self.logger.error('will keep trying to get a connection after failure connecting to %s', server, exc_info=True)
+                self.logger.error('will keep trying to get a connection after failure connecting to %s: %s', server, e)
                 time.sleep(0.5)
 
     def wrap(self, delegate):

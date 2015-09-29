@@ -18,18 +18,22 @@ class RethinkerForTesting(rethinkstuff.Rethinker):
         # logging.info("self.last_conn=%s", self.last_conn)
         return self.last_conn
 
-def test_rethinker():
+@pytest.fixture(scope="module")
+def r():
     r = RethinkerForTesting()
     result = r.db_create("my_db").run()
     assert not r.last_conn.is_open()
     assert result["dbs_created"] == 1
+    return RethinkerForTesting(db="my_db")
 
-    r = RethinkerForTesting(db="my_db")
+@pytest.fixture(scope="module")
+def my_table(r):
     assert r.table_list().run() == []
     result = r.table_create("my_table").run()
     assert not r.last_conn.is_open()
     assert result["tables_created"] == 1
 
+def test_rethinker(r, my_table):
     assert r.table("my_table").index_create("foo").run() == {"created": 1}
     assert not r.last_conn.is_open()
 
@@ -66,8 +70,21 @@ def test_rethinker():
     # connection should be closed after result is garbage-collected
     assert not r.last_conn.is_open()
 
+def test_too_many_errors(r):
     with pytest.raises(rethinkdb.errors.ReqlOpFailedError):
         r.table_create("too_many_replicas", replicas=99).run()
     with pytest.raises(rethinkdb.errors.ReqlOpFailedError):
         r.table_create("too_many_shards", shards=99).run()
 
+def test_slice(r, my_table):
+    """Tests RethinkerWrapper.__getitem__()"""
+    result = r.table("my_table")[5:10].run()
+    assert r.last_conn.is_open() # should still be open this time
+    assert isinstance(result, types.GeneratorType)
+    n = 0
+    for x in result:
+        n += 1
+        pass
+    # connection should be closed after finished iterating over results
+    assert not r.last_conn.is_open()
+    assert n == 5
