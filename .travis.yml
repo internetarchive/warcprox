@@ -1,0 +1,10 @@
+sudo: required
+language: python
+python:
+  - 3.4
+  - 3.5
+  - 2.7
+services:
+  - docker
+script:
+  - ./tests/run-tests.sh
