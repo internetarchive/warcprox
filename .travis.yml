@@ -1,15 +1,7 @@
 sudo: required
 language: python
-python:
-        - 2.7
-        - 3.4
-        - 3.5
-        - nightly
-        - pypy
 services:
         - docker
-before_install:
-        - docker build -t internetarchive/rethinkdb tests
 script:
-        - docker run --rm -i -t --volume="$TRAVIS_BUILD_DIR:/rethinkstuff" internetarchive/rethinkdb /sbin/my_init -- bash -x -c "cd /rethinkstuff && virtualenv /tmp/venv && source /tmp/venv/bin/activate && pip install pytest .  && py.test -v -s tests"
+        - ./tests/run-tests.sh
 
