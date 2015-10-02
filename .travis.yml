@@ -11,5 +11,5 @@ services:
 before_install:
         - docker build -t internetarchive/rethinkdb tests
 script:
-        - docker run --rm -i -t --volume="..:/rethinkstuff" internetarchive/rethinkdb /sbin/my_init -- bash -x -c "cd /rethinkstuff && virtualenv -p $python /tmp/venv && source /tmp/venv/bin/activate && pip install pytest .  && py.test -v -s tests"
+        - docker run --rm -i -t internetarchive/rethinkdb /sbin/my_init -- bash -x -c "cd /rethinkstuff && /tmp/venv && source /tmp/venv/bin/activate && pip install pytest .  && py.test -v -s tests"
 
