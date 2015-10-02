@@ -1,15 +1,18 @@
-sudo: required
 language: python
 python:
-        - 2.7
-        - 3.4
         - 3.5
+        - 3.4
+        - 2.7
         - nightly
         - pypy
+        - pypy3
 services:
         - docker
 before_install:
-        - docker build -t internetarchive/rethinkdb tests
+        - sudo service docker restart ; sleep 10  # https://github.com/travis-ci/travis-ci/issues/4778
+        - docker run -d --publish=28015:28015 rethinkdb
+install:
+        - pip install . pytest
 script:
-        - docker run --rm -i -t --volume="..:/rethinkstuff" internetarchive/rethinkdb /sbin/my_init -- bash -x -c "cd /rethinkstuff && virtualenv -p $python /tmp/venv && source /tmp/venv/bin/activate && pip install pytest .  && py.test -v -s tests"
+        - py.test -v -s tests
 
