@@ -9,7 +9,7 @@ user=$(id -un)
 
 for python in python2.7 python3.4
 do
-	docker run --rm --volume="$script_dir/..:/rethinkstuff" internetarchive/rethinkdb /sbin/my_init -- \
+	docker run -i --rm --volume="$script_dir/..:/rethinkstuff" internetarchive/rethinkdb /sbin/my_init -- \
 		true < /dev/null
 		# bash -x -c "cd /rethinkstuff \
 		# 		&& virtualenv -p $python /tmp/venv \
