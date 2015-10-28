@@ -86,23 +86,23 @@ class AsyncClient(object):
             self.n_bytes += len(chunk)
             if not chunk:
                 self.n_urls += 1
-                logging.info("finished reading from %s", url)
+                logging.debug("finished reading from %s", url)
                 r.close()
                 break
     
     @asyncio.coroutine
     def one_request(self, url):
-        logging.info("issuing request to %s", url)
+        logging.debug("issuing request to %s", url)
         r = yield from aiohttp.get(url, connector=self.connector)
-        logging.info("issued request to %s", url)
+        logging.debug("issued request to %s", url)
         yield from self.read_response(r, url)
 
 def benchmark(client):
     try:
        start = time.time()
-       tasks_https = [client.one_request('https://localhost:8443/%s' % int(1.1**i)) for i in range(120)]
+       tasks_https = [client.one_request('https://localhost:8443/%s' % int(1.1**i)) for i in range(80)]
        asyncio.get_event_loop().run_until_complete(asyncio.wait(tasks_https))
-       tasks_http = [client.one_request('http://localhost:8080/%s' % int(1.1**i)) for i in range(120)]
+       tasks_http = [client.one_request('http://localhost:8080/%s' % int(1.1**i)) for i in range(80)]
        asyncio.get_event_loop().run_until_complete(asyncio.wait(tasks_http))
     finally:
         finish = time.time()
@@ -124,7 +124,7 @@ if __name__ == '__main__':
     # This gives us a better sense of sustained max throughput. The
     # asynchronous nature of warcprox helps with bursty traffic, as long as the
     # average throughput stays below the sustained max.
-    with TemporaryDirectory() as tmpdir:
+    with tempfile.TemporaryDirectory() as tmpdir:
         args.queue_size = 1
         args.cacert = os.path.join(tmpdir, "benchmark-warcprox-ca.pem")
         args.certs_dir = os.path.join(tmpdir, "benchmark-warcprox-ca")
