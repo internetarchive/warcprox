@@ -17,8 +17,10 @@ Warcprox runs on python 3.4.
 
 To install latest release run:
 
+
 ::
 
+    # apt-get install libffi-dev libssl-dev python3-gdbm
     pip install warcprox
 
 You can also install the latest bleeding edge code:
