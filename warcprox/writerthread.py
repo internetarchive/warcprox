@@ -1,5 +1,3 @@
-# vim:set sw=4 et:
-
 from __future__ import absolute_import
 
 try:
@@ -38,9 +36,8 @@ class WarcWriterThread(threading.Thread):
 
     def run(self):
         try:
-            # XXX warcprox can shut down with urls to archive left in the queue
             self.setName('WarcWriterThread(tid={})'.format(warcprox.gettid()))
-            while not self.stop.is_set():
+            while True:
                 try:
                     recorded_url = self.recorded_url_q.get(block=True, timeout=0.5)
                     self.idle = None
@@ -54,6 +51,8 @@ class WarcWriterThread(threading.Thread):
                     if recorded_url.response_recorder and recorded_url.response_recorder.tempfile:
                         recorded_url.response_recorder.tempfile.close()
                 except queue.Empty:
+                    if self.stop.is_set():
+                        break
                     self.idle = time.time()
                     self.writer_pool.maybe_idle_rollover()
 
