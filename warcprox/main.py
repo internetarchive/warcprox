@@ -78,13 +78,14 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
             default=None, help='kafka broker list for capture feed')
     arg_parser.add_argument('--kafka-capture-feed-topic', dest='kafka_capture_feed_topic', 
             default=None, help='kafka capture feed topic')
+    arg_parser.add_argument('--queue-size', dest='queue_size', default=1000,
+            help='argparse.SUPPRESS')
     arg_parser.add_argument('--version', action='version',
             version="warcprox {}".format(warcprox.__version__))
     arg_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true')
     arg_parser.add_argument('-q', '--quiet', dest='quiet', action='store_true')
 
     return arg_parser
-
 
 def dump_state(signum=None, frame=None):
     pp = pprint.PrettyPrinter(indent=4)
@@ -97,21 +98,8 @@ def dump_state(signum=None, frame=None):
 
     logging.warn("dumping state (caught signal {})\n{}".format(signum, "\n".join(state_strs)))
 
-
-def main(argv=sys.argv):
-    arg_parser = _build_arg_parser(prog=os.path.basename(argv[0]))
-    args = arg_parser.parse_args(args=argv[1:])
+def init_controller(args):
     options = warcprox.Options(**vars(args))
-
-    if args.verbose:
-        loglevel = logging.DEBUG
-    elif args.quiet:
-        loglevel = logging.WARNING
-    else:
-        loglevel = logging.INFO
-
-    logging.basicConfig(stream=sys.stdout, level=loglevel,
-            format='%(asctime)s %(process)d %(levelname)s %(threadName)s %(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s')
 
     try:
         hashlib.new(args.digest_algorithm)
@@ -150,7 +138,7 @@ def main(argv=sys.argv):
         kafka_capture_feed = warcprox.kafkafeed.CaptureFeed(args.kafka_broker_list, args.kafka_capture_feed_topic)
         listeners.append(kafka_capture_feed)
 
-    recorded_url_q = queue.Queue()
+    recorded_url_q = queue.Queue(maxsize=args.queue_size)
 
     ca_name = 'Warcprox CA on {}'.format(socket.gethostname())[:64]
     ca = certauth.certauth.CertificateAuthority(args.cacert, args.certs_dir,
@@ -181,11 +169,32 @@ def main(argv=sys.argv):
     signal.signal(signal.SIGINT, lambda a,b: controller.stop.set())
     signal.signal(signal.SIGQUIT, dump_state)
 
+    return controller
+
+def real_main(args):
+    controller = init_controller(args)
     controller.run_until_shutdown()
 
+def parse_args(argv=sys.argv):
+    arg_parser = _build_arg_parser(prog=os.path.basename(argv[0]))
+    args = arg_parser.parse_args(args=argv[1:])
+    return args
+
+def main(argv=sys.argv):
+    args = parse_args(argv)
+
+    if args.verbose:
+        loglevel = logging.DEBUG
+    elif args.quiet:
+        loglevel = logging.WARNING
+    else:
+        loglevel = logging.INFO
+
+    logging.basicConfig(stream=sys.stdout, level=loglevel,
+            format='%(asctime)s %(process)d %(levelname)s %(threadName)s %(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s')
+
+    real_main(args)
 
 if __name__ == '__main__':
-    import gc
-    gc.set_debug(gc.DEBUG_LEAK)
     main()
 
