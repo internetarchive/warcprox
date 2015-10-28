@@ -16,6 +16,7 @@ from datetime import datetime
 import hanzo.httptools
 from hanzo import warctools
 import warcprox
+import cProfile
 
 class WarcWriterThread(threading.Thread):
     logger = logging.getLogger("warcprox.warcproxwriter.WarcWriterThread")
@@ -35,6 +36,9 @@ class WarcWriterThread(threading.Thread):
         self.idle = None
 
     def run(self):
+        cProfile.runctx('self._run()', globals(), locals(), sort='cumulative')
+
+    def _run(self):
         try:
             self.setName('WarcWriterThread(tid={})'.format(warcprox.gettid()))
             while True:
