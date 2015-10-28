@@ -18,8 +18,8 @@ do
 				&& virtualenv -p $python /tmp/venv \
 				&& source /tmp/venv/bin/activate \
 				&& pip --log-file /tmp/pip.log install . pytest requests \
-				&& py.test -s tests \
-				&& py.test -s --rethinkdb-servers=localhost tests \
-				&& py.test -s --rethinkdb-servers=localhost --rethinkdb-big-table tests'"
+				&& PYTHONDONTWRITEBYTECODE=1 py.test -s tests \
+				&& PYTHONDONTWRITEBYTECODE=1 py.test -s --rethinkdb-servers=localhost tests \
+				&& PYTHONDONTWRITEBYTECODE=1 py.test -s --rethinkdb-servers=localhost --rethinkdb-big-table tests'"
 done
 
