@@ -17,6 +17,12 @@ class PyTest(TestCommand):
         errno = pytest.main(self.test_args)
         sys.exit(errno)
 
+deps = ['certauth>=1.1.0', 'warctools', 'kafka-python', 'surt', 'rethinkstuff']
+try:
+    import concurrent.futures
+except:
+    deps.append('futures')
+
 setuptools.setup(name='warcprox',
         version='1.5.0',
         description='WARC writing MITM HTTP/S proxy',
@@ -26,13 +32,7 @@ setuptools.setup(name='warcprox',
         long_description=open('README.rst').read(),
         license='GPL',
         packages=['warcprox'],
-        install_requires=[
-            'certauth>=1.1.0',
-            'warctools',
-            'kafka-python',
-            'surt',
-            'rethinkstuff',
-            ],
+        install_requires=deps,
         tests_require=['requests>=2.0.1', 'pytest'],  # >=2.0.1 for https://github.com/kennethreitz/requests/pull/1636
         cmdclass = {'test': PyTest},
         test_suite='warcprox.tests',

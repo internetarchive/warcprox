@@ -14,6 +14,7 @@ import json
 from hanzo import warctools
 import random
 import warcprox
+import concurrent.futures
 
 def _empty_bucket(bucket):
     return {
@@ -95,7 +96,7 @@ class StatsDb:
             if b in self.db:
                 bucket_stats = json.loads(self.db[b].decode("utf-8"))
             else:
-                bucket_stats = _empty_bucket(b) 
+                bucket_stats = _empty_bucket(b)
 
             bucket_stats["total"]["urls"] += 1
             bucket_stats["total"]["wire_bytes"] += recorded_url.size
@@ -119,6 +120,7 @@ class RethinkStatsDb:
         self.replicas = replicas or min(3, len(r.servers))
         self._ensure_db_table()
         self.options = options
+        self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=10)
 
     def _ensure_db_table(self):
         dbs = self.r.db_list().run()
@@ -127,12 +129,15 @@ class RethinkStatsDb:
             self.r.db_create(self.r.dbname).run()
         tables = self.r.table_list().run()
         if not self.table in tables:
-            self.logger.info("creating rethinkdb table %s in database %s shards=%s replicas=%s", 
+            self.logger.info("creating rethinkdb table %s in database %s shards=%s replicas=%s",
                              repr(self.table), repr(self.r.dbname), self.shards, self.replicas)
             self.r.table_create(self.table, primary_key="bucket", shards=self.shards, replicas=self.replicas).run()
 
     def close(self):
-        pass
+        self.logger.info("waiting for ~%s tasks to finish",
+            self._executor._work_queue.qsize() + (self._executor._max_workers/2))
+        self._executor.shutdown(wait=True)
+        self.logger.info("shut down complete")
 
     def sync(self):
         pass
@@ -149,7 +154,32 @@ class RethinkStatsDb:
                     return bucket0_stats[bucket1]
         return bucket0_stats
 
-    def tally(self, recorded_url, records):
+    def _tally(self, buckets, size, is_revisit):
+        try:
+            self.logger.info("starting task self._tally(%s)", (buckets, size, is_revisit))
+            for bucket in buckets:
+                bucket_stats = self.value(bucket) or _empty_bucket(bucket)
+
+                bucket_stats["total"]["urls"] += 1
+                bucket_stats["total"]["wire_bytes"] += size
+
+                if is_revisit:
+                    bucket_stats["revisit"]["urls"] += 1
+                    bucket_stats["revisit"]["wire_bytes"] += size
+                else:
+                    bucket_stats["new"]["urls"] += 1
+                    bucket_stats["new"]["wire_bytes"] += size
+
+                self.logger.debug("saving %s", bucket_stats)
+                result = self.r.table(self.table).insert(bucket_stats, conflict="replace").run()
+                if sorted(result.values()) != [0,0,0,0,0,1] or [result["deleted"],result["skipped"],result["errors"]] != [0,0,0]:
+                    raise Exception("unexpected result %s saving %s", result, record)
+
+            self.logger.info("finished task self._tally(%s)", (buckets, size, is_revisit))
+        except:
+            self.logger.error("unexpected problem tallying stats", exc_info=True)
+
+    def _extract_stats_info(self, recorded_url, records):
         buckets = ["__all__"]
 
         if (recorded_url.warcprox_meta
@@ -159,24 +189,15 @@ class RethinkStatsDb:
         else:
             buckets.append("__unspecified__")
 
-        for bucket in buckets:
-            bucket_stats = self.value(bucket) or _empty_bucket(bucket)
+        is_revisit = records[0].get_header(warctools.WarcRecord.TYPE) == warctools.WarcRecord.REVISIT
 
-            bucket_stats["total"]["urls"] += 1
-            bucket_stats["total"]["wire_bytes"] += recorded_url.size
+        return buckets, recorded_url.size, is_revisit
 
-            if records[0].get_header(warctools.WarcRecord.TYPE) == warctools.WarcRecord.REVISIT:
-                bucket_stats["revisit"]["urls"] += 1
-                bucket_stats["revisit"]["wire_bytes"] += recorded_url.size
-            else:
-                bucket_stats["new"]["urls"] += 1
-                bucket_stats["new"]["wire_bytes"] += recorded_url.size
-
-            self.logger.debug("saving %s", bucket_stats)
-            result = self.r.table(self.table).insert(bucket_stats, conflict="replace").run()
-            if sorted(result.values()) != [0,0,0,0,0,1] or [result["deleted"],result["skipped"],result["errors"]] != [0,0,0]:
-                raise Exception("unexpected result %s saving %s", result, record)
+    def tally(self, recorded_url, records):
+        self._tally(self._extract_stats_info(recorded_url, records))
 
     def notify(self, recorded_url, records):
-        self.tally(recorded_url, records)
+        args = self._extract_stats_info(recorded_url, records)
+        self.logger.info("submitting task self._tally(%s)", args)
+        self._executor.submit(self._tally, *args)
 

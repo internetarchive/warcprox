@@ -398,8 +398,12 @@ def test_dedup_http(http_daemon, warcprox_, archiving_proxies, playback_proxies)
 
     # wait for writer thread to process
     time.sleep(0.5)
-    while not warcprox_.warc_writer_thread.idle:
+    while (not warcprox_.warc_writer_thread.idle
+            or (warcprox_.proxy.stats_db
+                and hasattr(warcprox_.proxy.stats_db, "_executor")
+                and warcprox_.proxy.stats_db._executor._work_queue.qsize() > 0)):
         time.sleep(0.5)
+    time.sleep(0.5)
 
     # check in dedup db (no change from prev)
     dedup_lookup = warcprox_.warc_writer_thread.dedup_db.lookup(b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
@@ -461,8 +465,13 @@ def test_dedup_https(https_daemon, warcprox_, archiving_proxies, playback_proxie
 
     # wait for writer thread to process
     time.sleep(0.5)
-    while not warcprox_.warc_writer_thread.idle:
+    while (not warcprox_.warc_writer_thread.idle
+            or (warcprox_.proxy.stats_db
+                and hasattr(warcprox_.proxy.stats_db, "_executor")
+                and warcprox_.proxy.stats_db._executor._work_queue.qsize() > 0)):
         time.sleep(0.5)
+    time.sleep(0.5)
+
 
     # check in dedup db (no change from prev)
     dedup_lookup = warcprox_.warc_writer_thread.dedup_db.lookup(b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
@@ -491,8 +500,12 @@ def test_limits(http_daemon, warcprox_, archiving_proxies):
 
     # wait for writer thread to process
     time.sleep(0.5)
-    while not warcprox_.warc_writer_thread.idle:
+    while (not warcprox_.warc_writer_thread.idle
+            or (warcprox_.proxy.stats_db
+                and hasattr(warcprox_.proxy.stats_db, "_executor")
+                and warcprox_.proxy.stats_db._executor._work_queue.qsize() > 0)):
         time.sleep(0.5)
+    time.sleep(0.5)
 
     response = requests.get(url, proxies=archiving_proxies, headers=headers, stream=True)
     assert response.status_code == 420
@@ -515,8 +528,12 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
 
     # wait for writer thread to process
     time.sleep(0.5)
-    while not warcprox_.warc_writer_thread.idle:
+    while (not warcprox_.warc_writer_thread.idle
+            or (warcprox_.proxy.stats_db
+                and hasattr(warcprox_.proxy.stats_db, "_executor")
+                and warcprox_.proxy.stats_db._executor._work_queue.qsize() > 0)):
         time.sleep(0.5)
+    time.sleep(0.5)
 
     # check url1 in dedup db bucket_a
     dedup_lookup = warcprox_.warc_writer_thread.dedup_db.lookup(b'sha1:bc3fac8847c9412f49d955e626fb58a76befbf81', bucket="bucket_a")
@@ -541,6 +558,7 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
     time.sleep(0.5)
     while not warcprox_.warc_writer_thread.idle:
         time.sleep(0.5)
+    time.sleep(0.5)
 
     # check url2 in dedup db bucket_b
     dedup_lookup = warcprox_.warc_writer_thread.dedup_db.lookup(b'sha1:bc3fac8847c9412f49d955e626fb58a76befbf81', bucket="bucket_b")
@@ -568,6 +586,7 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
     time.sleep(0.5)
     while not warcprox_.warc_writer_thread.idle:
         time.sleep(0.5)
+    time.sleep(0.5)
 
     # close the warc
     assert warcprox_.warc_writer_thread.writer_pool.warc_writers["test_dedup_buckets"]
@@ -575,14 +594,14 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
     warc_path = os.path.join(writer.directory, writer._f_finalname)
     warcprox_.warc_writer_thread.writer_pool.warc_writers["test_dedup_buckets"].close_writer()
     assert os.path.exists(warc_path)
-    
+
     # read the warc
     fh = warctools.ArchiveRecord.open_archive(warc_path)
     record_iter = fh.read_records(limit=None, offsets=True)
     try:
         (offset, record, errors) = next(record_iter)
         assert record.type == b'warcinfo'
-        
+
         # url1 bucket_a
         (offset, record, errors) = next(record_iter)
         assert record.type == b'response'
