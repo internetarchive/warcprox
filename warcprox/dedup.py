@@ -73,7 +73,9 @@ class DedupDb(object):
 
 
 def decorate_with_dedup_info(dedup_db, recorded_url, base32=False):
-    if recorded_url.response_recorder and recorded_url.response_recorder.payload_digest:
+    if (recorded_url.response_recorder 
+            and recorded_url.response_recorder.payload_digest 
+            and recorded_url.response_recorder.payload_size() > 0):
         digest_key = warcprox.digest_str(recorded_url.response_recorder.payload_digest, base32)
         if recorded_url.warcprox_meta and "captures-bucket" in recorded_url.warcprox_meta:
             recorded_url.dedup_info = dedup_db.lookup(digest_key, recorded_url.warcprox_meta["captures-bucket"])
