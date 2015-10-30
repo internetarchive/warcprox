@@ -1,3 +1,6 @@
+.. image:: https://travis-ci.org/nlevitt/rethinkstuff.svg?branch=master
+    :target: https://travis-ci.org/nlevitt/rethinkstuff
+    
 rethinkstuff
 ============
 
