@@ -13,4 +13,6 @@ setuptools.setup(
     url='https://github.com/nlevitt/rethinkstuff',
     author='Noah Levitt',
     author_email='nlevitt@archive.org',
+    description='Rudimentary rethinkdb python library with some smarts, perhaps some dumbs',
+    long_description=open('README.rst').read(),
 )
