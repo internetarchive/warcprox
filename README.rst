@@ -25,7 +25,7 @@ Not really a connection pool, because it doesn’t keep any connections
 open, but it does take care of connection management.
 
 Service Registry
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
 
 Now also has a ServiceRegistry class, a lightweight solution for service
 discovery for distributed services. Maintains service info and status in
