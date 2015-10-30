@@ -5,6 +5,7 @@ import types
 import gc
 import pytest
 import rethinkdb
+import time
 
 logging.basicConfig(stream=sys.stderr, level=logging.INFO,
         format="%(asctime)s %(process)d %(levelname)s %(threadName)s %(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s")
@@ -88,3 +89,51 @@ def test_slice(r, my_table):
     # connection should be closed after finished iterating over results
     assert not r.last_conn.is_open()
     assert n == 5
+
+def test_svcreg(r):
+    # import pdb; pdb.set_trace()
+    svcreg = rethinkstuff.ServiceRegistry(r)
+    assert svcreg.available_service("yes-such-role") == None
+    svc0 = {
+        "role": "yes-such-role",
+        "load": 100.0,
+        "heartbeat_interval": 0.2,
+    }
+    svc1 = {
+        "role": "yes-such-role",
+        "load": 200.0,
+        "heartbeat_interval": 0.2,
+    }
+    svc0["id"] = svcreg.heartbeat(svc0)
+    svc1["id"] = svcreg.heartbeat(svc1)
+    assert svc0["id"] is not None
+    assert svc1["id"] is not None
+    assert svc0["id"] != svc1["id"]
+    time.sleep(0.1)
+    assert svcreg.available_service("no-such-role") == None
+    assert svcreg.available_service("yes-such-role")["id"] == svc0["id"]
+
+    svc1["load"] = 50.0
+    svcreg.heartbeat(svc1)
+    time.sleep(0.1)
+    assert svcreg.available_service("no-such-role") == None
+    assert svcreg.available_service("yes-such-role")["id"] == svc1["id"]
+
+    svc1["load"] = 200.0
+    svcreg.heartbeat(svc1)
+    time.sleep(0.1)
+    assert svcreg.available_service("no-such-role") == None
+    assert svcreg.available_service("yes-such-role")["id"] == svc0["id"]
+    svcreg.heartbeat(svc1)
+    time.sleep(0.1)
+
+    svcreg.heartbeat(svc1)
+    time.sleep(0.4)
+    assert svcreg.available_service("no-such-role") == None
+    assert svcreg.available_service("yes-such-role")["id"] == svc1["id"]
+
+    svcreg.unregister(svc1["id"])
+    time.sleep(0.1)
+    assert svcreg.available_service("no-such-role") == None
+    assert svcreg.available_service("yes-such-role") == None
+
