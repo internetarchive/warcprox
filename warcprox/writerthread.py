@@ -39,31 +39,33 @@ class WarcWriterThread(threading.Thread):
         cProfile.runctx('self._run()', globals(), locals(), sort='cumulative')
 
     def _run(self):
-        try:
-            self.setName('WarcWriterThread(tid={})'.format(warcprox.gettid()))
-            while True:
-                try:
-                    recorded_url = self.recorded_url_q.get(block=True, timeout=0.5)
-                    self.idle = None
-                    if self.dedup_db:
-                        warcprox.dedup.decorate_with_dedup_info(self.dedup_db,
-                                recorded_url, base32=self.options.base32)
-                    records = self.writer_pool.write_records(recorded_url)
-                    self._final_tasks(recorded_url, records)
+        while not self.stop.is_set():
+            try:
+                self.setName('WarcWriterThread(tid={})'.format(warcprox.gettid()))
+                while True:
+                    try:
+                        recorded_url = self.recorded_url_q.get(block=True, timeout=0.5)
+                        self.idle = None
+                        if self.dedup_db:
+                            warcprox.dedup.decorate_with_dedup_info(self.dedup_db,
+                                    recorded_url, base32=self.options.base32)
+                        records = self.writer_pool.write_records(recorded_url)
+                        self._final_tasks(recorded_url, records)
 
-                    # try to release resources in a timely fashion
-                    if recorded_url.response_recorder and recorded_url.response_recorder.tempfile:
-                        recorded_url.response_recorder.tempfile.close()
-                except queue.Empty:
-                    if self.stop.is_set():
-                        break
-                    self.idle = time.time()
-                    self.writer_pool.maybe_idle_rollover()
+                        # try to release resources in a timely fashion
+                        if recorded_url.response_recorder and recorded_url.response_recorder.tempfile:
+                            recorded_url.response_recorder.tempfile.close()
+                    except queue.Empty:
+                        if self.stop.is_set():
+                            break
+                        self.idle = time.time()
+                        self.writer_pool.maybe_idle_rollover()
 
-            self.logger.info('WarcWriterThread shutting down')
-            self.writer_pool.close_writers()
-        except:
-            self.logger.critical("WarcWriterThread shutting down after unexpected error", exc_info=True)
+                self.logger.info('WarcWriterThread shutting down')
+                self.writer_pool.close_writers()
+            except:
+                self.logger.critical("WarcWriterThread will try to continue after unexpected error", exc_info=True)
+                time.sleep(0.5)
 
     # closest thing we have to heritrix crawl log at the moment
     def _log(self, recorded_url, records):
