@@ -10,4 +10,7 @@ setuptools.setup(
         'Programming Language :: Python :: 3.5',
     ],
     install_requires=['rethinkdb'],
+    url='https://github.com/nlevitt/rethinkstuff',
+    author='Noah Levitt',
+    author_email='nlevitt@archive.org',
 )
