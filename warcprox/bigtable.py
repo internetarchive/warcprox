@@ -43,9 +43,9 @@ class RethinkCaptures:
         sha1base32 = base64.b32encode(raw_digest).decode("utf-8")
         results_iter = self.r.table(self.table).get_all([sha1base32, "response", bucket], index="sha1_warc_type").run()
         results = list(results_iter)
-        if len(results) > 1:
-            raise Exception("expected 0 or 1 but found %s results for sha1base32=%s", len(results), sha1base32)
-        elif len(results) == 1:
+        if len(results) > 0:
+            if len(results) > 1:
+                self.logger.error("expected 0 or 1 but found %s results for sha1base32=%s bucket=%s (will use first result)", len(results), sha1base32, bucket)
             result = results[0]
         else:
             result = None
