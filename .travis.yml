@@ -1,21 +1,24 @@
-# vim: set sw=4 et:
-#
-# tox approach stolen from
-# https://github.com/pypa/pip/blob/abdb597dbfb51b21cc76c1cff068b72c80f3a77d/.travis.yml
-#
+# http://docs.travis-ci.com/user/migrating-from-legacy/
+sudo: false
 
 language: python
 
-env:
-    - TOXENV=py27
-    - TOXENV=py34
+python:
+    - 3.5
+    - 3.4
+    - 2.7
+    - nightly
+    - pypy
+    - pypy3
 
-before_install:
-    - sudo apt-get update
-    - sudo apt-get -y install python-gdbm python3-gdbm
+addons:
+    apt:
+        packages:
+            - python-gdbm
+            - python3-gdbm
 
 before_script:
-    - pip install tox
+    - pip install . pytest requests
 
-script: tox
+script: py.test warcprox
 
