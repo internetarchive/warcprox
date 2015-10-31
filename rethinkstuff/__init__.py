@@ -127,7 +127,7 @@ class ServiceRegistry(object):
         tables = self.r.table_list().run()
         if not 'services' in tables:
             self.logger.info("creating rethinkdb table 'services' in database %s", repr(self.r.dbname))
-            self.r.table_create('services', shards=1, replicas=min(len(self.r.servers), 1)).run()
+            self.r.table_create('services', shards=1, replicas=min(3, len(self.r.servers))).run()
             # self.r.table('sites').index_create...?
 
     def heartbeat(self, status_info):
