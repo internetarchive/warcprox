@@ -6,6 +6,7 @@ import gc
 import pytest
 import rethinkdb
 import time
+import socket
 
 logging.basicConfig(stream=sys.stderr, level=logging.INFO,
         format="%(asctime)s %(process)d %(levelname)s %(threadName)s %(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s")
@@ -90,7 +91,7 @@ def test_slice(r, my_table):
     assert not r.last_conn.is_open()
     assert n == 5
 
-def test_svcreg(r):
+def test_service_registry(r):
     # import pdb; pdb.set_trace()
     svcreg = rethinkstuff.ServiceRegistry(r)
     assert svcreg.available_service("yes-such-role") == None
@@ -104,30 +105,37 @@ def test_svcreg(r):
         "load": 200.0,
         "heartbeat_interval": 0.2,
     }
-    svc0["id"] = svcreg.heartbeat(svc0)
-    svc1["id"] = svcreg.heartbeat(svc1)
-    assert svc0["id"] is not None
-    assert svc1["id"] is not None
+    svc0 = svcreg.heartbeat(svc0)
+    svc1 = svcreg.heartbeat(svc1)
+    assert "id" in svc0
+    assert "id" in svc1
     assert svc0["id"] != svc1["id"]
+
+    assert svc0["host"] == socket.gethostname()
+    assert svc1["host"] == socket.gethostname()
+
+    assert "last_heartbeat" in svc0
+    assert "last_heartbeat" in svc1
+
     time.sleep(0.1)
     assert svcreg.available_service("no-such-role") == None
     assert svcreg.available_service("yes-such-role")["id"] == svc0["id"]
 
     svc1["load"] = 50.0
-    svcreg.heartbeat(svc1)
+    svc1 = svcreg.heartbeat(svc1)
     time.sleep(0.1)
     assert svcreg.available_service("no-such-role") == None
     assert svcreg.available_service("yes-such-role")["id"] == svc1["id"]
 
     svc1["load"] = 200.0
-    svcreg.heartbeat(svc1)
+    svc1 = svcreg.heartbeat(svc1)
     time.sleep(0.1)
     assert svcreg.available_service("no-such-role") == None
     assert svcreg.available_service("yes-such-role")["id"] == svc0["id"]
-    svcreg.heartbeat(svc1)
+    svc1 = svcreg.heartbeat(svc1)
     time.sleep(0.1)
 
-    svcreg.heartbeat(svc1)
+    svc1 = svcreg.heartbeat(svc1)
     time.sleep(0.4)
     assert svcreg.available_service("no-such-role") == None
     assert svcreg.available_service("yes-such-role")["id"] == svc1["id"]

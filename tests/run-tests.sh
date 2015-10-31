@@ -14,6 +14,6 @@ do
                         && sudo -u $user bash -x -c 'cd /rethinkstuff \
 				&& virtualenv -p $python /tmp/venv \
 				&& source /tmp/venv/bin/activate \
-				&& pip install pytest . \
-				&& py.test -v -s tests'"
+				&& PYTHONDONTWRITEBYTECODE=1 pip install pytest . \
+				&& PYTHONDONTWRITEBYTECODE=1 py.test -v -s tests'"
 done

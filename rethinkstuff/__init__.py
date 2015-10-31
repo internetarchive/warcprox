@@ -135,11 +135,9 @@ class ServiceRegistry(object):
         status_info['last_heartbeat'] = r.now()
         if not 'host' in status_info:
             status_info['host'] = socket.gethostname()
-        result = self.r.table('services').insert(status_info, conflict='replace').run()
-        if 'generated_keys' in result:
-            return result['generated_keys'][0]
-        else:
-            return status_info['id']
+        result = self.r.table('services').insert(status_info, conflict='replace', return_changes=True).run()
+        # XXX check 
+        return result['changes'][0]['new_val']
 
     def unregister(self, id):
         result = self.r.table('services').get(id).delete().run()
