@@ -92,7 +92,10 @@ def dump_state(signum=None, frame=None):
     state_strs = []
 
     for th in threading.enumerate():
-        state_strs.append(str(th))
+        try:
+            state_strs.append(str(th))
+        except AssertionError:
+            state_strs.append("<n/a:AssertionError>")
         stack = traceback.format_stack(sys._current_frames()[th.ident])
         state_strs.append("".join(stack))
 
@@ -163,7 +166,12 @@ def init_controller(args):
             recorded_url_q=recorded_url_q, writer_pool=writer_pool,
             dedup_db=dedup_db, listeners=listeners, options=options)
 
-    controller = warcprox.controller.WarcproxController(proxy, warc_writer_thread, playback_proxy, options=options)
+    if args.rethinkdb_servers:
+        svcreg = rethinkstuff.ServiceRegistry(r)
+
+    controller = warcprox.controller.WarcproxController(proxy,
+        warc_writer_thread, playback_proxy, service_registry=svcreg,
+        options=options)
 
     signal.signal(signal.SIGTERM, lambda a,b: controller.stop.set())
     signal.signal(signal.SIGINT, lambda a,b: controller.stop.set())
