@@ -220,7 +220,24 @@ def stats_db(request, rethinkdb_servers):
     return sdb
 
 @pytest.fixture(scope="module")
-def warcprox_(request, captures_db, dedup_db, stats_db):
+def service_registry(request, rethinkdb_servers):
+    if rethinkdb_servers:
+        servers = rethinkdb_servers.split(",")
+        db = 'warcprox_test_services_' + "".join(random.sample("abcdefghijklmnopqrstuvwxyz0123456789_",8))
+        r = rethinkstuff.Rethinker(servers, db)
+
+        def fin():
+            logging.info('dropping rethinkdb database {}'.format(db))
+            result = r.db_drop(db).run()
+            logging.info("result=%s", result)
+        request.addfinalizer(fin)
+
+        return rethinkstuff.ServiceRegistry(r)
+    else:
+        return None
+
+@pytest.fixture(scope="module")
+def warcprox_(request, captures_db, dedup_db, stats_db, service_registry):
     f = tempfile.NamedTemporaryFile(prefix='warcprox-test-ca-', suffix='.pem', delete=True)
     f.close() # delete it, or CertificateAuthority will try to read it
     ca_file = f.name
@@ -249,7 +266,9 @@ def warcprox_(request, captures_db, dedup_db, stats_db):
             recorded_url_q=recorded_url_q, writer_pool=writer_pool,
             dedup_db=dedup_db, listeners=[captures_db or dedup_db, playback_index_db, stats_db])
 
-    warcprox_ = warcprox.controller.WarcproxController(proxy, warc_writer_thread, playback_proxy, options)
+    warcprox_ = warcprox.controller.WarcproxController(proxy=proxy,
+        warc_writer_thread=warc_writer_thread, playback_proxy=playback_proxy,
+        service_registry=service_registry, options=options)
     logging.info('starting warcprox')
     warcprox_thread = threading.Thread(name='WarcproxThread',
             target=warcprox_.run_until_shutdown)
