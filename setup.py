@@ -17,7 +17,7 @@ class PyTest(TestCommand):
         errno = pytest.main(self.test_args)
         sys.exit(errno)
 
-deps = ['certauth>=1.1.0', 'warctools', 'kafka-python', 'surt', 'rethinkstuff']
+deps = ['certauth>=1.1.0', 'warctools', 'kafka-python', 'surt==0.3b2', 'rethinkstuff']
 try:
     import concurrent.futures
 except:
