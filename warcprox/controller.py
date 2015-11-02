@@ -115,6 +115,7 @@ class WarcproxController(object):
             status_info = {
                 'role': 'warcprox',
                 'heartbeat_interval': self.HEARTBEAT_INTERVAL,
+                'port': self.options.port,
             }
         status_info['load'] = self.proxy.recorded_url_q.qsize() / (self.proxy.recorded_url_q.maxsize or 100)
 
@@ -139,8 +140,18 @@ class WarcproxController(object):
         last_mem_dbg = datetime.datetime.utcfromtimestamp(0)
 
         try:
+            utc = datetime.timezone.utc
+        except AttributeError:
+            # python2 :-\
+            class UTC(datetime.tzinfo):
+                def tzname(self, dt): return "UTC+00:00"
+                def dst(self, dt): return datetime.timedelta(0)
+                def utcoffset(self, dt): return datetime.timedelta(0)
+            utc = UTC()
+
+        try:
             while not self.stop.is_set():
-                if not hasattr(self, "status_info") or (datetime.datetime.now(datetime.timezone.utc) - self.status_info["last_heartbeat"]).total_seconds() > self.HEARTBEAT_INTERVAL:
+                if self.service_registry and (not hasattr(self, "status_info") or (datetime.datetime.now(utc) - self.status_info["last_heartbeat"]).total_seconds() > self.HEARTBEAT_INTERVAL):
                     self._service_heartbeat()
 
                 if (datetime.datetime.utcnow() - last_mem_dbg).total_seconds() > 60:
