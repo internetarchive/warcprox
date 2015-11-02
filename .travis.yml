@@ -20,5 +20,5 @@ addons:
 before_script:
     - pip install . pytest requests
 
-script: py.test warcprox
+script: py.test -v -s tests
 
