@@ -168,6 +168,8 @@ def init_controller(args):
 
     if args.rethinkdb_servers:
         svcreg = rethinkstuff.ServiceRegistry(r)
+    else:
+        svcreg = None
 
     controller = warcprox.controller.WarcproxController(proxy,
         warc_writer_thread, playback_proxy, service_registry=svcreg,
