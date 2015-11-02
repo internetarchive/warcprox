@@ -1,18 +1,20 @@
 language: python
-
 python:
     - 3.5
     - 3.4
     - 2.7
     - nightly
-    - pypy
-    - pypy3
+    # - pypy
+    # - pypy3
 
 addons:
     apt:
         packages:
             - python-gdbm
             - python3-gdbm
+
+services:
+    - docker
 
 before_install:
     - sudo service docker restart ; sleep 10  # https://github.com/travis-ci/travis-ci/issues/4778
