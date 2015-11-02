@@ -7,6 +7,7 @@ import pytest
 import rethinkdb
 import time
 import socket
+import os
 
 logging.basicConfig(stream=sys.stderr, level=logging.INFO,
         format="%(asctime)s %(process)d %(levelname)s %(threadName)s %(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s")
@@ -92,7 +93,6 @@ def test_slice(r, my_table):
     assert n == 5
 
 def test_service_registry(r):
-    # import pdb; pdb.set_trace()
     svcreg = rethinkstuff.ServiceRegistry(r)
     assert svcreg.available_service("yes-such-role") == None
     svc0 = {
@@ -114,6 +114,12 @@ def test_service_registry(r):
     assert svc0["host"] == socket.gethostname()
     assert svc1["host"] == socket.gethostname()
 
+    assert "pid" in svc0
+    assert "pid" in svc1
+    assert svc0["pid"] == os.getpid()
+    assert svc1["pid"] == os.getpid()
+    assert "first_heartbeat" in svc0
+    assert "first_heartbeat" in svc1
     assert "last_heartbeat" in svc0
     assert "last_heartbeat" in svc1
 
