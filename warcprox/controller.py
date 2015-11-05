@@ -117,7 +117,7 @@ class WarcproxController(object):
                 'heartbeat_interval': self.HEARTBEAT_INTERVAL,
                 'port': self.options.port,
             }
-        status_info['load'] = self.proxy.recorded_url_q.qsize() / (self.proxy.recorded_url_q.maxsize or 100)
+        status_info['load'] = 1.0 * self.proxy.recorded_url_q.qsize() / (self.proxy.recorded_url_q.maxsize or 100)
 
         self.status_info = self.service_registry.heartbeat(status_info)
         self.logger.debug("status in service registry: %s", self.status_info)
@@ -154,9 +154,9 @@ class WarcproxController(object):
                 if self.service_registry and (not hasattr(self, "status_info") or (datetime.datetime.now(utc) - self.status_info["last_heartbeat"]).total_seconds() > self.HEARTBEAT_INTERVAL):
                     self._service_heartbeat()
 
-                if (datetime.datetime.utcnow() - last_mem_dbg).total_seconds() > 60:
-                    self.debug_mem()
-                    last_mem_dbg = datetime.datetime.utcnow()
+                # if (datetime.datetime.utcnow() - last_mem_dbg).total_seconds() > 60:
+                #     self.debug_mem()
+                #     last_mem_dbg = datetime.datetime.utcnow()
 
                 time.sleep(0.5)
         except:
@@ -167,9 +167,6 @@ class WarcproxController(object):
             self.proxy.shutdown()
             self.proxy.server_close()
 
-            if self.warc_writer_thread.dedup_db is not None:
-                self.warc_writer_thread.dedup_db.close()
-
             if self.playback_proxy is not None:
                 self.playback_proxy.shutdown()
                 self.playback_proxy.server_close()
@@ -178,6 +175,10 @@ class WarcproxController(object):
 
             # wait for threads to finish
             self.warc_writer_thread.join()
+
+            if self.warc_writer_thread.dedup_db is not None:
+                self.warc_writer_thread.dedup_db.close()
+
             proxy_thread.join()
             if self.playback_proxy is not None:
                 playback_proxy_thread.join()
