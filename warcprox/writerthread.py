@@ -41,7 +41,7 @@ class WarcWriterThread(threading.Thread):
     def _run(self):
         while not self.stop.is_set():
             try:
-                self.setName('WarcWriterThread(tid={})'.format(warcprox.gettid()))
+                self.name = 'WarcWriterThread(tid={})'.format(warcprox.gettid())
                 while True:
                     try:
                         recorded_url = self.recorded_url_q.get(block=True, timeout=0.5)

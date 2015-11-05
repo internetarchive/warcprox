@@ -15,11 +15,14 @@ except ImportError:
 import socket
 import logging
 import ssl
+import warcprox
+import threading
 
 class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
     logger = logging.getLogger("warcprox.mitmproxy.MitmProxyHandler")
 
     def __init__(self, request, client_address, server):
+        threading.current_thread.name = 'MitmProxyHandler-thread(tid={})'.format(warcprox.gettid())
         self.is_connect = False
         self._headers_buffer = []
         http_server.BaseHTTPRequestHandler.__init__(self, request, client_address, server)
