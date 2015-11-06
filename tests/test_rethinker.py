@@ -151,3 +151,16 @@ def test_service_registry(r):
     assert svcreg.available_service("no-such-role") == None
     assert svcreg.available_service("yes-such-role") == None
 
+    svc0 = {
+        "role": "yes-such-role",
+        "load": 100.0,
+        "heartbeat_interval": 0.2,
+    }
+    svc1 = {
+        "role": "yes-such-role",
+        "load": 200.0,
+        "heartbeat_interval": 0.2,
+    }
+    svc0 = svcreg.heartbeat(svc0)
+    svc1 = svcreg.heartbeat(svc1)
+    assert len(svcreg.available_services("yes-such-role")) == 2

@@ -161,3 +161,11 @@ class ServiceRegistry(object):
         except r.ReqlNonExistenceError:
             return None
 
+    def available_services(self, role):
+        try:
+            result = self.r.table('services').filter({"role":role}).filter(
+                lambda svc: r.now().sub(svc["last_heartbeat"]) < 3 * svc["heartbeat_interval"]   #.default(20.0)
+            ).order_by("load").run()
+            return result
+        except r.ReqlNonExistenceError:
+            return []
