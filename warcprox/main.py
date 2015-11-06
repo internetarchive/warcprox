@@ -80,6 +80,8 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
             default=None, help='kafka capture feed topic')
     arg_parser.add_argument('--queue-size', dest='queue_size', default=1000,
             help=argparse.SUPPRESS)
+    arg_parser.add_argument('--profile', action='store_true', default=False,
+            help=argparse.SUPPRESS)
     arg_parser.add_argument('--version', action='version',
             version="warcprox {}".format(warcprox.__version__))
     arg_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true')

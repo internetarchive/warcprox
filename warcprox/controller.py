@@ -44,9 +44,6 @@ class WarcproxController(object):
 
     def debug_mem(self):
         self.logger.info("self.proxy.recorded_url_q.qsize()=%s", self.proxy.recorded_url_q.qsize())
-        if self.proxy.stats_db and hasattr(self.proxy.stats_db, "_executor"):
-            self.logger.info("self.proxy.stats_db._executor._work_queue.qsize()=%s",
-                    self.proxy.stats_db._executor._work_queue.qsize())
         with open("/proc/self/status") as f:
             for line in f:
                 fields = line.split()
@@ -118,6 +115,7 @@ class WarcproxController(object):
                 'port': self.options.port,
             }
         status_info['load'] = 1.0 * self.proxy.recorded_url_q.qsize() / (self.proxy.recorded_url_q.maxsize or 100)
+        status_info['queue_size'] = self.proxy.recorded_url_q.qsize()
 
         self.status_info = self.service_registry.heartbeat(status_info)
         self.logger.debug("status in service registry: %s", self.status_info)
@@ -154,9 +152,9 @@ class WarcproxController(object):
                 if self.service_registry and (not hasattr(self, "status_info") or (datetime.datetime.now(utc) - self.status_info["last_heartbeat"]).total_seconds() > self.HEARTBEAT_INTERVAL):
                     self._service_heartbeat()
 
-                # if (datetime.datetime.utcnow() - last_mem_dbg).total_seconds() > 60:
-                #     self.debug_mem()
-                #     last_mem_dbg = datetime.datetime.utcnow()
+                if self.options.profile and (datetime.datetime.utcnow() - last_mem_dbg).total_seconds() > 60:
+                    self.debug_mem()
+                    last_mem_dbg = datetime.datetime.utcnow()
 
                 time.sleep(0.5)
         except:
@@ -176,10 +174,15 @@ class WarcproxController(object):
             # wait for threads to finish
             self.warc_writer_thread.join()
 
-            if self.warc_writer_thread.dedup_db is not None:
+            if self.proxy.stats_db:
+                self.proxy.stats_db.close()
+            if self.warc_writer_thread.dedup_db:
                 self.warc_writer_thread.dedup_db.close()
 
             proxy_thread.join()
             if self.playback_proxy is not None:
                 playback_proxy_thread.join()
+
+            if self.service_registry and hasattr(self, "status_info"):
+                self.service_registry.unregister(self.status_info["id"])
 

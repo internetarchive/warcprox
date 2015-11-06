@@ -16,6 +16,7 @@ import random
 import warcprox
 import threading
 import rethinkdb as r
+import datetime
 
 def _empty_bucket(bucket):
     return {
@@ -160,7 +161,7 @@ class RethinkStatsDb:
 
         if not self._stop.is_set():
             self._timer = threading.Timer(0.5, self._update_batch)
-            self._timer.name = "RethinkCaptures-batch-insert-timer"
+            self._timer.name = "RethinkStats-batch-update-timer-%s" % datetime.datetime.utcnow().isoformat()
             self._timer.start()
         else:
             self.logger.info("finished")

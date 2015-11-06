@@ -36,7 +36,10 @@ class WarcWriterThread(threading.Thread):
         self.idle = None
 
     def run(self):
-        cProfile.runctx('self._run()', globals(), locals(), sort='cumulative')
+        if self.options.profile:
+            cProfile.runctx('self._run()', globals(), locals(), sort='cumulative')
+        else:
+            self._run()
 
     def _run(self):
         while not self.stop.is_set():
@@ -44,6 +47,11 @@ class WarcWriterThread(threading.Thread):
                 self.name = 'WarcWriterThread(tid={})'.format(warcprox.gettid())
                 while True:
                     try:
+                        if self.stop.is_set():
+                            qsize = self.recorded_url_q.qsize()
+                            if qsize % 50 == 0:
+                                self.logger.info("%s urls left to write", qsize)
+
                         recorded_url = self.recorded_url_q.get(block=True, timeout=0.5)
                         self.idle = None
                         if self.dedup_db:

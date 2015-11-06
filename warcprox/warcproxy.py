@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# vim:set sw=4 et:
 #
 """
 WARC writing MITM HTTP/S proxy
@@ -151,8 +150,8 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 key, limit = item
                 bucket0, bucket1, bucket2 = key.rsplit(".", 2)
                 value = self.server.stats_db.value(bucket0, bucket1, bucket2)
-                # self.logger.debug("warcprox_meta['limits']=%s stats['%s']=%s recorded_url_q.qsize()=%s", 
-                #         warcprox_meta['limits'], key, value, self.server.recorded_url_q.qsize())
+                self.logger.debug("warcprox_meta['limits']=%s stats['%s']=%s recorded_url_q.qsize()=%s", 
+                        warcprox_meta['limits'], key, value, self.server.recorded_url_q.qsize())
                 if value and value >= limit:
                     body = "request rejected by warcprox: reached limit {}={}\n".format(key, limit).encode("utf-8")
                     self.send_response(420, "Reached limit")
@@ -369,7 +368,7 @@ class SingleThreadedWarcProxy(http_server.HTTPServer):
         if recorded_url_q is not None:
             self.recorded_url_q = recorded_url_q
         else:
-            self.recorded_url_q = queue.Queue()
+            self.recorded_url_q = queue.Queue(maxsize=options.queue_size or 1000)
 
         self.stats_db = stats_db
 
@@ -383,6 +382,8 @@ class SingleThreadedWarcProxy(http_server.HTTPServer):
         self.logger.info('WarcProxy shutting down')
         http_server.HTTPServer.server_close(self)
 
+    def handle_error(self, request, client_address):
+        self.logger.warn("exception processing request %s from %s", request, client_address, exc_info=True)
 
 class WarcProxy(socketserver.ThreadingMixIn, SingleThreadedWarcProxy):
     pass
