@@ -22,7 +22,7 @@ def gettid():
         tid = libc.syscall(SYS_gettid)
         return tid
     except:
-        logging.warn("gettid failed?", exc_info=True)
+        return "n/a"
 
 import warcprox.controller as controller
 import warcprox.playback as playback
