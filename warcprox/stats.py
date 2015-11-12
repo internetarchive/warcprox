@@ -160,7 +160,7 @@ class RethinkStatsDb:
                 self._batch = {}
 
         if not self._stop.is_set():
-            self._timer = threading.Timer(0.5, self._update_batch)
+            self._timer = threading.Timer(2.0, self._update_batch)
             self._timer.name = "RethinkStats-batch-update-timer-%s" % datetime.datetime.utcnow().isoformat()
             self._timer.start()
         else:
