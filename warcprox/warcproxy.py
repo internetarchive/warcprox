@@ -35,6 +35,7 @@ from hanzo import warctools
 from certauth.certauth import CertificateAuthority
 import warcprox
 import datetime
+import concurrent.futures
 
 class ProxyingRecorder(object):
     """
@@ -294,10 +295,6 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
             self.logger.error("uncaught exception in do_WARCPROX_WRITE_RECORD", exc_info=True)
             raise
 
-    def log_error(self, fmt, *args):
-        # logging better handled elsewhere?
-        pass
-
     def log_message(self, fmt, *args):
         # logging better handled elsewhere?
         pass
@@ -385,5 +382,14 @@ class SingleThreadedWarcProxy(http_server.HTTPServer):
     def handle_error(self, request, client_address):
         self.logger.warn("exception processing request %s from %s", request, client_address, exc_info=True)
 
-class WarcProxy(socketserver.ThreadingMixIn, SingleThreadedWarcProxy):
-    pass
+class PooledMixIn(socketserver.ThreadingMixIn):
+    def process_request(self, request, client_address):
+        if hasattr(self, 'pool') and self.pool:
+            self.pool.submit(self.process_request_thread, request, client_address)
+        else:
+            socketserver.ThreadingMixIn.process_request(self, request, client_address)
+
+class WarcProxy(PooledMixIn, SingleThreadedWarcProxy):
+    def __init__(self, *args, **kwargs):
+        SingleThreadedWarcProxy.__init__(self, *args, **kwargs)
+        self.pool = concurrent.futures.ThreadPoolExecutor(max_workers=self.options.max_threads or 500)

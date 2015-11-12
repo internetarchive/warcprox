@@ -1,5 +1,3 @@
-# vim:set sw=4 et:
-
 from __future__ import absolute_import
 
 try:
@@ -17,14 +15,16 @@ import logging
 import ssl
 import warcprox
 import threading
+import datetime
 
 class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
     logger = logging.getLogger("warcprox.mitmproxy.MitmProxyHandler")
 
     def __init__(self, request, client_address, server):
-        threading.current_thread.name = 'MitmProxyHandler-thread(tid={})'.format(warcprox.gettid())
+        threading.current_thread().name = 'MitmProxyHandler(tid={},started={},client={}:{})'.format(warcprox.gettid(), datetime.datetime.utcnow().isoformat(), client_address[0], client_address[1])
         self.is_connect = False
         self._headers_buffer = []
+        request.settimeout(60)  # XXX what value should this have?
         http_server.BaseHTTPRequestHandler.__init__(self, request, client_address, server)
 
     def _determine_host_port(self):
@@ -52,7 +52,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
     def _connect_to_host(self):
         # Connect to destination
         self._proxy_sock = socket.socket()
-        self._proxy_sock.settimeout(60)
+        self._proxy_sock.settimeout(60)  # XXX what value should this have?
         self._proxy_sock.connect((self.hostname, int(self.port)))
 
         # Wrap socket if SSL is required
@@ -146,4 +146,6 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         if item.startswith('do_'):
             return self.do_COMMAND
 
+    def log_error(self, fmt, *args):
+        self.logger.warn(fmt, *args)
 
