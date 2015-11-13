@@ -564,7 +564,7 @@ def test_limits(http_daemon, warcprox_, archiving_proxies):
     time.sleep(0.5)
     while not warcprox_.warc_writer_thread.idle:
         time.sleep(0.5)
-    time.sleep(0.5)
+    time.sleep(2.5)
 
     response = requests.get(url, proxies=archiving_proxies, headers=headers, stream=True)
     assert response.status_code == 420
