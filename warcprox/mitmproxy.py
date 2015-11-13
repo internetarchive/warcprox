@@ -16,6 +16,7 @@ import ssl
 import warcprox
 import threading
 import datetime
+import socks
 
 class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
     logger = logging.getLogger("warcprox.mitmproxy.MitmProxyHandler")
@@ -51,7 +52,18 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
 
     def _connect_to_host(self):
         # Connect to destination
-        self._proxy_sock = socket.socket()
+        if self.onion_tor_socks_proxy_host and self.hostname.lower().endswith('.onion'):
+            self.logger.info("using tor socks proxy at %s:%s to connect to %s",
+                    self.onion_tor_socks_proxy_host,
+                    self.onion_tor_socks_proxy_port or 1080,
+                    self.hostname)
+            self._proxy_sock = socks.socksocket()
+            self._proxy_sock.set_proxy(socks.SOCKS5,
+                addr=self.onion_tor_socks_proxy_host,
+                port=self.onion_tor_socks_proxy_port, rdns=True)
+        else:
+            self._proxy_sock = socket.socket()
+
         self._proxy_sock.settimeout(60)  # XXX what value should this have?
         self._proxy_sock.connect((self.hostname, int(self.port)))
 

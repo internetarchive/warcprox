@@ -350,6 +350,16 @@ class SingleThreadedWarcProxy(http_server.HTTPServer):
 
     def __init__(self, ca=None, recorded_url_q=None, stats_db=None, options=warcprox.Options()):
         server_address = (options.address or 'localhost', options.port if options.port is not None else 8000)
+
+        if options.onion_tor_socks_proxy:
+            try:
+                host, port = options.onion_tor_socks_proxy.split(':')
+                WarcProxyHandler.onion_tor_socks_proxy_host = host
+                WarcProxyHandler.onion_tor_socks_proxy_port = int(port)
+            except ValueError:
+                WarcProxyHandler.onion_tor_socks_proxy_host = options.onion_tor_socks_proxy
+                WarcProxyHandler.onion_tor_socks_proxy_port = None
+
         http_server.HTTPServer.__init__(self, server_address, WarcProxyHandler, bind_and_activate=True)
 
         self.digest_algorithm = options.digest_algorithm or 'sha1'

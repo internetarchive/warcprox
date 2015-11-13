@@ -20,3 +20,5 @@ RUN mkdir -vp /etc/service/rethinkdb \
 RUN apt-get -y install python-virtualenv git
 RUN apt-get -y install python-gdbm python3-gdbm libpython2.7-dev libpython3.4-dev libffi-dev libssl-dev
 RUN pip install devpi-client
+RUN apt-get -y install tor   # starts tor socks proxy on port 9050
+

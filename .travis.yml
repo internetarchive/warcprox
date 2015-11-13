@@ -12,6 +12,7 @@ addons:
         packages:
             - python-gdbm
             - python3-gdbm
+            - tor
 
 services:
     - docker

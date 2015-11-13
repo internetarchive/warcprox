@@ -43,6 +43,8 @@ def parse_args():
     arg_parser.add_argument('--certs-dir', dest='certs_dir',
         default='./{0}-warcprox-ca'.format(socket.gethostname()),
         help='where to store and load generated certificates')
+    arg_parser.add_argument('--onion-tor-socks-proxy', dest='onion_tor_socks_proxy',
+        default=None, help='host:port of tor socks proxy, used only to connect to .onion sites')
     arg_parser.add_argument('--version', action='version',
         version="warcprox {}".format(warcprox.__version__))
     arg_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true')

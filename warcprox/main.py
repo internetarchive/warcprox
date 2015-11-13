@@ -84,6 +84,8 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
             help=argparse.SUPPRESS)
     arg_parser.add_argument('--profile', action='store_true', default=False,
             help=argparse.SUPPRESS)
+    arg_parser.add_argument('--onion-tor-socks-proxy', dest='onion_tor_socks_proxy',
+            default=None, help='host:port of tor socks proxy, used only to connect to .onion sites')
     arg_parser.add_argument('--version', action='version',
             version="warcprox {}".format(warcprox.__version__))
     arg_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true')

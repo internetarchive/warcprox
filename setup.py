@@ -3,7 +3,7 @@
 
 from setuptools.command.test import test as TestCommand
 import sys
-import setuptools 
+import setuptools
 
 # special class needs to be added to support the pytest written dump-anydbm tests
 class PyTest(TestCommand):
@@ -17,7 +17,14 @@ class PyTest(TestCommand):
         errno = pytest.main(self.test_args)
         sys.exit(errno)
 
-deps = ['certauth>=1.1.0', 'warctools', 'kafka-python', 'surt==0.3b2', 'rethinkstuff']
+deps = [
+    'certauth>=1.1.0',
+    'warctools',
+    'kafka-python',
+    'surt==0.3b2',
+    'rethinkstuff',
+    'PySocks',
+]
 try:
     import concurrent.futures
 except:

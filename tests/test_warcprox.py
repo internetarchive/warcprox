@@ -272,7 +272,8 @@ def warcprox_(request, captures_db, dedup_db, stats_db, service_registry):
 
     recorded_url_q = queue.Queue()
 
-    options = warcprox.Options(port=0, playback_port=0)
+    options = warcprox.Options(port=0, playback_port=0,
+            onion_tor_socks_proxy='localhost:9050')
     proxy = warcprox.warcproxy.WarcProxy(ca=ca, recorded_url_q=recorded_url_q,
             stats_db=stats_db, options=options)
     options.port = proxy.server_port
@@ -695,6 +696,18 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
 
     finally:
         fh.close()
+
+# XXX this test relies on a tor proxy running at localhost:9050 with a working
+# connection to the internet, and relies on a third party site (facebook) being
+# up and behaving a certain way
+def test_tor_onion(archiving_proxies):
+    response = requests.get('http://www.facebookcorewwwi.onion/',
+        proxies=archiving_proxies, verify=False, allow_redirects=False)
+    assert response.status_code == 302
+
+    response = requests.get('https://www.facebookcorewwwi.onion/',
+        proxies=archiving_proxies, verify=False, allow_redirects=False)
+    assert response.status_code == 200
 
 if __name__ == '__main__':
     pytest.main()
