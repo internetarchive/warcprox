@@ -13,7 +13,11 @@ def utcnow():
     requires timezone-aware datetime for its native time type, and
     unfortunately datetime.datetime.utcnow() is not timezone-aware. Also python
     2 doesn't come with a timezone implementation."""
-    return datetime.datetime.now(r.make_timezone("00:00"))
+    try:
+        utc = datetime.timezone.utc
+    except:
+        utc = r.make_timezone("00:00")
+    return datetime.datetime.now(utc)
 
 class RethinkerWrapper(object):
     logger = logging.getLogger('rethinkstuff.RethinkerWrapper')
