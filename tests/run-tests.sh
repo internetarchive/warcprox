@@ -1,19 +1,18 @@
 #!/bin/bash
 
-script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+set -e
 
-docker build -t internetarchive/rethinkdb $script_dir || exit 1
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-uid=$(id -u)
-user=$(id -un)
+docker build -t internetarchive/rethinkdb $script_dir
 
 for python in python2.7 python3.4
 do
-	docker run --rm -it --volume="$script_dir/..:/rethinkstuff" internetarchive/rethinkdb /sbin/my_init -- \
-                bash -x -c "adduser --gecos=$user --disabled-password --quiet --uid=$uid $user \
-                        && sudo PYTHONDONTWRITEBYTECODE=1 -u $user bash -x -c 'cd /rethinkstuff \
-				&& virtualenv -p $python /tmp/venv \
-				&& source /tmp/venv/bin/activate \
-				&& pip install pytest . \
-				&& py.test -v -s tests'"
+    docker run --rm -it --volume="$script_dir/..:/rethinkstuff" internetarchive/rethinkdb /sbin/my_init -- \
+        bash -x -c "ls -l /rethinkstuff ; cd /tmp && git clone /rethinkstuff \
+                && cd /tmp/rethinkstuff \
+                && virtualenv -p $python /tmp/venv \
+                && source /tmp/venv/bin/activate \
+                && pip install pytest . \
+                && py.test -v -s tests"
 done
