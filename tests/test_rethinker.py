@@ -8,6 +8,7 @@ import rethinkdb
 import time
 import socket
 import os
+import datetime
 
 logging.basicConfig(stream=sys.stderr, level=logging.INFO,
         format="%(asctime)s %(process)d %(levelname)s %(threadName)s %(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s")
@@ -164,3 +165,15 @@ def test_service_registry(r):
     svc0 = svcreg.heartbeat(svc0)
     svc1 = svcreg.heartbeat(svc1)
     assert len(svcreg.available_services("yes-such-role")) == 2
+
+def test_utcnow(r):
+    now_notz = datetime.datetime.utcnow()  # has no timezone :(
+    assert not now_notz.tzinfo
+
+    now_tz = r.utcnow() # solution to that problem
+    assert now_tz.tzinfo
+    assert now_tz.tzinfo.delta == datetime.timedelta(0)
+
+    # XXX should really run this test in non-utc timezone environment
+    assert now_tz.timestamp() - now_notz.timestamp() < 0.1
+

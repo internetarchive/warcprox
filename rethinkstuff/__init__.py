@@ -6,6 +6,14 @@ import time
 import types
 import socket
 import os
+import datetime
+
+def utcnow():
+    """Convenience function to get timezone-aware UTC datetime. RethinkDB
+    requires timezone-aware datetime for its native time type, and
+    unfortunately datetime.datetime.utcnow() is not timezone-aware. Also python
+    2 doesn't come with a timezone implementation."""
+    return datetime.datetime.now(r.make_timezone("00:00"))
 
 class RethinkerWrapper(object):
     logger = logging.getLogger('rethinkstuff.RethinkerWrapper')
@@ -144,13 +152,13 @@ class ServiceRegistry(object):
         if not 'pid' in status_info:
             status_info['pid'] = os.getpid()
         result = self.r.table('services').insert(status_info, conflict='replace', return_changes=True).run()
-        # XXX check 
+        # XXX check
         return result['changes'][0]['new_val']
 
     def unregister(self, id):
         result = self.r.table('services').get(id).delete().run()
         if result != {'deleted':1,'errors':0,'inserted':0,'replaced':0,'skipped':0,'unchanged':0}:
-            self.logger.warn('unexpected result attempting to delete id=%s from rethinkdb services table: %s', id, result) 
+            self.logger.warn('unexpected result attempting to delete id=%s from rethinkdb services table: %s', id, result)
 
     def available_service(self, role):
         try:
@@ -169,3 +177,4 @@ class ServiceRegistry(object):
             return result
         except r.ReqlNonExistenceError:
             return []
+
