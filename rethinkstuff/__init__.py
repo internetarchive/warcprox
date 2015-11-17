@@ -8,16 +8,17 @@ import socket
 import os
 import datetime
 
+try:
+    UTC = datetime.timezone.utc
+except:
+    UTC = r.make_timezone("00:00")
+
 def utcnow():
     """Convenience function to get timezone-aware UTC datetime. RethinkDB
     requires timezone-aware datetime for its native time type, and
     unfortunately datetime.datetime.utcnow() is not timezone-aware. Also python
     2 doesn't come with a timezone implementation."""
-    try:
-        utc = datetime.timezone.utc
-    except:
-        utc = r.make_timezone("00:00")
-    return datetime.datetime.now(utc)
+    return datetime.datetime.now(UTC)
 
 class RethinkerWrapper(object):
     logger = logging.getLogger('rethinkstuff.RethinkerWrapper')
