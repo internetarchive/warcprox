@@ -10,6 +10,7 @@ import os
 import hashlib
 import threading
 import datetime
+import rethinkstuff
 
 class RethinkCaptures:
     """Inserts in batches every 0.5 seconds"""
@@ -97,8 +98,7 @@ class RethinkCaptures:
             "id": "{} {}".format(canon_surt[:20], records[0].id.decode("utf-8")[10:-1]),
             "abbr_canon_surt": canon_surt[:150],
             "canon_surt": canon_surt,
-            # "timestamp": re.sub(r"[^0-9]", "", records[0].date.decode("utf-8")),
-            "timestamp": records[0].date.decode("utf-8"),
+            "timestamp": recorded_url.timestamp.replace(tzinfo=rethinkstuff.UTC),
             "url": recorded_url.url.decode("utf-8"),
             "offset": records[0].offset,
             "filename": os.path.basename(records[0].warc_filename),
@@ -140,7 +140,11 @@ class RethinkCapturesDedup:
             raw_digest = base64.b16decode(value_str, casefold=True)
         entry = self.captures_db.find_response_by_digest(algo, raw_digest, bucket)
         if entry:
-            dedup_info = {"url":entry["url"].encode("utf-8"), "date":entry["timestamp"].encode("utf-8"), "id":entry["warc_id"].encode("utf-8")}
+            dedup_info = {
+                "url": entry["url"].encode("utf-8"),
+                "date": entry["timestamp"].strftime("%Y-%m-%dT%H:%M:%SZ").encode("utf-8"),
+                "id": entry["warc_id"].encode("utf-8")
+            }
             return dedup_info
         else:
             return None

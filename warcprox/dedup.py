@@ -64,8 +64,8 @@ class DedupDb(object):
     def notify(self, recorded_url, records):
         if (records[0].get_header(warctools.WarcRecord.TYPE) == warctools.WarcRecord.RESPONSE
                 and recorded_url.response_recorder.payload_size() > 0):
-            digest_key = warcprox.digest_str(recorded_url.response_recorder.payload_digest, 
-                    self.options.base32)
+            digest_key = warcprox.digest_str(recorded_url.response_recorder.payload_digest,
+                self.options.base32)
             if recorded_url.warcprox_meta and "captures-bucket" in recorded_url.warcprox_meta:
                 self.save(digest_key, records[0], bucket=recorded_url.warcprox_meta["captures-bucket"])
             else:
@@ -73,8 +73,8 @@ class DedupDb(object):
 
 
 def decorate_with_dedup_info(dedup_db, recorded_url, base32=False):
-    if (recorded_url.response_recorder 
-            and recorded_url.response_recorder.payload_digest 
+    if (recorded_url.response_recorder
+            and recorded_url.response_recorder.payload_digest
             and recorded_url.response_recorder.payload_size() > 0):
         digest_key = warcprox.digest_str(recorded_url.response_recorder.payload_digest, base32)
         if recorded_url.warcprox_meta and "captures-bucket" in recorded_url.warcprox_meta:
@@ -100,7 +100,7 @@ class RethinkDedupDb:
             self.r.db_create(self.r.dbname).run()
         tables = self.r.table_list().run()
         if not self.table in tables:
-            self.logger.info("creating rethinkdb table %s in database %s shards=%s replicas=%s", 
+            self.logger.info("creating rethinkdb table %s in database %s shards=%s replicas=%s",
                              repr(self.table), repr(self.r.dbname), self.shards, self.replicas)
             self.r.table_create(self.table, primary_key="key", shards=self.shards, replicas=self.replicas).run()
 
@@ -135,7 +135,7 @@ class RethinkDedupDb:
     def notify(self, recorded_url, records):
         if (records[0].get_header(warctools.WarcRecord.TYPE) == warctools.WarcRecord.RESPONSE
                 and recorded_url.response_recorder.payload_size() > 0):
-            digest_key = warcprox.digest_str(recorded_url.response_recorder.payload_digest, 
+            digest_key = warcprox.digest_str(recorded_url.response_recorder.payload_digest,
                     self.options.base32)
             if recorded_url.warcprox_meta and "captures-bucket" in recorded_url.warcprox_meta:
                 self.save(digest_key, records[0], bucket=recorded_url.warcprox_meta["captures-bucket"])
