@@ -14,7 +14,7 @@ import hashlib
 import time
 import socket
 import base64
-from datetime import datetime
+from datetime import datetime, timedelta
 import hanzo.httptools
 from hanzo import warctools
 import warcprox
@@ -26,9 +26,10 @@ class WarcWriter:
     def __init__(self, directory='./warcs', rollover_size=1000000000,
             gzip=False, prefix='WARCPROX', port=0,
             digest_algorithm='sha1', base32=False, dedup_db=None,
-            playback_index_db=None):
+            playback_index_db=None, rollover_time=None):
 
         self.rollover_size = rollover_size
+        self.rollover_time = rollover_time
 
         self.gzip = gzip
         self.digest_algorithm = digest_algorithm
@@ -45,6 +46,7 @@ class WarcWriter:
         self._f = None
         self._fpath = None
         self._serial = 0
+        self._current_rollover_time = None
 
         #Map of the the record_url of the first segment of a map to the record id it was assigned.
         self.continuation_map = {}
@@ -209,9 +211,8 @@ class WarcWriter:
         return record
 
 
-    def timestamp17(self):
-        now = datetime.utcnow()
-        return '{:%Y%m%d%H%M%S}{:03d}'.format(now, now.microsecond//1000)
+    def timestamp17(self, when):
+        return '{:%Y%m%d%H%M%S}{:03d}'.format(when, when.microsecond//1000)
 
     def close_writer(self):
         if self._fpath:
@@ -222,6 +223,7 @@ class WarcWriter:
 
             self._fpath = None
             self._f = None
+            self._current_rollover_time = None
 
     def _build_warcinfo_record(self, filename):
         warc_record_date = warctools.warc.warc_datetime_str(datetime.utcnow())
@@ -251,6 +253,12 @@ class WarcWriter:
 
     # <!-- <property name="template" value="${prefix}-${timestamp17}-${serialno}-${heritrix.pid}~${heritrix.hostname}~${heritrix.port}" /> -->
     def _writer(self):
+        #Rollover based on time
+        if self._fpath and self.rollover_time \
+                and datetime.utcnow() - self._current_rollover_time > timedelta(seconds=self.rollover_time):
+            self.logger.debug("Closing WARC because exceeded rollover time.")
+            self.close_writer()
+
         #Rollover based on size
         if self._fpath and os.path.getsize(self._fpath) > self.rollover_size:
             self.logger.debug("Closing WARC because exceeded rollover size.")
@@ -259,7 +267,7 @@ class WarcWriter:
         if self._f == None:
             self._current_rollover_time = datetime.utcnow()
             self._f_finalname = '{}-{}-{:05d}-{}-{}-{}.warc{}'.format(
-                    self.prefix, self.timestamp17(), self._serial, os.getpid(),
+                    self.prefix, self.timestamp17(self._current_rollover_time), self._serial, os.getpid(),
                     socket.gethostname(), self.port, '.gz' if self.gzip else '')
             self._fpath = os.path.sep.join([self.directory, self._f_finalname + '.open'])
 
@@ -325,7 +333,7 @@ class WarcWriterThread(threading.Thread):
     def run(self):
         self.logger.info('WarcWriterThread starting, directory={} gzip={} rollover_size={} rollover_idle_time={} prefix={} port={} rollover_time={}'.format(
                 os.path.abspath(self.warc_writer.directory), self.warc_writer.gzip, self.warc_writer.rollover_size,
-                self.rollover_idle_time, self.warc_writer.prefix, self.warc_writer.port))
+                self.rollover_idle_time, self.warc_writer.prefix, self.warc_writer.port, self.warc_writer.rollover_time))
 
         self._last_sync = self._last_activity = time.time()
 
