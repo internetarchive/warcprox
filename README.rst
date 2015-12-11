@@ -1,3 +1,18 @@
+Streaming warcprox
+------------------
+
+This is a fork of https://github.com/internetarchive/warcprox that is enhanced to
+support streaming by implementing WARC record segmentation.
+
+In particular, it supports:
+
+* Splitting long http responses into multiple WARC records. The size of each record
+  is configurable with --record-size.
+* Rollover of WARCs by time. The duration of each file is configurable with --rollover-time.
+
+The motivation for these enhancements is to support recording of the `Twitter Streaming
+API <https://dev.twitter.com/streaming/overview>`_.
+
 warcprox - WARC writing MITM HTTP/S proxy
 -----------------------------------------
 .. image:: https://travis-ci.org/internetarchive/warcprox.png?branch=master   

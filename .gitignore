@@ -11,3 +11,6 @@ warcs
 build
 dist
 .tox
+ENV/
+.idea/
+warcprox/version.txt

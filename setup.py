@@ -37,7 +37,7 @@ class PyTest(TestCommand):
         errno = pytest.main(self.test_args)
         sys.exit(errno)
 
-setuptools.setup(name='warcprox',
+setuptools.setup(name='warcprox-gwu',
         version=version_bytes.decode('utf-8'),
         description='WARC writing MITM HTTP/S proxy',
         url='https://github.com/internetarchive/warcprox',
