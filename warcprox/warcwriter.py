@@ -46,9 +46,13 @@ class WarcWriter:
         self._fpath = None
         self._serial = 0
 
+        #Map of the the record_url of the first segment of a map to the record id it was assigned.
+        self.continuation_map = {}
+
         if not os.path.exists(directory):
             self.logger.info("warc destination directory {} doesn't exist, creating it".format(directory))
             os.mkdir(directory)
+
 
 
     # returns a tuple (principal_record, request_record) where principal_record is either a response or revisit record
@@ -79,6 +83,41 @@ class WarcWriter:
                     profile=warctools.WarcRecord.PROFILE_IDENTICAL_PAYLOAD_DIGEST,
                     content_type=hanzo.httptools.ResponseMessage.CONTENT_TYPE,
                     remote_ip=recorded_url.remote_ip)
+
+        elif recorded_url.segment_number == 1:
+            self.logger.info("Writing first segment record")
+            #First segment
+            principal_record = self.build_warc_record(
+                    url=recorded_url.url, warc_date=warc_date,
+                    recorder=recorded_url.response_recorder,
+                    warc_type=warctools.WarcRecord.RESPONSE,
+                    content_type=hanzo.httptools.ResponseMessage.CONTENT_TYPE,
+                    remote_ip=recorded_url.remote_ip,
+                    segment_number=recorded_url.segment_number)
+            self.continuation_map[recorded_url] = principal_record.id
+        elif recorded_url.segment_number and recorded_url.is_last_segment:
+            self.logger.info("Writing last segment record")
+            #Last segment
+            principal_record = self.build_warc_record(
+                    url=recorded_url.url, warc_date=warc_date,
+                    recorder=recorded_url.response_recorder,
+                    warc_type="continuation",
+                    content_type=hanzo.httptools.ResponseMessage.CONTENT_TYPE,
+                    remote_ip=recorded_url.remote_ip, segment_number=recorded_url.segment_number,
+                    segment_origin=self.continuation_map[recorded_url.first_segment],
+                    segment_total_length=recorded_url.response_recorder.continuation_payload_size(),
+                    truncated = recorded_url.truncated)
+        elif recorded_url.segment_number:
+            self.logger.info("Writing %s segment record", recorded_url.segment_number)
+            #Middle segment
+            principal_record = self.build_warc_record(
+                    url=recorded_url.url, warc_date=warc_date,
+                    recorder=recorded_url.response_recorder,
+                    warc_type="continuation",
+                    content_type=hanzo.httptools.ResponseMessage.CONTENT_TYPE,
+                    remote_ip=recorded_url.remote_ip, segment_number=recorded_url.segment_number,
+                    segment_origin=self.continuation_map[recorded_url.first_segment],
+                    truncated = recorded_url.truncated)
         else:
             # response record
             principal_record = self.build_warc_record(
@@ -88,12 +127,15 @@ class WarcWriter:
                     content_type=hanzo.httptools.ResponseMessage.CONTENT_TYPE,
                     remote_ip=recorded_url.remote_ip)
 
-        request_record = self.build_warc_record(
-                url=recorded_url.url, warc_date=warc_date,
-                data=recorded_url.request_data,
-                warc_type=warctools.WarcRecord.REQUEST,
-                content_type=hanzo.httptools.RequestMessage.CONTENT_TYPE,
-                concurrent_to=principal_record.id)
+        #Don't write if a continuation record > 1
+        request_record = None
+        if recorded_url.segment_number <= 1:
+            request_record = self.build_warc_record(
+                    url=recorded_url.url, warc_date=warc_date,
+                    data=recorded_url.request_data,
+                    warc_type=warctools.WarcRecord.REQUEST,
+                    content_type=hanzo.httptools.RequestMessage.CONTENT_TYPE,
+                    concurrent_to=principal_record.id)
 
         return principal_record, request_record
 
@@ -105,7 +147,8 @@ class WarcWriter:
     def build_warc_record(self, url, warc_date=None, recorder=None, data=None,
         concurrent_to=None, warc_type=None, content_type=None, remote_ip=None,
         profile=None, refers_to=None, refers_to_target_uri=None,
-        refers_to_date=None, payload_digest=None):
+        refers_to_date=None, payload_digest=None, segment_number=0, segment_origin=None, segment_total_length=0,
+        truncated=False):
 
         if warc_date is None:
             warc_date = warctools.warc.warc_datetime_str(datetime.utcnow())
@@ -134,6 +177,14 @@ class WarcWriter:
             headers.append((warctools.WarcRecord.CONTENT_TYPE, content_type))
         if payload_digest is not None:
             headers.append((warctools.WarcRecord.PAYLOAD_DIGEST, payload_digest))
+        if segment_number:
+            headers.append(("WARC-Segment-Number", str(segment_number).encode(('latin1'))))
+        if segment_origin is not None:
+            headers.append(("WARC-Segment-Origin-ID", segment_origin))
+        if segment_total_length:
+            headers.append(("WARC-Segment-Total-Length", str(segment_total_length).encode('latin1')))
+        if truncated:
+            headers.append(("WARC-Truncated", "unspecified"))
 
         if recorder is not None:
             headers.append((warctools.WarcRecord.CONTENT_LENGTH, str(len(recorder)).encode('latin1')))
@@ -200,10 +251,13 @@ class WarcWriter:
 
     # <!-- <property name="template" value="${prefix}-${timestamp17}-${serialno}-${heritrix.pid}~${heritrix.hostname}~${heritrix.port}" /> -->
     def _writer(self):
+        #Rollover based on size
         if self._fpath and os.path.getsize(self._fpath) > self.rollover_size:
+            self.logger.debug("Closing WARC because exceeded rollover size.")
             self.close_writer()
 
         if self._f == None:
+            self._current_rollover_time = datetime.utcnow()
             self._f_finalname = '{}-{}-{:05d}-{}-{}-{}.warc{}'.format(
                     self.prefix, self.timestamp17(), self._serial, os.getpid(),
                     socket.gethostname(), self.port, '.gz' if self.gzip else '')
@@ -239,13 +293,14 @@ class WarcWriter:
         recordset_offset = writer.tell()
 
         for record in recordset:
-            offset = writer.tell()
-            record.write_to(writer, gzip=self.gzip)
-            self.logger.debug('wrote warc record: warc_type={} content_length={} url={} warc={} offset={}'.format(
-                    record.get_header(warctools.WarcRecord.TYPE),
-                    record.get_header(warctools.WarcRecord.CONTENT_LENGTH),
-                    record.get_header(warctools.WarcRecord.URL),
-                    self._fpath, offset))
+            if record:
+                offset = writer.tell()
+                record.write_to(writer, gzip=self.gzip)
+                self.logger.debug('wrote warc record: warc_type={} content_length={} url={} warc={} offset={}'.format(
+                        record.get_header(warctools.WarcRecord.TYPE),
+                        record.get_header(warctools.WarcRecord.CONTENT_LENGTH),
+                        record.get_header(warctools.WarcRecord.URL),
+                        self._fpath, offset))
 
         self._f.flush()
 
@@ -268,7 +323,7 @@ class WarcWriterThread(threading.Thread):
             self.warc_writer = WarcWriter()
 
     def run(self):
-        self.logger.info('WarcWriterThread starting, directory={} gzip={} rollover_size={} rollover_idle_time={} prefix={} port={}'.format(
+        self.logger.info('WarcWriterThread starting, directory={} gzip={} rollover_size={} rollover_idle_time={} prefix={} port={} rollover_time={}'.format(
                 os.path.abspath(self.warc_writer.directory), self.warc_writer.gzip, self.warc_writer.rollover_size,
                 self.rollover_idle_time, self.warc_writer.prefix, self.warc_writer.port))
 
