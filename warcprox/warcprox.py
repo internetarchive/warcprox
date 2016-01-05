@@ -213,6 +213,8 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 warcprox_meta=warcprox_meta)
         self.server.recorded_url_q.put(recorded_url)
 
+        return recorded_url
+
 
 class RecordedUrl(object):
     def __init__(self, url, request_data, response_recorder, remote_ip, warcprox_meta=None):
