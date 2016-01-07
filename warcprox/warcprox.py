@@ -36,6 +36,8 @@ import traceback
 import hashlib
 import json
 import socket
+import threading
+import time
 
 from certauth.certauth import CertificateAuthority
 import warcprox.mitmproxy
@@ -48,7 +50,7 @@ class ProxyingRecorder(object):
 
     logger = logging.getLogger("warcprox.warcprox.ProxyingRecorder")
 
-    def __init__(self, fp, proxy_dest, digest_algorithm='sha1'):
+    def __init__(self, fp, proxy_dest, digest_algorithm='sha1', prev_continuation_payload_size=0):
         self.fp = fp
         # "The file has no name, and will cease to exist when it is closed."
         self.tempfile = tempfile.SpooledTemporaryFile(max_size=512*1024)
@@ -60,6 +62,7 @@ class ProxyingRecorder(object):
         self._proxy_dest_conn_open = True
         self._prev_hunk_last_two_bytes = b''
         self.len = 0
+        self.prev_continuation_payload_size = prev_continuation_payload_size
 
     def _update_payload_digest(self, hunk):
         if self.payload_digest is None:
@@ -137,15 +140,21 @@ class ProxyingRecorder(object):
         else:
             return 0
 
+    def continuation_payload_size(self):
+        return self.prev_continuation_payload_size + self.payload_size()
+
 
 class ProxyingRecordingHTTPResponse(http_client.HTTPResponse):
 
     def __init__(self, sock, debuglevel=0, method=None, proxy_dest=None, digest_algorithm='sha1'):
         http_client.HTTPResponse.__init__(self, sock, debuglevel=debuglevel, method=method)
 
+        self.proxy_dest = proxy_dest
+        self.digest_algorithm = digest_algorithm
+        self.orig_fp = self.fp
         # Keep around extra reference to self.fp because HTTPResponse sets
         # self.fp=None after it finishes reading, but we still need it
-        self.recorder = ProxyingRecorder(self.fp, proxy_dest, digest_algorithm)
+        self.recorder = ProxyingRecorder(self.orig_fp, self.proxy_dest, self.digest_algorithm)
         self.fp = self.recorder
 
 
@@ -196,28 +205,67 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 digest_algorithm=self.server.digest_algorithm)
         h.begin()
 
+        remote_ip = self._proxy_sock.getpeername()[0]
+
         buf = h.read(8192)
+        # Keep track of which segment is the first segment, since WARC
+        # continuation records need WARC-Segment-Origin-ID header field.
+        first_segment = None
+        # Keep track of segment number, since WARC continuation records
+        # need WARC-Segment-Number header field.
+        segment_number = 0
+        # Keep track of start time so that can rollover WARC record based on time.
+        record_start_time = time.time()
         while buf != b'':
+            # Check if should interrupt reading the response.
+            if self.server.stop.is_set():
+                self.logger.debug("Interrupting stream since stop is set")
+                break
+            # Read a chunk from the response.
             buf = h.read(8192)
+            self.logger.debug("Record size: %s. Max is %s.", h.recorder.len, self.server.record_size)
+            # If record has gotten too big or taken too long, segment it.
+            if (self.server.record_size and h.recorder.len > self.server.record_size) \
+                    or (self.server.record_rollover_time
+                        and time.time() - record_start_time > self.server.record_rollover_time):
+                self.logger.info("Starting a new record")
+                segment_number += 1
+                # Create a RecordedUrl and add it to the queue to be written to WARC.
+                recorded_url = RecordedUrl(url=self.url, request_data=req,
+                    response_recorder=h.recorder, remote_ip=remote_ip,
+                    warcprox_meta=warcprox_meta, first_segment=first_segment, segment_number=segment_number)
+                self.server.recorded_url_q.put(recorded_url)
+                # Update information that will be needed for later segments.
+                if not first_segment:
+                    first_segment = recorded_url
+                prev_continuation_payload_size = h.recorder.continuation_payload_size()
+                # Reset things.
+                # Provide ProxyingRecordingHTTPResponse with a fresh ProxyingRecorder
+                h.recorder = ProxyingRecorder(h.orig_fp, h.proxy_dest, h.digest_algorithm,
+                                              prev_continuation_payload_size=prev_continuation_payload_size)
+                h.fp = h.recorder
+                record_start_time = time.time()
 
         self.log_request(h.status, h.recorder.len)
-
-        remote_ip = self._proxy_sock.getpeername()[0]
 
         # Let's close off the remote end
         h.close()
         self._proxy_sock.close()
 
+        if first_segment:
+            segment_number += 1
         recorded_url = RecordedUrl(url=self.url, request_data=req,
                 response_recorder=h.recorder, remote_ip=remote_ip,
-                warcprox_meta=warcprox_meta)
+                warcprox_meta=warcprox_meta, first_segment=first_segment, is_last_segment=True,
+                segment_number=segment_number, truncated=(first_segment and self.server.stop.is_set()))
         self.server.recorded_url_q.put(recorded_url)
 
         return recorded_url
 
 
 class RecordedUrl(object):
-    def __init__(self, url, request_data, response_recorder, remote_ip, warcprox_meta=None):
+    def __init__(self, url, request_data, response_recorder, remote_ip, warcprox_meta=None, first_segment=None,
+                 is_last_segment=False, segment_number=0, truncated=False):
         # XXX should test what happens with non-ascii url (when does
         # url-encoding happen?)
         if type(url) is not bytes:
@@ -238,16 +286,30 @@ class RecordedUrl(object):
         else:
             self.warcprox_meta = {}
 
+        self.first_segment = first_segment
+        self.is_last_segment = is_last_segment
+        self.segment_number = segment_number
+        self.truncated = truncated
+
 
 class WarcProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
     logger = logging.getLogger("warcprox.warcprox.WarcProxy")
 
     def __init__(self, server_address=('localhost', 8000),
             req_handler_class=WarcProxyHandler, bind_and_activate=True,
-            ca=None, recorded_url_q=None, digest_algorithm='sha1'):
+            ca=None, recorded_url_q=None, digest_algorithm='sha1', record_size=1000 * 1000 * 100,
+            record_rollover_time=5 * 60):
         http_server.HTTPServer.__init__(self, server_address, req_handler_class, bind_and_activate)
 
+        #This will be used to tell the WarcProxyHandler to interrupt.
+        self.stop = threading.Event()
+
         self.digest_algorithm = digest_algorithm
+        self.record_size  = record_size
+        self.record_rollover_time= record_rollover_time
+        #This causes abrupt termination
+        #However, we don't want to end abruptly since need to write final segment record.
+        # self.daemon_threads = True
 
         if ca is not None:
             self.ca = ca

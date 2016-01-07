@@ -35,7 +35,7 @@ class WarcproxController(object):
             self.warc_writer_thread = warcprox.warcwriter.WarcWriterThread(recorded_url_q=self.proxy.recorded_url_q)
 
         self.playback_proxy = playback_proxy
-
+        self.stop = None
 
     def run_until_shutdown(self):
         """Start warcprox and run until shut down.
@@ -43,6 +43,7 @@ class WarcproxController(object):
         If running in the main thread, SIGTERM initiates a graceful shutdown.
         Otherwise, call warcprox_controller.stop.set().
         """
+        self.logger.info("Running until shutdown")
         proxy_thread = threading.Thread(target=self.proxy.serve_forever, name='ProxyThread')
         proxy_thread.start()
         self.warc_writer_thread.start()
@@ -54,9 +55,10 @@ class WarcproxController(object):
         self.stop = threading.Event()
 
         try:
-            signal.signal(signal.SIGTERM, self.stop.set)
+            signal.signal(signal.SIGTERM, lambda signal_number, stack_frame: self.stop.set())
             self.logger.info('SIGTERM will initiate graceful shutdown')
         except ValueError:
+            self.logger.info('SIGTERM will NOT initiate graceful shutdown')
             pass
 
         try:
@@ -66,6 +68,7 @@ class WarcproxController(object):
             pass
         finally:
             self.warc_writer_thread.stop.set()
+            self.proxy.stop.set()
             self.proxy.shutdown()
             self.proxy.server_close()
 

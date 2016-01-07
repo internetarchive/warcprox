@@ -46,9 +46,19 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
     arg_parser.add_argument('-s', '--size', dest='size',
             default=1000*1000*1000,
             help='WARC file rollover size threshold in bytes')
+    arg_parser.add_argument('-r', '--record-size', dest='record_size',
+            default=1000*1000*100,
+            help='WARC record rollover size threshold in bytes')
     arg_parser.add_argument('--rollover-idle-time',
             dest='rollover_idle_time', default=None,
             help="WARC file rollover idle time threshold in seconds (so that Friday's last open WARC doesn't sit there all weekend waiting for more data)")
+    arg_parser.add_argument('--rollover-time',
+            dest='rollover_time', default=None,
+            help="WARC file rollover time threshold in seconds to automatically use a new WARC after a period of time")
+    arg_parser.add_argument('--record-rollover-time',
+            dest='record_rollover_time', default=None,
+            help="WARC record rollover time threshold in seconds to automatically use a new WARC after a period of time")
+
     try:
         hash_algos = hashlib.algorithms_guaranteed
     except AttributeError:
@@ -111,7 +121,9 @@ def main(argv=sys.argv):
     proxy = warcprox.warcprox.WarcProxy(
             server_address=(args.address, int(args.port)), ca=ca,
             recorded_url_q=recorded_url_q,
-            digest_algorithm=args.digest_algorithm)
+            digest_algorithm=args.digest_algorithm,
+            record_size=int(args.record_size),
+            record_rollover_time=int(args.record_rollover_time) if args.record_rollover_time is not None else None)
 
     if args.playback_port is not None:
         playback_index_db = warcprox.playback.PlaybackIndexDb(args.playback_index_db_file)
@@ -127,7 +139,8 @@ def main(argv=sys.argv):
             gzip=args.gzip, prefix=args.prefix, port=int(args.port),
             rollover_size=int(args.size), base32=args.base32,
             dedup_db=dedup_db, digest_algorithm=args.digest_algorithm,
-            playback_index_db=playback_index_db)
+            playback_index_db=playback_index_db,
+            rollover_time=int(args.rollover_time) if args.rollover_time is not None else None)
     warc_writer_thread = warcprox.warcwriter.WarcWriterThread(
             recorded_url_q=recorded_url_q, warc_writer=warc_writer,
             rollover_idle_time=int(args.rollover_idle_time) if args.rollover_idle_time is not None else None)
