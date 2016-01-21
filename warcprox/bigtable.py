@@ -57,7 +57,7 @@ class RethinkCaptures:
         if not self.table in tables:
             self.logger.info("creating rethinkdb table %s in database %s", repr(self.table), repr(self.r.dbname))
             self.r.table_create(self.table, shards=self.shards, replicas=self.replicas).run()
-            self.r.table(self.table).index_create("abbr_canon_surt_timesamp", [self.r.row["abbr_canon_surt"], self.r.row["timestamp"]]).run()
+            self.r.table(self.table).index_create("abbr_canon_surt_timestamp", [self.r.row["abbr_canon_surt"], self.r.row["timestamp"]]).run()
             self.r.table(self.table).index_create("sha1_warc_type", [self.r.row["sha1base32"], self.r.row["warc_type"], self.r.row["bucket"]]).run()
 
     def find_response_by_digest(self, algo, raw_digest, bucket="__unspecified__"):
