@@ -1,13 +1,5 @@
 from __future__ import absolute_import
 
-try:
-    import dbm.gnu as dbm_gnu
-except ImportError:
-    try:
-        import gdbm as dbm_gnu
-    except ImportError:
-        import anydbm as dbm_gnu
-
 import logging
 import os
 import json
@@ -42,6 +34,14 @@ class StatsDb:
     logger = logging.getLogger("warcprox.stats.StatsDb")
 
     def __init__(self, dbm_file='./warcprox-stats.db', options=warcprox.Options()):
+        try:
+            import dbm.gnu as dbm_gnu
+        except ImportError:
+            try:
+                import gdbm as dbm_gnu
+            except ImportError:
+                import anydbm as dbm_gnu
+
         if os.path.exists(dbm_file):
             self.logger.info('opening existing stats database {}'.format(dbm_file))
         else:

@@ -12,14 +12,6 @@ try:
 except ImportError:
     import SocketServer as socketserver
 
-try:
-    import dbm.gnu as dbm_gnu
-except ImportError:
-    try:
-        import gdbm as dbm_gnu
-    except ImportError:
-        import anydbm as dbm_gnu
-
 import logging
 import os
 from hanzo import warctools
@@ -203,6 +195,14 @@ class PlaybackIndexDb(object):
     logger = logging.getLogger("warcprox.playback.PlaybackIndexDb")
 
     def __init__(self, dbm_file='./warcprox-playback-index.db'):
+        try:
+            import dbm.gnu as dbm_gnu
+        except ImportError:
+            try:
+                import gdbm as dbm_gnu
+            except ImportError:
+                import anydbm as dbm_gnu
+
         if os.path.exists(dbm_file):
             self.logger.info('opening existing playback index database {}'.format(dbm_file))
         else:

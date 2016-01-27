@@ -1,13 +1,5 @@
 from __future__ import absolute_import
 
-try:
-    import dbm.gnu as dbm_gnu
-except ImportError:
-    try:
-        import gdbm as dbm_gnu
-    except ImportError:
-        import anydbm as dbm_gnu
-
 import logging
 import os
 import json
@@ -19,6 +11,14 @@ class DedupDb(object):
     logger = logging.getLogger("warcprox.dedup.DedupDb")
 
     def __init__(self, dbm_file='./warcprox-dedup.db', options=warcprox.Options()):
+        try:
+            import dbm.gnu as dbm_gnu
+        except ImportError:
+            try:
+                import gdbm as dbm_gnu
+            except ImportError:
+                import anydbm as dbm_gnu
+
         if os.path.exists(dbm_file):
             self.logger.info('opening existing deduplication database {}'.format(dbm_file))
         else:
