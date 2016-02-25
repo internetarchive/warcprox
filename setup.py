@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# vim: set sw=4 et:
 
 from setuptools.command.test import test as TestCommand
 import sys
@@ -21,7 +20,7 @@ deps = [
     'certauth>=1.1.0',
     'warctools',
     'kafka-python',
-    'surt==0.3b2',
+    'surt>=0.3b4',
     'rethinkstuff',
     'PySocks',
 ]
@@ -31,7 +30,7 @@ except:
     deps.append('futures')
 
 setuptools.setup(name='warcprox',
-        version='1.5.0',
+        version='1.5.0.dev1',
         description='WARC writing MITM HTTP/S proxy',
         url='https://github.com/internetarchive/warcprox',
         author='Noah Levitt',
