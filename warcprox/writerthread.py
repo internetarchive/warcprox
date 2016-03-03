@@ -92,5 +92,9 @@ class WarcWriterThread(threading.Thread):
     def _final_tasks(self, recorded_url, records):
         if self.listeners:
             for listener in self.listeners:
-                listener.notify(recorded_url, records)
+                try:
+                    listener.notify(recorded_url, records)
+                except:
+                    self.logger.error('%s raised exception',
+                                      listener.notify, exc_info=True)
         self._log(recorded_url, records)
