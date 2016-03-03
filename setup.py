@@ -19,7 +19,7 @@ class PyTest(TestCommand):
 deps = [
     'certauth>=1.1.0',
     'warctools',
-    'kafka-python',
+    'kafka-python>=1.0.1',
     'surt>=0.3b4',
     'rethinkstuff',
     'PySocks',
