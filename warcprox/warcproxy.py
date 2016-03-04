@@ -202,6 +202,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
             req += self.rfile.read(int(self.headers['Content-Length']))
 
         prox_rec_res = None
+        recorded_url = None
         try:
             self.logger.debug('sending to remote server req=%s', repr(req))
 
