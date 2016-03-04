@@ -74,13 +74,13 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
     arg_parser.add_argument('--rethinkdb-big-table',
             dest='rethinkdb_big_table', action='store_true', default=False,
             help='use a big rethinkdb table called "captures", instead of a small table called "dedup"; table is suitable for use as index for playback (ignored unless --rethinkdb-servers is specified)')
-    arg_parser.add_argument('--kafka-broker-list', dest='kafka_broker_list', 
+    arg_parser.add_argument('--kafka-broker-list', dest='kafka_broker_list',
             default=None, help='kafka broker list for capture feed')
-    arg_parser.add_argument('--kafka-capture-feed-topic', dest='kafka_capture_feed_topic', 
+    arg_parser.add_argument('--kafka-capture-feed-topic', dest='kafka_capture_feed_topic',
             default=None, help='kafka capture feed topic')
     arg_parser.add_argument('--queue-size', dest='queue_size', default=500,
             help=argparse.SUPPRESS)
-    arg_parser.add_argument('--max-threads', dest='max_threads', default=500,
+    arg_parser.add_argument('--max-threads', dest='max_threads',
             help=argparse.SUPPRESS)
     arg_parser.add_argument('--profile', action='store_true', default=False,
             help=argparse.SUPPRESS)
