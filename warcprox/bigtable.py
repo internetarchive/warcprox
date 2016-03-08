@@ -143,8 +143,9 @@ class RethinkCapturesDedup:
             dedup_info = {
                 "url": entry["url"].encode("utf-8"),
                 "date": entry["timestamp"].strftime("%Y-%m-%dT%H:%M:%SZ").encode("utf-8"),
-                "id": entry["warc_id"].encode("utf-8")
             }
+            if "warc_id" in entry:
+                dedup_info["id"] = entry["warc_id"].encode("utf-8")
             return dedup_info
         else:
             return None
