@@ -72,20 +72,27 @@ class RethinkCaptures:
             result = results[0]
         else:
             result = None
-        self.logger.debug("returning %s for sha1base32=%s bucket=%s", result, sha1base32, bucket)
+        self.logger.debug("returning %s for sha1base32=%s bucket=%s",
+                          result, sha1base32, bucket)
         return result
 
     def _assemble_entry(self, recorded_url, records):
         if recorded_url.response_recorder:
             if recorded_url.response_recorder.payload_digest.name == "sha1":
-                sha1base32 = base64.b32encode(recorded_url.response_recorder.payload_digest.digest()).decode("utf-8")
+                sha1base32 = base64.b32encode(
+                        recorded_url.response_recorder.payload_digest.digest()
+                        ).decode("utf-8")
             else:
-                self.logger.warn("digest type is %s but big capture table is indexed by sha1", recorded_url.response_recorder.payload_digest.name)
+                self.logger.warn(
+                        "digest type is %s but big capture table is indexed "
+                        "by sha1",
+                        recorded_url.response_recorder.payload_digest.name)
         else:
             digest = hashlib.new("sha1", records[0].content[1])
             sha1base32 = base64.b32encode(digest.digest()).decode("utf-8")
 
-        if recorded_url.warcprox_meta and "captures-bucket" in recorded_url.warcprox_meta:
+        if (recorded_url.warcprox_meta
+                and "captures-bucket" in recorded_url.warcprox_meta):
             bucket = recorded_url.warcprox_meta["captures-bucket"]
         else:
             bucket = "__unspecified__"
@@ -95,10 +102,12 @@ class RethinkCaptures:
 
         entry = {
             # id only specified for rethinkdb partitioning
-            "id": "{} {}".format(canon_surt[:20], records[0].id.decode("utf-8")[10:-1]),
+            "id": "{} {}".format(
+                canon_surt[:20], records[0].id.decode("utf-8")[10:-1]),
             "abbr_canon_surt": canon_surt[:150],
             "canon_surt": canon_surt,
-            "timestamp": recorded_url.timestamp.replace(tzinfo=rethinkstuff.UTC),
+            "timestamp": recorded_url.timestamp.replace(
+                tzinfo=rethinkstuff.UTC),
             "url": recorded_url.url.decode("utf-8"),
             "offset": records[0].offset,
             "filename": os.path.basename(records[0].warc_filename),
@@ -111,6 +120,12 @@ class RethinkCaptures:
             "bucket": bucket,
             "length": records[0].length,
         }
+
+        if (recorded_url.warcprox_meta and
+                "captures-table-extra-fields" in recorded_url.warcprox_meta):
+            extras = recorded_url.warcprox_meta["captures-table-extra-fields"]
+            for extra_field in extras:
+                entry[extra_field] = extras[extra_field]
 
         return entry
 
