@@ -14,7 +14,7 @@ import rethinkstuff
 
 class RethinkCaptures:
     """Inserts in batches every 0.5 seconds"""
-    logger = logging.getLogger("warcprox.bigtables.RethinkCaptures")
+    logger = logging.getLogger("warcprox.bigtable.RethinkCaptures")
 
     def __init__(self, r, table="captures", shards=None, replicas=None, options=warcprox.Options()):
         self.r = r

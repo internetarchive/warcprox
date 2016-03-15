@@ -114,8 +114,9 @@ class WarcRecordBuilder:
             digest = hashlib.new(self.digest_algorithm, data)
             headers.append((warctools.WarcRecord.BLOCK_DIGEST,
                 warcprox.digest_str(digest, self.base32)))
-            headers.append((warctools.WarcRecord.PAYLOAD_DIGEST,
-                warcprox.digest_str(digest, self.base32)))
+            if not payload_digest:
+                headers.append((warctools.WarcRecord.PAYLOAD_DIGEST,
+                                warcprox.digest_str(digest, self.base32)))
 
             content_tuple = content_type, data
             record = warctools.WarcRecord(headers=headers, content=content_tuple)

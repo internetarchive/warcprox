@@ -22,6 +22,7 @@ import warnings
 import pprint
 import traceback
 import signal
+from collections import Counter
 
 try:
     import http.server as http_server
@@ -662,6 +663,8 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
         (offset, record, errors) = next(record_iter)
         assert record.type == b'response'
         assert record.url == url1.encode('ascii')
+        # check for duplicate warc record headers
+        assert Counter(h[0] for h in record.headers).most_common(1)[0][1] == 1
         assert record.content[1] == b'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nwarcprox-test-header: k!\r\nContent-Length: 44\r\n\r\nI am the warcprox test payload! llllllllll!\n'
         (offset, record, errors) = next(record_iter)
         assert record.type == b'request'
@@ -670,6 +673,8 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
         (offset, record, errors) = next(record_iter)
         assert record.type == b'response'
         assert record.url == url2.encode('ascii')
+        # check for duplicate warc record headers
+        assert Counter(h[0] for h in record.headers).most_common(1)[0][1] == 1
         assert record.content[1] == b'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nwarcprox-test-header: k!\r\nContent-Length: 44\r\n\r\nI am the warcprox test payload! llllllllll!\n'
         (offset, record, errors) = next(record_iter)
         assert record.type == b'request'
@@ -678,6 +683,8 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
         (offset, record, errors) = next(record_iter)
         assert record.type == b'revisit'
         assert record.url == url2.encode('ascii')
+        # check for duplicate warc record headers
+        assert Counter(h[0] for h in record.headers).most_common(1)[0][1] == 1
         assert record.content[1] == b'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nwarcprox-test-header: k!\r\nContent-Length: 44\r\n\r\n'
         (offset, record, errors) = next(record_iter)
         assert record.type == b'request'
@@ -686,6 +693,8 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
         (offset, record, errors) = next(record_iter)
         assert record.type == b'revisit'
         assert record.url == url1.encode('ascii')
+        # check for duplicate warc record headers
+        assert Counter(h[0] for h in record.headers).most_common(1)[0][1] == 1
         assert record.content[1] == b'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nwarcprox-test-header: k!\r\nContent-Length: 44\r\n\r\n'
         (offset, record, errors) = next(record_iter)
         assert record.type == b'request'
