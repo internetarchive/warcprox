@@ -30,7 +30,7 @@ except:
     deps.append('futures')
 
 setuptools.setup(name='warcprox',
-        version='1.5.0.dev3',
+        version='2.0.dev4',
         description='WARC writing MITM HTTP/S proxy',
         url='https://github.com/internetarchive/warcprox',
         author='Noah Levitt',
