@@ -1,14 +1,10 @@
 warcprox - WARC writing MITM HTTP/S proxy
 -----------------------------------------
-.. image:: https://travis-ci.org/internetarchive/warcprox.png?branch=master   
+.. image:: https://travis-ci.org/internetarchive/warcprox.png?branch=master
         :target: https://travis-ci.org/internetarchive/warcprox
 
 Based on the excellent and simple pymiproxy by Nadeem Douba.
 https://github.com/allfro/pymiproxy
-
-License: because pymiproxy is GPL and warcprox is a derivative work of
-pymiproxy, warcprox is also GPL.
-
 
 Install
 ~~~~~~~
@@ -47,10 +43,15 @@ Usage
     usage: warcprox [-h] [-p PORT] [-b ADDRESS] [-c CACERT]
                     [--certs-dir CERTS_DIR] [-d DIRECTORY] [-z] [-n PREFIX]
                     [-s SIZE] [--rollover-idle-time ROLLOVER_IDLE_TIME]
-                    [-g DIGEST_ALGORITHM] [--base32] [-j DEDUP_DB_FILE]
-                    [-P PLAYBACK_PORT]
-                    [--playback-index-db-file PLAYBACK_INDEX_DB_FILE] [--version]
-                    [-v] [-q]
+                    [-g DIGEST_ALGORITHM] [--base32]
+                    [--stats-db-file STATS_DB_FILE] [-P PLAYBACK_PORT]
+                    [--playback-index-db-file PLAYBACK_INDEX_DB_FILE]
+                    [-j DEDUP_DB_FILE | --rethinkdb-servers RETHINKDB_SERVERS]
+                    [--rethinkdb-db RETHINKDB_DB] [--rethinkdb-big-table]
+                    [--kafka-broker-list KAFKA_BROKER_LIST]
+                    [--kafka-capture-feed-topic KAFKA_CAPTURE_FEED_TOPIC]
+                    [--onion-tor-socks-proxy ONION_TOR_SOCKS_PROXY]
+                    [--version] [-v] [-q]
 
     warcprox - WARC writing MITM HTTP/S proxy
 
@@ -60,84 +61,91 @@ Usage
       -b ADDRESS, --address ADDRESS
                             address to listen on (default: localhost)
       -c CACERT, --cacert CACERT
-                            CA certificate file; if file does not exist, it will
-                            be created (default: ./desktop-nlevitt-warcprox-
-                            ca.pem)
+                            CA certificate file; if file does not exist, it
+                            will be created (default: ./MacBook-Pro.local-
+                            warcprox-ca.pem)
       --certs-dir CERTS_DIR
                             where to store and load generated certificates
-                            (default: ./desktop-nlevitt-warcprox-ca)
+                            (default: ./MacBook-Pro.local-warcprox-ca)
       -d DIRECTORY, --dir DIRECTORY
                             where to write warcs (default: ./warcs)
-      -z, --gzip            write gzip-compressed warc records (default: False)
+      -z, --gzip            write gzip-compressed warc records (default:
+                            False)
       -n PREFIX, --prefix PREFIX
                             WARC filename prefix (default: WARCPROX)
-      -s SIZE, --size SIZE  WARC file rollover size threshold in bytes (default:
-                            1000000000)
+      -s SIZE, --size SIZE  WARC file rollover size threshold in bytes
+                            (default: 1000000000)
       --rollover-idle-time ROLLOVER_IDLE_TIME
-                            WARC file rollover idle time threshold in seconds (so
-                            that Friday's last open WARC doesn't sit there all
-                            weekend waiting for more data) (default: None)
+                            WARC file rollover idle time threshold in seconds
+                            (so that Friday's last open WARC doesn't sit there
+                            all weekend waiting for more data) (default: None)
       -g DIGEST_ALGORITHM, --digest-algorithm DIGEST_ALGORITHM
-                            digest algorithm, one of sha384, sha512, md5, sha224,
-                            sha256, sha1 (default: sha1)
+                            digest algorithm, one of sha1, sha256, md5,
+                            sha224, sha512, sha384 (default: sha1)
       --base32              write digests in Base32 instead of hex (default:
                             False)
-      -j DEDUP_DB_FILE, --dedup-db-file DEDUP_DB_FILE
-                            persistent deduplication database file; empty string
-                            or /dev/null disables deduplication (default:
-                            ./warcprox-dedup.db)
+      --stats-db-file STATS_DB_FILE
+                            persistent statistics database file; empty string
+                            or /dev/null disables statistics tracking
+                            (default: ./warcprox-stats.db)
       -P PLAYBACK_PORT, --playback-port PLAYBACK_PORT
-                            port to listen on for instant playback (default: None)
+                            port to listen on for instant playback (default:
+                            None)
       --playback-index-db-file PLAYBACK_INDEX_DB_FILE
-                            playback index database file (only used if --playback-
-                            port is specified) (default: ./warcprox-playback-
-                            index.db)
+                            playback index database file (only used if
+                            --playback-port is specified) (default:
+                            ./warcprox-playback-index.db)
+      -j DEDUP_DB_FILE, --dedup-db-file DEDUP_DB_FILE
+                            persistent deduplication database file; empty
+                            string or /dev/null disables deduplication
+                            (default: ./warcprox-dedup.db)
+      --rethinkdb-servers RETHINKDB_SERVERS
+                            rethinkdb servers, used for dedup and stats if
+                            specified; e.g.
+                            db0.foo.org,db0.foo.org:38015,db1.foo.org
+                            (default: None)
+      --rethinkdb-db RETHINKDB_DB
+                            rethinkdb database name (ignored unless
+                            --rethinkdb-servers is specified) (default:
+                            warcprox)
+      --rethinkdb-big-table
+                            use a big rethinkdb table called "captures",
+                            instead of a small table called "dedup"; table is
+                            suitable for use as index for playback (ignored
+                            unless --rethinkdb-servers is specified) (default:
+                            False)
+      --kafka-broker-list KAFKA_BROKER_LIST
+                            kafka broker list for capture feed (default: None)
+      --kafka-capture-feed-topic KAFKA_CAPTURE_FEED_TOPIC
+                            kafka capture feed topic (default: None)
+      --onion-tor-socks-proxy ONION_TOR_SOCKS_PROXY
+                            host:port of tor socks proxy, used only to connect
+                            to .onion sites (default: None)
       --version             show program's version number and exit
       -v, --verbose
       -q, --quiet
 
-To do
-~~~~~
 
-* (partly done) integration tests, unit tests
-* (done) url-agnostic deduplication
-* unchunk and/or ungzip before storing payload, or alter request to
-  discourage server from chunking/gzipping
-* check certs from proxied website, like browser does, and present
-  browser-like warning if appropriate
-* keep statistics, produce reports
-* write cdx while crawling?
-* performance testing
-* (done) base32 sha1 like heritrix?
-* configurable timeouts and stuff
-* evaluate ipv6 support
-* (done) more explicit handling of connection closed exception
-  during transfer
-* dns cache?? the system already does a fine job I'm thinking
-* keepalive with remote servers?
-* (done) python3
-* special handling for 304 not-modified (write nothing or write revisit
-  record... and/or modify request so server never responds with 304)
-* (done) instant playback on a second proxy port
-* special url for downloading ca cert e.g. http(s)://warcprox./ca.pem
-* special url for other stuff, some status info or something?
-* browser plugin for warcprox mode
+License
+~~~~~~~
 
-  -  accept warcprox CA cert only when in warcprox mode
-  -  separate temporary cookie store, like incognito
-  -  "careful! your activity is being archived" banner
-  -  easy switch between archiving and instant playback proxy port
+Warcprox is a derivative work of pymiproxy, which is GPL. Thus warcprox is also
+GPL.
 
-To not do
-^^^^^^^^^
+Copyright (C) 2012 Cygnos Corporation
+Copyright (C) 2013-2016 Internet Archive
 
-The features below could also be part of warcprox. But maybe they don't
-belong here, since this is a proxy, not a crawler/robot. It can be used
-by a human with a browser, or by something automated, i.e. a robot. My
-feeling is that it's more appropriate to implement these in the robot.
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
 
-*  politeness, i.e. throttle requests per server
-*  fetch and obey robots.txt
-*  alter user-agent, maybe insert something like "warcprox mitm
-   archiving proxy; +http://archive.org/details/archive.org\_bot"
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
