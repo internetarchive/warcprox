@@ -1,3 +1,29 @@
+#
+# warcprox/mitmproxy.py - man-in-the-middle http/s proxy code, handles http
+# CONNECT method by creating a snakeoil certificate for the requested site,
+# calling ssl.wrap_socket() on the client connection; connects to remote
+# (proxied) host, possibly using tor if host tld is .onion and tor proxy is
+# configured
+#
+# Copyright (C) 2012 Cygnos Corporation
+# Copyright (C) 2013-2016 Internet Archive
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
+# USA.
+#
+
 from __future__ import absolute_import
 
 try:
