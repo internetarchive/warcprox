@@ -147,8 +147,10 @@ class ProxyingRecordingHTTPResponse(http_client.HTTPResponse):
 
         status_and_headers = 'HTTP/1.1 {} {}\r\n'.format(self.status, self.reason)
         for k,v in self.msg.items():
-            if k.lower() not in ('connection', 'proxy-connection', 'keep-alive',
-                    'proxy-authenticate', 'proxy-authorization', 'upgrade'):
+            if k.lower() not in (
+                    'connection', 'proxy-connection', 'keep-alive',
+                    'proxy-authenticate', 'proxy-authorization', 'upgrade',
+                    'strict-transport-security'):
                 status_and_headers += '{}: {}\r\n'.format(k, v)
         status_and_headers += 'Connection: close\r\n\r\n'
         self.proxy_dest.sendall(status_and_headers.encode('latin1'))
