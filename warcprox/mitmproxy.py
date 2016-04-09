@@ -1,4 +1,28 @@
-# vim:set sw=4 et:
+#
+# warcprox/mitmproxy.py - man-in-the-middle http/s proxy code, handles http
+# CONNECT method by creating a snakeoil certificate for the requested site,
+# calling ssl.wrap_socket() on the client connection; connects to remote
+# (proxied) host, possibly using tor if host tld is .onion and tor proxy is
+# configured
+#
+# Copyright (C) 2012 Cygnos Corporation
+# Copyright (C) 2013-2016 Internet Archive
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
+# USA.
+#
 
 from __future__ import absolute_import
 
@@ -15,13 +39,19 @@ except ImportError:
 import socket
 import logging
 import ssl
+import warcprox
+import threading
+import datetime
+import socks
 
 class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
     logger = logging.getLogger("warcprox.mitmproxy.MitmProxyHandler")
 
     def __init__(self, request, client_address, server):
+        threading.current_thread().name = 'MitmProxyHandler(tid={},started={},client={}:{})'.format(warcprox.gettid(), datetime.datetime.utcnow().isoformat(), client_address[0], client_address[1])
         self.is_connect = False
         self._headers_buffer = []
+        request.settimeout(60)  # XXX what value should this have?
         http_server.BaseHTTPRequestHandler.__init__(self, request, client_address, server)
 
     def _determine_host_port(self):
@@ -32,7 +62,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             self.url = self.path
             u = urllib_parse.urlparse(self.url)
             if u.scheme != 'http':
-                raise Exception('Unknown scheme %s' % repr(u.scheme))
+                raise Exception('unable to parse request "{}" as a proxy request'.format(self.requestline))
             self.hostname = u.hostname
             self.port = u.port or 80
             self.path = urllib_parse.urlunparse(
@@ -48,8 +78,19 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
 
     def _connect_to_host(self):
         # Connect to destination
-        self._proxy_sock = socket.socket()
-        self._proxy_sock.settimeout(60)
+        if self.onion_tor_socks_proxy_host and self.hostname.lower().endswith('.onion'):
+            self.logger.info("using tor socks proxy at %s:%s to connect to %s",
+                    self.onion_tor_socks_proxy_host,
+                    self.onion_tor_socks_proxy_port or 1080,
+                    self.hostname)
+            self._proxy_sock = socks.socksocket()
+            self._proxy_sock.set_proxy(socks.SOCKS5,
+                addr=self.onion_tor_socks_proxy_host,
+                port=self.onion_tor_socks_proxy_port, rdns=True)
+        else:
+            self._proxy_sock = socket.socket()
+
+        self._proxy_sock.settimeout(60)  # XXX what value should this have?
         self._proxy_sock.connect((self.hostname, int(self.port)))
 
         # Wrap socket if SSL is required
@@ -83,6 +124,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             self._transition_to_ssl()
         except Exception as e:
             try:
+                self.logger.error("problem handling {}: {}".format(repr(self.requestline), e))
                 if type(e) is socket.timeout:
                     self.send_error(504, str(e))
                 else:
@@ -122,14 +164,18 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 self._connect_to_host()
                 assert self.url
             except Exception as e:
+                self.logger.error("problem processing request {}: {}".format(repr(self.requestline), e))
                 self.send_error(500, str(e))
                 return
         else:
             # if self.is_connect we already connected in do_CONNECT
             self.url = self._construct_tunneled_url()
 
-        self._proxy_request()
-
+        try:
+            self._proxy_request()
+        except:
+            self.logger.error("exception proxying request", exc_info=True)
+            raise
 
     def _proxy_request(self):
         raise Exception('_proxy_request() not implemented in MitmProxyHandler, must be implemented in subclass!')
@@ -139,11 +185,5 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             return self.do_COMMAND
 
     def log_error(self, fmt, *args):
-        self.logger.error("{0} - - [{1}] {2}".format(self.address_string(),
-            self.log_date_time_string(), fmt % args))
-
-    def log_message(self, fmt, *args):
-        self.logger.info("{} {} - - [{}] {}".format(self.__class__.__name__,
-            self.address_string(), self.log_date_time_string(), fmt % args))
-
+        self.logger.warn(fmt, *args)
 

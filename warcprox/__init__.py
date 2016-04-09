@@ -1,8 +1,60 @@
-def _read_version_bytes():
-    import os
-    version_txt = os.path.sep.join(__file__.split(os.path.sep)[:-1] + ['version.txt'])
-    with open(version_txt, 'rb') as fin:
-        return fin.read().strip()
+#
+# warcprox/__init__.py - warcprox package main file, contains some utility code
+#
+# Copyright (C) 2013-2016 Internet Archive
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+# USA.
+#
 
-version_bytes = _read_version_bytes().strip()
-version_str = version_bytes.decode('utf-8')
+from argparse import Namespace as _Namespace
+from pkg_resources import get_distribution as _get_distribution
+__version__ = _get_distribution('warcprox').version
+
+def digest_str(hash_obj, base32):
+    import base64
+    return hash_obj.name.encode('utf-8') + b':' + (
+            base64.b32encode(hash_obj.digest()) if base32
+            else hash_obj.hexdigest().encode('ascii'))
+
+class Options(_Namespace):
+    def __getattr__(self, name):
+        try:
+            return super(Options, self).__getattr__(self, name)
+        except AttributeError:
+            return None
+
+# XXX linux-specific
+def gettid():
+    try:
+        import ctypes
+        libc = ctypes.cdll.LoadLibrary('libc.so.6')
+        SYS_gettid = 186
+        tid = libc.syscall(SYS_gettid)
+        return tid
+    except:
+        return "n/a"
+
+import warcprox.controller as controller
+import warcprox.playback as playback
+import warcprox.dedup as dedup
+import warcprox.warcproxy as warcproxy
+import warcprox.mitmproxy as mitmproxy
+import warcprox.writer as writer
+import warcprox.warc as warc
+import warcprox.writerthread as writerthread
+import warcprox.stats as stats
+import warcprox.bigtable as bigtable
+import warcprox.kafkafeed as kafkafeed

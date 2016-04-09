@@ -1,4 +1,24 @@
-# vim:set sw=4 et:
+#
+# warcprox/playback.py - rudimentary support for playback of urls archived by
+# warcprox (not much used or maintained)
+#
+# Copyright (C) 2013-2016 Internet Archive
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
+# USA.
+#
 
 from __future__ import absolute_import
 
@@ -12,14 +32,6 @@ try:
 except ImportError:
     import SocketServer as socketserver
 
-try:
-    import dbm.gnu as dbm_gnu
-except ImportError:
-    try:
-        import gdbm as dbm_gnu
-    except ImportError:
-        import anydbm as dbm_gnu
-
 import logging
 import os
 from hanzo import warctools
@@ -27,6 +39,7 @@ import json
 import traceback
 import re
 from warcprox.mitmproxy import MitmProxyHandler
+import warcprox
 
 class PlaybackProxyHandler(MitmProxyHandler):
     logger = logging.getLogger("warcprox.playback.PlaybackProxyHandler")
@@ -180,13 +193,14 @@ class PlaybackProxyHandler(MitmProxyHandler):
 class PlaybackProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
     logger = logging.getLogger("warcprox.playback.PlaybackProxy")
 
-    def __init__(self, server_address, req_handler_class=PlaybackProxyHandler,
-            bind_and_activate=True, ca=None, playback_index_db=None,
-            warcs_dir=None):
-        http_server.HTTPServer.__init__(self, server_address, req_handler_class, bind_and_activate)
+
+    def __init__(self, ca=None, playback_index_db=None, options=warcprox.Options()):
+        server_address = (options.address or 'localhost', options.playback_port if options.playback_port is not None else 8001)
+        http_server.HTTPServer.__init__(self, server_address, PlaybackProxyHandler, bind_and_activate=True)
         self.ca = ca
         self.playback_index_db = playback_index_db
-        self.warcs_dir = warcs_dir
+        self.warcs_dir = options.directory
+        self.options = options
 
     def server_activate(self):
         http_server.HTTPServer.server_activate(self)
@@ -201,6 +215,14 @@ class PlaybackIndexDb(object):
     logger = logging.getLogger("warcprox.playback.PlaybackIndexDb")
 
     def __init__(self, dbm_file='./warcprox-playback-index.db'):
+        try:
+            import dbm.gnu as dbm_gnu
+        except ImportError:
+            try:
+                import gdbm as dbm_gnu
+            except ImportError:
+                import anydbm as dbm_gnu
+
         if os.path.exists(dbm_file):
             self.logger.info('opening existing playback index database {}'.format(dbm_file))
         else:
@@ -216,6 +238,9 @@ class PlaybackIndexDb(object):
             self.db.sync()
         except:
             pass
+
+    def notify(self, recorded_url, records):
+        self.save(records[0].warc_filename, records, records[0].offset)
 
     def save(self, warcfile, recordset, offset):
         response_record = recordset[0]
