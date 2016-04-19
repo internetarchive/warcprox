@@ -96,6 +96,8 @@ def test_slice(r, my_table):
 def test_service_registry(r):
     svcreg = rethinkstuff.ServiceRegistry(r)
     assert svcreg.available_service("yes-such-role") == None
+    assert svcreg.available_services("yes-such-role") == []
+    assert svcreg.available_services() == []
     svc0 = {
         "role": "yes-such-role",
         "load": 100.0,
@@ -126,19 +128,26 @@ def test_service_registry(r):
 
     time.sleep(0.1)
     assert svcreg.available_service("no-such-role") == None
+    assert svcreg.available_services("no-such-role") == []
     assert svcreg.available_service("yes-such-role")["id"] == svc0["id"]
+    assert len(svcreg.available_services("yes-such-role")) == 1
+    assert len(svcreg.available_services()) == 1
 
     svc1["load"] = 50.0
     svc1 = svcreg.heartbeat(svc1)
     time.sleep(0.1)
     assert svcreg.available_service("no-such-role") == None
     assert svcreg.available_service("yes-such-role")["id"] == svc1["id"]
+    assert len(svcreg.available_services("yes-such-role")) == 1
+    assert len(svcreg.available_services()) == 1
 
     svc1["load"] = 200.0
     svc1 = svcreg.heartbeat(svc1)
     time.sleep(0.1)
     assert svcreg.available_service("no-such-role") == None
     assert svcreg.available_service("yes-such-role")["id"] == svc0["id"]
+    assert len(svcreg.available_services("yes-such-role")) == 1
+    assert len(svcreg.available_services()) == 1
     svc1 = svcreg.heartbeat(svc1)
     time.sleep(0.1)
 
@@ -146,11 +155,15 @@ def test_service_registry(r):
     time.sleep(0.4)
     assert svcreg.available_service("no-such-role") == None
     assert svcreg.available_service("yes-such-role")["id"] == svc1["id"]
+    assert len(svcreg.available_services("yes-such-role")) == 1
+    assert len(svcreg.available_services()) == 1
 
     svcreg.unregister(svc1["id"])
     time.sleep(0.1)
     assert svcreg.available_service("no-such-role") == None
     assert svcreg.available_service("yes-such-role") == None
+    assert svcreg.available_services("yes-such-role") == []
+    assert svcreg.available_services() == []
 
     svc0 = {
         "role": "yes-such-role",
@@ -165,6 +178,34 @@ def test_service_registry(r):
     svc0 = svcreg.heartbeat(svc0)
     svc1 = svcreg.heartbeat(svc1)
     assert len(svcreg.available_services("yes-such-role")) == 2
+    assert len(svcreg.available_services()) == 2
+
+    svc0 = {
+        "role": "yes-such-role",
+        "load": 100.0,
+        "heartbeat_interval": 0.2,
+    }
+    svc1 = {
+        "role": "yes-such-role",
+        "load": 200.0,
+        "heartbeat_interval": 0.2,
+    }
+    svc2 = {
+        "role": "another-such-role",
+        "load": 200.0,
+        "heartbeat_interval": 0.2,
+    }
+    svc3 = {
+        "role": "yet-another-such-role",
+        "load": 200.0,
+        "heartbeat_interval": 0.2,
+    }
+    svc0 = svcreg.heartbeat(svc0)
+    svc1 = svcreg.heartbeat(svc1)
+    svc2 = svcreg.heartbeat(svc2)
+    svc3 = svcreg.heartbeat(svc3)
+    assert len(svcreg.available_services("yes-such-role")) == 2
+    assert len(svcreg.available_services()) == 4
 
 def test_utcnow():
     now_notz = datetime.datetime.utcnow()  # has no timezone :(
@@ -173,8 +214,9 @@ def test_utcnow():
     now_tz = rethinkstuff.utcnow() # solution to that problem
     assert now_tz.tzinfo
 
-    ## XXX .timestamp() was added in python 3.3
-    # assert now_tz.timestamp() - now_notz.timestamp() < 0.1
+    ## .timestamp() was added in python 3.3
+    if hasattr(now_tz, 'timestamp'):
+        assert now_tz.timestamp() - now_notz.timestamp() < 0.1
 
     ## XXX TypeError: can't subtract offset-naive and offset-aware datetimes
     # assert abs((now_tz - now_notz).total_seconds()) <  0.1
