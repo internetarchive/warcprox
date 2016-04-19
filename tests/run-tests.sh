@@ -14,7 +14,6 @@ do
                 && (cd /rethinkstuff && git diff) | patch -p1 \
                 && virtualenv -p $python /tmp/venv \
                 && source /tmp/venv/bin/activate \
-                && tail -20 tests/test_reth* \
                 && pip install pytest . \
                 && py.test -v -s tests"
 done

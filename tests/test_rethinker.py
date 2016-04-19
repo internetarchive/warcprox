@@ -101,12 +101,12 @@ def test_service_registry(r):
     svc0 = {
         "role": "yes-such-role",
         "load": 100.0,
-        "heartbeat_interval": 0.2,
+        "heartbeat_interval": 0.4,
     }
     svc1 = {
         "role": "yes-such-role",
         "load": 200.0,
-        "heartbeat_interval": 0.2,
+        "heartbeat_interval": 0.4,
     }
     svc0 = svcreg.heartbeat(svc0)
     svc1 = svcreg.heartbeat(svc1)
@@ -126,40 +126,44 @@ def test_service_registry(r):
     assert "last_heartbeat" in svc0
     assert "last_heartbeat" in svc1
 
-    time.sleep(0.1)
+    time.sleep(0.2)
     assert svcreg.available_service("no-such-role") == None
     assert svcreg.available_services("no-such-role") == []
+    # svc0 has less load
     assert svcreg.available_service("yes-such-role")["id"] == svc0["id"]
-    assert len(svcreg.available_services("yes-such-role")) == 1
-    assert len(svcreg.available_services()) == 1
+    assert len(svcreg.available_services("yes-such-role")) == 2
+    assert len(svcreg.available_services()) == 2
 
     svc1["load"] = 50.0
     svc1 = svcreg.heartbeat(svc1)
-    time.sleep(0.1)
+    time.sleep(0.2)
     assert svcreg.available_service("no-such-role") == None
+    # now svc1 has less load
     assert svcreg.available_service("yes-such-role")["id"] == svc1["id"]
-    assert len(svcreg.available_services("yes-such-role")) == 1
-    assert len(svcreg.available_services()) == 1
+    assert len(svcreg.available_services("yes-such-role")) == 2
+    assert len(svcreg.available_services()) == 2
 
     svc1["load"] = 200.0
     svc1 = svcreg.heartbeat(svc1)
-    time.sleep(0.1)
+    time.sleep(0.2)
     assert svcreg.available_service("no-such-role") == None
+    # now svc0 has less load again
     assert svcreg.available_service("yes-such-role")["id"] == svc0["id"]
-    assert len(svcreg.available_services("yes-such-role")) == 1
-    assert len(svcreg.available_services()) == 1
-    svc1 = svcreg.heartbeat(svc1)
-    time.sleep(0.1)
+    assert len(svcreg.available_services("yes-such-role")) == 2
+    assert len(svcreg.available_services()) == 2
 
     svc1 = svcreg.heartbeat(svc1)
-    time.sleep(0.4)
+    time.sleep(0.2)
+    svc1 = svcreg.heartbeat(svc1)
+    time.sleep(0.7)
     assert svcreg.available_service("no-such-role") == None
+    # now it's been too long since the last heartbeat from svc0
     assert svcreg.available_service("yes-such-role")["id"] == svc1["id"]
     assert len(svcreg.available_services("yes-such-role")) == 1
     assert len(svcreg.available_services()) == 1
 
     svcreg.unregister(svc1["id"])
-    time.sleep(0.1)
+    time.sleep(0.2)
     assert svcreg.available_service("no-such-role") == None
     assert svcreg.available_service("yes-such-role") == None
     assert svcreg.available_services("yes-such-role") == []
@@ -168,37 +172,39 @@ def test_service_registry(r):
     svc0 = {
         "role": "yes-such-role",
         "load": 100.0,
-        "heartbeat_interval": 0.2,
+        "heartbeat_interval": 0.4,
     }
     svc1 = {
         "role": "yes-such-role",
         "load": 200.0,
-        "heartbeat_interval": 0.2,
+        "heartbeat_interval": 0.4,
     }
     svc0 = svcreg.heartbeat(svc0)
     svc1 = svcreg.heartbeat(svc1)
     assert len(svcreg.available_services("yes-such-role")) == 2
     assert len(svcreg.available_services()) == 2
+    svcreg.unregister(svc0["id"])
+    svcreg.unregister(svc1["id"])
 
     svc0 = {
         "role": "yes-such-role",
         "load": 100.0,
-        "heartbeat_interval": 0.2,
+        "heartbeat_interval": 0.4,
     }
     svc1 = {
         "role": "yes-such-role",
         "load": 200.0,
-        "heartbeat_interval": 0.2,
+        "heartbeat_interval": 0.4,
     }
     svc2 = {
         "role": "another-such-role",
         "load": 200.0,
-        "heartbeat_interval": 0.2,
+        "heartbeat_interval": 0.4,
     }
     svc3 = {
         "role": "yet-another-such-role",
         "load": 200.0,
-        "heartbeat_interval": 0.2,
+        "heartbeat_interval": 0.4,
     }
     svc0 = svcreg.heartbeat(svc0)
     svc1 = svcreg.heartbeat(svc1)
