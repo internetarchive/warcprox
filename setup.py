@@ -2,7 +2,7 @@ import setuptools
 
 setuptools.setup(
     name='rethinkstuff',
-    version='0.1.4',
+    version='0.1.5',
     packages=['rethinkstuff'],
     classifiers=[
         'Programming Language :: Python :: 2.7',
