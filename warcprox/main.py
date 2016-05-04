@@ -46,16 +46,9 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
     arg_parser.add_argument('-s', '--size', dest='size',
             default=1000*1000*1000,
             help='WARC file rollover size threshold in bytes')
-    arg_parser.add_argument('-r', '--record-size', dest='record_size',
-            default=1000*1000*100,
-            help='WARC record rollover size threshold in bytes')
     arg_parser.add_argument('--rollover-idle-time',
             dest='rollover_idle_time', default=None,
             help="WARC file rollover idle time threshold in seconds (so that Friday's last open WARC doesn't sit there all weekend waiting for more data)")
-    arg_parser.add_argument('--record-rollover-time',
-            dest='record_rollover_time', default=None,
-            help="WARC record rollover time threshold in seconds to automatically use a new WARC after a period of time")
-
     try:
         hash_algos = hashlib.algorithms_guaranteed
     except AttributeError:
@@ -118,9 +111,7 @@ def main(argv=sys.argv):
     proxy = warcprox.warcprox.WarcProxy(
             server_address=(args.address, int(args.port)), ca=ca,
             recorded_url_q=recorded_url_q,
-            digest_algorithm=args.digest_algorithm,
-            record_size=int(args.record_size),
-            record_rollover_time=int(args.record_rollover_time) if args.record_rollover_time is not None else None)
+            digest_algorithm=args.digest_algorithm)
 
     if args.playback_port is not None:
         playback_index_db = warcprox.playback.PlaybackIndexDb(args.playback_index_db_file)
