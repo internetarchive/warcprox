@@ -68,6 +68,9 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
             version="warcprox {}".format(warcprox.version_str))
     arg_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true')
     arg_parser.add_argument('-q', '--quiet', dest='quiet', action='store_true')
+    arg_parser.add_argument('-i', '--interrupt', dest='interrupt', action='store_true',
+                            help='interrupt handling of request when SIGTERM is received (otherwise completes current '
+                                 'request)')
     # [--ispartof=warcinfo ispartof]
     # [--description=warcinfo description]
     # [--operator=warcinfo operator]
@@ -111,7 +114,8 @@ def main(argv=sys.argv):
     proxy = warcprox.warcprox.WarcProxy(
             server_address=(args.address, int(args.port)), ca=ca,
             recorded_url_q=recorded_url_q,
-            digest_algorithm=args.digest_algorithm)
+            digest_algorithm=args.digest_algorithm,
+            interrupt_on_terminate=args.interrupt)
 
     if args.playback_port is not None:
         playback_index_db = warcprox.playback.PlaybackIndexDb(args.playback_index_db_file)
