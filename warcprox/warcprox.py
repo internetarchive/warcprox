@@ -36,6 +36,7 @@ import traceback
 import hashlib
 import json
 import socket
+import threading
 
 from certauth.certauth import CertificateAuthority
 import warcprox.mitmproxy
@@ -198,6 +199,10 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
 
         buf = h.read(8192)
         while buf != b'':
+            # Check if should interrupt reading the response.
+            if self.server.interrupt_on_terminate and self.server.stop.is_set():
+                self.logger.debug("Interrupting stream since stop is set")
+                break
             buf = h.read(8192)
 
         self.log_request(h.status, h.recorder.len)
@@ -244,10 +249,14 @@ class WarcProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
 
     def __init__(self, server_address=('localhost', 8000),
             req_handler_class=WarcProxyHandler, bind_and_activate=True,
-            ca=None, recorded_url_q=None, digest_algorithm='sha1'):
+            ca=None, recorded_url_q=None, digest_algorithm='sha1', interrupt_on_terminate=False):
         http_server.HTTPServer.__init__(self, server_address, req_handler_class, bind_and_activate)
 
+        # This will be used to tell the WarcProxyHandler to interrupt.
+        self.stop = threading.Event()
+
         self.digest_algorithm = digest_algorithm
+        self.interrupt_on_terminate = interrupt_on_terminate
 
         if ca is not None:
             self.ca = ca
