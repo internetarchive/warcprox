@@ -241,6 +241,8 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                             self.hostname)
                     raise
 
+        return self._remote_server_sock
+
     def _transition_to_ssl(self):
         self.request = self.connection = ssl.wrap_socket(self.connection,
                 server_side=True, certfile=self.server.ca.cert_for_host(self.hostname))
@@ -262,9 +264,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         '''
         self.is_connect = True
         try:
-            # Connect to destination first
             self._determine_host_port()
-            self._connect_to_remote_server()
 
             # If successful, let's do this!
             self.send_response(200, 'Connection established')
@@ -305,19 +305,23 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         return result
 
     def do_COMMAND(self):
-        if not self.is_connect:
-            try:
-                # Connect to destination
-                self._determine_host_port()
-                self._connect_to_remote_server()
-                assert self.url
-            except Exception as e:
-                self.logger.error("problem processing request {}: {}".format(repr(self.requestline), e))
-                self.send_error(500, str(e))
-                return
-        else:
-            # if self.is_connect we already connected in do_CONNECT
+        if self.is_connect:
             self.url = self._construct_tunneled_url()
+        else:
+            self._determine_host_port()
+            assert self.url
+
+        try:
+            # Connect to destination
+            self._connect_to_remote_server()
+        except warcprox.RequestBlockedByRule as e:
+            # limit enforcers have already sent the appropriate response
+            self.logger.info("%s: %s", repr(self.requestline), e)
+            return
+        except Exception as e:
+            self.logger.error("problem processing request {}: {}".format(repr(self.requestline), e))
+            self.send_error(500, str(e))
+            return
 
         try:
             self._proxy_request()

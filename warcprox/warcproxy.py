@@ -45,18 +45,135 @@ import warcprox
 import datetime
 import concurrent.futures
 import resource
+import ipaddress
+import surt
+
+class Url:
+    def __init__(self, url):
+        self.url = url
+        self._surt = None
+        self._host = None
+
+    @property
+    def surt(self):
+        if not self._surt:
+            hurl = surt.handyurl.parse(self.url)
+            surt.GoogleURLCanonicalizer.canonicalize(hurl)
+            hurl.query = None
+            hurl.hash = None
+            self._surt = hurl.getURLString(surt=True, trailing_comma=True)
+        return self._surt
+
+    @property
+    def host(self):
+        if not self._host:
+            self._host = surt.handyurl.parse(self.url).host
+        return self._host
+
+    def matches_ip_or_domain(self, ip_or_domain):
+        """Returns true if
+           - ip_or_domain is an ip address and self.host is the same ip address
+           - ip_or_domain is a domain and self.host is the same domain
+           - ip_or_domain is a domain and self.host is a subdomain of it
+        """
+        if ip_or_domain == self.host:
+            return True
+
+        # if either ip_or_domain or self.host are ip addresses, and they're not
+        # identical (previous check), not a match
+        try:
+            ipaddress.ip_address(ip_or_domain)
+            return False
+        except:
+            pass
+        try:
+            ipaddress.ip_address(self.host)
+            return False
+        except:
+            pass
+
+        # if we get here, we're looking at two hostnames
+        # XXX do we need to handle case of one punycoded idn, other not?
+        domain_parts = ip_or_domain.split(".")
+        host_parts = self.host.split(".")
+
+        return host_parts[-len(domain_parts):] == domain_parts
 
 class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
     # self.server is WarcProxy
     logger = logging.getLogger("warcprox.warcprox.WarcProxyHandler")
 
+    # XXX nearly identical to brozzler.site.Site._scope_rule_applies() but
+    # there's no obvious common dependency where this code should go... TBD
+    def _scope_rule_applies(self, rule):
+        u = Url(self.url)
+
+        if "host" in rule and not u.matches_ip_or_domain(rule["host"]):
+            return False
+        if "url_match" in rule:
+            if rule["url_match"] == "STRING_MATCH":
+                return u.url.find(rule["value"]) >= 0
+            elif rule["url_match"] == "REGEX_MATCH":
+                try:
+                    return re.fullmatch(rule["value"], u.url)
+                except Exception as e:
+                    self.logger.warn(
+                            "caught exception matching against regex %s: %s",
+                            rule["value"], e)
+                    return False
+            elif rule["url_match"] == "SURT_MATCH":
+                return u.surt.startswith(rule["value"])
+            else:
+                self.logger.warn("invalid rule.url_match=%s", rule.url_match)
+                return False
+        else:
+            if "host" in rule:
+                # we already know that it matches from earlier check
+                return True
+            else:
+                self.logger.warn("unable to make sense of scope rule %s", rule)
+                return False
+
+    def _enforce_blocks(self, warcprox_meta):
+        """
+        Sends a 403 response and raises warcprox.RequestBlockedByRule if the
+        url is blocked by a rule in warcprox_meta.
+        """
+        if warcprox_meta and "blocks" in warcprox_meta:
+            for rule in warcprox_meta["blocks"]:
+                if self._scope_rule_applies(rule):
+                    body = ("request rejected by warcprox: blocked by "
+                            "rule found in Warcprox-Meta header: %s"
+                            % rule).encode("utf-8")
+                    self.send_response(403, "Forbidden")
+                    self.send_header("Content-Type", "text/plain;charset=utf-8")
+                    self.send_header("Connection", "close")
+                    self.send_header("Content-Length", len(body))
+                    response_meta = {"blocked-by-rule":rule}
+                    self.send_header(
+                            "Warcprox-Meta",
+                            json.dumps(response_meta, separators=(",",":")))
+                    self.end_headers()
+                    if self.command != "HEAD":
+                        self.wfile.write(body)
+                    self.connection.close()
+                    raise warcprox.RequestBlockedByRule(
+                            "%s 403 %s %s -- blocked by rule in Warcprox-Meta "
+                            "request header %s" % (
+                                self.client_address[0], self.command,
+                                self.url, rule))
+
     def _enforce_limits(self, warcprox_meta):
+        """
+        Sends a 420 response and raises warcprox.RequestBlockedByRule if a
+        limit specified in warcprox_meta is reached.
+        """
         if warcprox_meta and "limits" in warcprox_meta:
             for item in warcprox_meta["limits"].items():
                 key, limit = item
                 bucket0, bucket1, bucket2 = key.rsplit(".", 2)
                 value = self.server.stats_db.value(bucket0, bucket1, bucket2)
-                self.logger.debug("warcprox_meta['limits']=%s stats['%s']=%s recorded_url_q.qsize()=%s", 
+                self.logger.debug("warcprox_meta['limits']=%s stats['%s']=%s recorded_url_q.qsize()=%s",
                         warcprox_meta['limits'], key, value, self.server.recorded_url_q.qsize())
                 if value and value >= limit:
                     body = "request rejected by warcprox: reached limit {}={}\n".format(key, limit).encode("utf-8")
@@ -70,19 +187,34 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                     if self.command != "HEAD":
                         self.wfile.write(body)
                     self.connection.close()
-                    self.logger.info("%s 420 %s %s -- reached limit %s=%s", self.client_address[0], self.command, self.url, key, limit)
-                    return True
-        return False
+                    raise warcprox.RequestBlockedByRule(
+                            "%s 420 %s %s -- reached limit %s=%s" % (
+                                self.client_address[0], self.command,
+                                self.url, key, limit))
+
+    def _connect_to_remote_server(self):
+        '''
+        Wraps MitmProxyHandler._connect_to_remote_server, first enforcing
+        limits and block rules in the Warcprox-Meta request header, if any.
+        Raises warcprox.RequestBlockedByRule if a rule has been enforced.
+        Otherwise calls MitmProxyHandler._connect_to_remote_server, which
+        initializes self._remote_server_sock.
+        '''
+        if 'Warcprox-Meta' in self.headers:
+            warcprox_meta = json.loads(self.headers['Warcprox-Meta'])
+            self._enforce_limits(warcprox_meta)
+            self._enforce_blocks(warcprox_meta)
+        return warcprox.mitmproxy.MitmProxyHandler._connect_to_remote_server(self)
 
     def _proxy_request(self):
         warcprox_meta = None
         raw_warcprox_meta = self.headers.get('Warcprox-Meta')
+        self.logger.log(
+                warcprox.TRACE, 'request for %s Warcprox-Meta header: %s',
+                self.url, repr(raw_warcprox_meta))
         if raw_warcprox_meta:
             warcprox_meta = json.loads(raw_warcprox_meta)
             del self.headers['Warcprox-Meta']
-
-        if self._enforce_limits(warcprox_meta):
-            return
 
         remote_ip = self._remote_server_sock.getpeername()[0]
         timestamp = datetime.datetime.utcnow()

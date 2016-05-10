@@ -109,6 +109,7 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
     arg_parser.add_argument('--version', action='version',
             version="warcprox {}".format(warcprox.__version__))
     arg_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true')
+    arg_parser.add_argument('--trace', dest='trace', action='store_true')
     arg_parser.add_argument('-q', '--quiet', dest='quiet', action='store_true')
 
     return arg_parser
@@ -232,7 +233,9 @@ def main(argv=sys.argv):
     '''
     args = parse_args(argv)
 
-    if args.verbose:
+    if args.trace:
+        loglevel = warcprox.TRACE
+    elif args.verbose:
         loglevel = logging.DEBUG
     elif args.quiet:
         loglevel = logging.WARNING

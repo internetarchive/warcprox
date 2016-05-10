@@ -1,24 +1,24 @@
 #!/usr/bin/env python
-#
-# tests/test_warcprox.py - automated tests for warcprox
-#
-# Copyright (C) 2013-2016 Internet Archive
-#
-# This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License
-# as published by the Free Software Foundation; either version 2
-# of the License, or (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
-# USA.
-#
+'''
+tests/test_warcprox.py - automated tests for warcprox
+
+Copyright (C) 2013-2016 Internet Archive
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
+USA.
+'''
 
 import pytest
 import threading
@@ -58,7 +58,8 @@ import certauth.certauth
 import warcprox
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
-        format='%(asctime)s %(process)d %(levelname)s %(threadName)s %(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s')
+        format='%(asctime)s %(process)d %(levelname)s %(threadName)s '
+        '%(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s')
 logging.getLogger("requests.packages.urllib3").setLevel(logging.WARN)
 warnings.simplefilter("ignore", category=requests.packages.urllib3.exceptions.InsecureRequestWarning)
 warnings.simplefilter("ignore", category=requests.packages.urllib3.exceptions.InsecurePlatformWarning)
@@ -137,8 +138,8 @@ def cert(request):
 
 @pytest.fixture(scope="module")
 def http_daemon(request):
-    http_daemon = http_server.HTTPServer(('localhost', 0),
-            RequestHandlerClass=_TestHttpRequestHandler)
+    http_daemon = http_server.HTTPServer(
+            ('localhost', 0), RequestHandlerClass=_TestHttpRequestHandler)
     logging.info('starting http://{}:{}'.format(http_daemon.server_address[0], http_daemon.server_address[1]))
     http_daemon_thread = threading.Thread(name='HttpDaemonThread',
             target=http_daemon.serve_forever)
@@ -724,6 +725,118 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
 
     finally:
         fh.close()
+
+def test_block_rules(http_daemon, https_daemon, warcprox_, archiving_proxies):
+    rules = [
+        {
+            "host": "localhost",
+            "url_match": "STRING_MATCH",
+            "value": "bar",
+        },
+        {
+            "url_match": "SURT_MATCH",
+            "value": "http://(localhost:%s,)/fuh/" % (http_daemon.server_port),
+        },
+        {
+            "url_match": "SURT_MATCH",
+            # this rule won't match because of http scheme, https port
+            "value": "http://(localhost:%s,)/fuh/" % (https_daemon.server_port),
+        },
+        {
+            "host": "badhost.com",
+        },
+    ]
+    request_meta = {"blocks":rules}
+    headers = {"Warcprox-Meta":json.dumps(request_meta)}
+
+    # blocked by STRING_MATCH rule
+    url = 'http://localhost:{}/bar'.format(http_daemon.server_port)
+    response = requests.get(
+            url, proxies=archiving_proxies, headers=headers, stream=True)
+    assert response.status_code == 403
+    assert response.content.startswith(b"request rejected by warcprox: blocked by rule found in Warcprox-Meta header:")
+    assert json.loads(response.headers['warcprox-meta']) == {"blocked-by-rule":rules[0]}
+
+    # not blocked
+    url = 'http://localhost:{}/m/n'.format(http_daemon.server_port)
+    response = requests.get(
+            url, proxies=archiving_proxies, headers=headers, stream=True)
+    assert response.status_code == 200
+
+    # blocked by SURT_MATCH
+    url = 'http://localhost:{}/fuh/guh'.format(http_daemon.server_port)
+    # logging.info("%s => %s", repr(url), repr(warcprox.warcproxy.Url(url).surt))
+    response = requests.get(
+            url, proxies=archiving_proxies, headers=headers, stream=True)
+    assert response.status_code == 403
+    assert response.content.startswith(b"request rejected by warcprox: blocked by rule found in Warcprox-Meta header:")
+    assert json.loads(response.headers['warcprox-meta']) == {"blocked-by-rule":rules[1]}
+
+    # not blocked (no trailing slash)
+    url = 'http://localhost:{}/fuh'.format(http_daemon.server_port)
+    response = requests.get(
+            url, proxies=archiving_proxies, headers=headers, stream=True)
+    # 404 because server set up at the top of this file doesn't handle this url
+    assert response.status_code == 404
+
+    # not blocked because surt scheme does not match (differs from heritrix
+    # behavior where https urls are coerced to http surt form)
+    url = 'https://localhost:{}/fuh/guh'.format(https_daemon.server_port)
+    response = requests.get(
+            url, proxies=archiving_proxies, headers=headers, stream=True,
+            verify=False)
+    assert response.status_code == 200
+
+    # blocked by blanket host block
+    url = 'http://badhost.com/'
+    response = requests.get(
+            url, proxies=archiving_proxies, headers=headers, stream=True)
+    assert response.status_code == 403
+    assert response.content.startswith(b"request rejected by warcprox: blocked by rule found in Warcprox-Meta header:")
+    assert json.loads(response.headers['warcprox-meta']) == {"blocked-by-rule":rules[3]}
+
+    # blocked by blanket host block
+    url = 'https://badhost.com/'
+    response = requests.get(
+            url, proxies=archiving_proxies, headers=headers, stream=True,
+            verify=False)
+    assert response.status_code == 403
+    assert response.content.startswith(b"request rejected by warcprox: blocked by rule found in Warcprox-Meta header:")
+    assert json.loads(response.headers['warcprox-meta']) == {"blocked-by-rule":rules[3]}
+
+    # blocked by blanket host block
+    url = 'http://badhost.com:1234/'
+    response = requests.get(
+            url, proxies=archiving_proxies, headers=headers, stream=True)
+    assert response.status_code == 403
+    assert response.content.startswith(b"request rejected by warcprox: blocked by rule found in Warcprox-Meta header:")
+    assert json.loads(response.headers['warcprox-meta']) == {"blocked-by-rule":rules[3]}
+
+    # blocked by blanket host block
+    url = 'http://foo.bar.badhost.com/'
+    response = requests.get(
+            url, proxies=archiving_proxies, headers=headers, stream=True)
+    assert response.status_code == 403
+    assert response.content.startswith(b"request rejected by warcprox: blocked by rule found in Warcprox-Meta header:")
+    assert json.loads(response.headers['warcprox-meta']) == {"blocked-by-rule":rules[3]}
+
+    # host block also applies to subdomains
+    url = 'https://foo.bar.badhost.com/'
+    response = requests.get(
+            url, proxies=archiving_proxies, headers=headers, stream=True,
+            verify=False)
+    assert response.status_code == 403
+    assert response.content.startswith(b"request rejected by warcprox: blocked by rule found in Warcprox-Meta header:")
+    assert json.loads(response.headers['warcprox-meta']) == {"blocked-by-rule":rules[3]}
+
+    # blocked by blanket host block
+    url = 'http://foo.bar.badhost.com:1234/'
+    response = requests.get(
+            url, proxies=archiving_proxies, headers=headers, stream=True)
+    assert response.status_code == 403
+    assert response.content.startswith(b"request rejected by warcprox: blocked by rule found in Warcprox-Meta header:")
+    assert json.loads(response.headers['warcprox-meta']) == {"blocked-by-rule":rules[3]}
+
 
 # XXX this test relies on a tor proxy running at localhost:9050 with a working
 # connection to the internet, and relies on a third party site (facebook) being

@@ -1,23 +1,23 @@
-#
-# warcprox/__init__.py - warcprox package main file, contains some utility code
-#
-# Copyright (C) 2013-2016 Internet Archive
-#
-# This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License
-# as published by the Free Software Foundation; either version 2
-# of the License, or (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
-# USA.
-#
+"""
+warcprox/__init__.py - warcprox package main file, contains some utility code
+
+Copyright (C) 2013-2016 Internet Archive
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+USA.
+"""
 
 from argparse import Namespace as _Namespace
 from pkg_resources import get_distribution as _get_distribution
@@ -46,6 +46,19 @@ def gettid():
         return tid
     except:
         return "n/a"
+
+class RequestBlockedByRule(Exception):
+    """
+    An exception raised when a request should be blocked to respect a
+    Warcprox-Meta rule.
+    """
+    def __init__(self, msg):
+        self.msg = msg
+    def __str__(self):
+        return "%s: %s" % (self.__class__.__name__, self.msg)
+
+# logging level more fine-grained than logging.DEBUG==10
+TRACE = 5
 
 import warcprox.controller as controller
 import warcprox.playback as playback
