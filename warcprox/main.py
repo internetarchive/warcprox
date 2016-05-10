@@ -1,25 +1,25 @@
 #!/usr/bin/env python
-#
-# warcprox/main.py - entrypoint for warcprox executable, parses command line
-# arguments, initializes components, starts controller, handles signals
-#
-# Copyright (C) 2013-2016 Internet Archive
-#
-# This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License
-# as published by the Free Software Foundation; either version 2
-# of the License, or (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
-# USA.
-#
+'''
+warcprox/main.py - entrypoint for warcprox executable, parses command line
+arguments, initializes components, starts controller, handles signals
+
+Copyright (C) 2013-2016 Internet Archive
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
+USA.
+'''
 
 from __future__ import absolute_import
 
@@ -114,6 +114,9 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
     return arg_parser
 
 def dump_state(signum=None, frame=None):
+    '''
+    Signal handler, logs stack traces of active threads.
+    '''
     pp = pprint.PrettyPrinter(indent=4)
     state_strs = []
 
@@ -128,6 +131,10 @@ def dump_state(signum=None, frame=None):
     logging.warn("dumping state (caught signal {})\n{}".format(signum, "\n".join(state_strs)))
 
 def init_controller(args):
+    '''
+    Creates a warcprox.controller.WarcproxController configured according to
+    the supplied arguments (normally the result of parse_args(sys.argv)).
+    '''
     options = warcprox.Options(**vars(args))
 
     try:
@@ -212,11 +219,17 @@ def real_main(args):
     controller.run_until_shutdown()
 
 def parse_args(argv=sys.argv):
+    '''
+    Parses command line arguments with argparse.
+    '''
     arg_parser = _build_arg_parser(prog=os.path.basename(argv[0]))
     args = arg_parser.parse_args(args=argv[1:])
     return args
 
 def main(argv=sys.argv):
+    '''
+    Main method, entry point of warcprox command.
+    '''
     args = parse_args(argv)
 
     if args.verbose:

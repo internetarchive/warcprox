@@ -1,24 +1,24 @@
-#
-# warcprox/warcproxy.py - recording proxy, extends mitmproxy to record traffic,
-# enqueue info on the recorded url queue
-#
-# Copyright (C) 2013-2016 Internet Archive
-#
-# This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License
-# as published by the Free Software Foundation; either version 2
-# of the License, or (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
-# USA.
-#
+'''
+warcprox/warcproxy.py - recording proxy, extends mitmproxy to record traffic,
+enqueue info on the recorded url queue
+
+Copyright (C) 2013-2016 Internet Archive
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
+USA.
+'''
 
 from __future__ import absolute_import
 
@@ -34,15 +34,9 @@ try:
     import queue
 except ImportError:
     import Queue as queue
-try:
-    import http.client as http_client
-except ImportError:
-    import httplib as http_client
 import logging
 import re
-import tempfile
 import traceback
-import hashlib
 import json
 import socket
 from hanzo import warctools
@@ -51,112 +45,6 @@ import warcprox
 import datetime
 import concurrent.futures
 import resource
-
-class ProxyingRecorder(object):
-    """
-    Wraps a socket._fileobject, recording the bytes as they are read,
-    calculating digests, and sending them on to the proxy client.
-    """
-
-    logger = logging.getLogger("warcprox.warcproxy.ProxyingRecorder")
-
-    def __init__(self, fp, proxy_dest, digest_algorithm='sha1', url=None):
-        self.fp = fp
-        # "The file has no name, and will cease to exist when it is closed."
-        self.tempfile = tempfile.SpooledTemporaryFile(max_size=512*1024)
-        self.digest_algorithm = digest_algorithm
-        self.block_digest = hashlib.new(digest_algorithm)
-        self.payload_offset = None
-        self.payload_digest = None
-        self.proxy_dest = proxy_dest
-        self._proxy_dest_conn_open = True
-        self._prev_hunk_last_two_bytes = b''
-        self.len = 0
-        self.url = url
-
-    def payload_starts_now(self):
-        self.payload_digest = hashlib.new(self.digest_algorithm)
-        self.payload_offset = self.len
-
-    def _update_payload_digest(self, hunk):
-        if self.payload_digest:
-            self.payload_digest.update(hunk)
-
-    def _update(self, hunk):
-        self._update_payload_digest(hunk)
-        self.block_digest.update(hunk)
-
-        self.tempfile.write(hunk)
-
-        if self.payload_digest and self._proxy_dest_conn_open:
-            try:
-                self.proxy_dest.sendall(hunk)
-            except BaseException as e:
-                self._proxy_dest_conn_open = False
-                self.logger.warn('{} sending data to proxy client for url {}'.format(e, self.url))
-                self.logger.info('will continue downloading from remote server without sending to client {}'.format(self.url))
-
-        self.len += len(hunk)
-
-    def read(self, size=-1):
-        hunk = self.fp.read(size)
-        self._update(hunk)
-        return hunk
-
-    def readinto(self, b):
-        n = self.fp.readinto(b)
-        self._update(b[:n])
-        return n
-
-    def readline(self, size=-1):
-        # XXX depends on implementation details of self.fp.readline(), in
-        # particular that it doesn't call self.fp.read()
-        hunk = self.fp.readline(size)
-        self._update(hunk)
-        return hunk
-
-    def flush(self):
-        return self.fp.flush()
-
-    def close(self):
-        return self.fp.close()
-
-    def __len__(self):
-        return self.len
-
-    def payload_size(self):
-        if self.payload_offset is not None:
-            return self.len - self.payload_offset
-        else:
-            return 0
-
-class ProxyingRecordingHTTPResponse(http_client.HTTPResponse):
-
-    def __init__(self, sock, debuglevel=0, method=None, proxy_dest=None, digest_algorithm='sha1', url=None):
-        http_client.HTTPResponse.__init__(self, sock, debuglevel=debuglevel, method=method)
-        self.proxy_dest = proxy_dest
-        self.url = url
-
-        # Keep around extra reference to self.fp because HTTPResponse sets
-        # self.fp=None after it finishes reading, but we still need it
-        self.recorder = ProxyingRecorder(self.fp, proxy_dest, digest_algorithm, url=url)
-        self.fp = self.recorder
-
-    def begin(self):
-        http_client.HTTPResponse.begin(self)  # reads status line, headers
-
-        status_and_headers = 'HTTP/1.1 {} {}\r\n'.format(self.status, self.reason)
-        for k,v in self.msg.items():
-            if k.lower() not in (
-                    'connection', 'proxy-connection', 'keep-alive',
-                    'proxy-authenticate', 'proxy-authorization', 'upgrade',
-                    'strict-transport-security'):
-                status_and_headers += '{}: {}\r\n'.format(k, v)
-        status_and_headers += 'Connection: close\r\n\r\n'
-        self.proxy_dest.sendall(status_and_headers.encode('latin1'))
-
-        self.recorder.payload_starts_now()
-
 
 class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
     # self.server is WarcProxy
@@ -187,96 +75,63 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         return False
 
     def _proxy_request(self):
-        # Build request
-        req_str = '{} {} {}\r\n'.format(self.command, self.path, self.request_version)
-
         warcprox_meta = None
         raw_warcprox_meta = self.headers.get('Warcprox-Meta')
         if raw_warcprox_meta:
             warcprox_meta = json.loads(raw_warcprox_meta)
+            del self.headers['Warcprox-Meta']
 
         if self._enforce_limits(warcprox_meta):
             return
 
-        # Swallow headers that don't make sense to forward on, i.e. most
-        # hop-by-hop headers, see http://tools.ietf.org/html/rfc2616#section-13.5
-        # self.headers is an email.message.Message, which is case-insensitive
-        # and doesn't throw KeyError in __delitem__
-        for key in ('Connection', 'Proxy-Connection', 'Keep-Alive',
-                'Proxy-Authenticate', 'Proxy-Authorization', 'Upgrade',
-                'Warcprox-Meta'):
-            del self.headers[key]
+        remote_ip = self._remote_server_sock.getpeername()[0]
+        timestamp = datetime.datetime.utcnow()
 
-        # Add headers to the request
-        # XXX in at least python3.3 str(self.headers) uses \n not \r\n :(
-        req_str += '\r\n'.join('{}: {}'.format(k,v) for (k,v) in self.headers.items())
+        req, prox_rec_res = warcprox.mitmproxy.MitmProxyHandler._proxy_request(
+                self)
 
-        req = req_str.encode('latin1') + b'\r\n\r\n'
-
-        # Append message body if present to the request
-        if 'Content-Length' in self.headers:
-            req += self.rfile.read(int(self.headers['Content-Length']))
-
-        prox_rec_res = None
-        recorded_url = None
-        try:
-            self.logger.debug('sending to remote server req=%s', repr(req))
-
-            # warc-date "shall represent the instant that data capture for record creation began"
-            timestamp = datetime.datetime.utcnow()
-
-            # Send it down the pipe!
-            self._proxy_sock.sendall(req)
-
-            # We want HTTPResponse's smarts about http and handling of
-            # non-compliant servers. But HTTPResponse.read() doesn't return the raw
-            # bytes read from the server, it unchunks them if they're chunked, and
-            # might do other stuff. We want to send the raw bytes back to the
-            # client. So we ignore the values returned by prox_rec_res.read() below. Instead
-            # the ProxyingRecordingHTTPResponse takes care of sending the raw bytes
-            # to the proxy client.
-
-            # Proxy and record the response
-            prox_rec_res = ProxyingRecordingHTTPResponse(self._proxy_sock,
-                    proxy_dest=self.connection,
-                    digest_algorithm=self.server.digest_algorithm,
-                    url=self.url)
-            prox_rec_res.begin()
-
-            remote_ip=self._proxy_sock.getpeername()[0]
-
-            buf = prox_rec_res.read(8192)
-            while buf != b'':
-                buf = prox_rec_res.read(8192)
-
-            recorded_url = RecordedUrl(url=self.url, request_data=req,
-                    response_recorder=prox_rec_res.recorder,
-                    remote_ip=remote_ip, warcprox_meta=warcprox_meta,
-                    status=prox_rec_res.status, size=prox_rec_res.recorder.len,
-                    client_ip=self.client_address[0],
-                    content_type=prox_rec_res.getheader("Content-Type"),
-                    method=self.command, timestamp=timestamp,
-                    host=self.hostname, duration=datetime.datetime.utcnow()-timestamp)
-            self.server.recorded_url_q.put(recorded_url)
-
-            self.log_request(prox_rec_res.status, prox_rec_res.recorder.len)
-        except socket.timeout as e:
-            self.logger.warn("%s proxying %s %s", repr(e), self.command, self.url)
-        except BaseException as e:
-            self.logger.error("%s proxying %s %s", repr(e), self.command, self.url, exc_info=True)
-        finally:
-            # Let's close off the remote end
-            if prox_rec_res:
-                prox_rec_res.close()
-            self._proxy_sock.close()
+        recorded_url = RecordedUrl(
+                url=self.url, request_data=req,
+                response_recorder=prox_rec_res.recorder, remote_ip=remote_ip,
+                warcprox_meta=warcprox_meta, status=prox_rec_res.status,
+                size=prox_rec_res.recorder.len,
+                client_ip=self.client_address[0],
+                content_type=prox_rec_res.getheader("Content-Type"),
+                method=self.command, timestamp=timestamp, host=self.hostname,
+                duration=datetime.datetime.utcnow()-timestamp)
+        self.server.recorded_url_q.put(recorded_url)
 
         return recorded_url
 
     # deprecated
     def do_PUTMETA(self):
+        '''
+        Handles a special warcprox PUTMETA request (deprecated). A PUTMETA
+        request is equivalent to a WARCPROX_WRITE_RECORD request with
+        WARC-Type: metadata.
+        '''
         self.do_WARCPROX_WRITE_RECORD(warc_type=warctools.WarcRecord.METADATA)
 
     def do_WARCPROX_WRITE_RECORD(self, warc_type=None):
+        '''
+        Handles a request with http method WARCPROX_WRITE_RECORD, a special
+        type of request which tells warcprox to construct a warc record from
+        the request more or less verbatim, and write it to a warc.
+
+        To honor the request, this method creates a RecordedUrl queues it for
+        the WarcWriterThread to process. The warc record headers Content-Type
+        and WARC-Type are taken from the request headers, as is the payload.
+
+        Example request:
+
+        WARCPROX_WRITE_RECORD screenshot:https://example.com/ HTTP/1.1
+        WARC-Type: metadata
+        Content-Type: image/png
+        Content-Length: 12345
+        Connection: close
+
+        <png image data>
+        '''
         try:
             self.url = self.path
 
