@@ -66,10 +66,10 @@ class WarcproxController(object):
         except:
             pass
         finally:
-            self.warc_writer_thread.stop.set()
             self.proxy.stop.set()
             self.proxy.shutdown()
             self.proxy.server_close()
+            self.warc_writer_thread.stop.set()
 
             if self.warc_writer_thread.warc_writer.dedup_db is not None:
                 self.warc_writer_thread.warc_writer.dedup_db.close()
