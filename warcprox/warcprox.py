@@ -217,7 +217,6 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 response_recorder=h.recorder, remote_ip=remote_ip,
                 warcprox_meta=warcprox_meta)
         self.server.recorded_url_q.put(recorded_url)
-
         return recorded_url
 
 
@@ -277,5 +276,6 @@ class WarcProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
 
     def server_close(self):
         self.logger.info('WarcProxy shutting down')
+        http_server.HTTPServer.shutdown(self)
         http_server.HTTPServer.server_close(self)
 
