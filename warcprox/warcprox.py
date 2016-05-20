@@ -237,9 +237,13 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         # Mark this done.
         self.done.set()
         # If server's stop event is not set, remove from list of handlers.
-        if not self.server.stop.is_set():
+        if not self.server.stop.is_set() and self.server:
             self.logger.debug("Removing handler")
-            self.server.handlers.remove(self)
+            # For some reason, sometimes self.server.handlers disappears, so catching.
+            try:
+                self.server.handlers.remove(self)
+            except TypeError:
+                pass
 
 class RecordedUrl(object):
     def __init__(self, url, request_data, response_recorder, remote_ip, warcprox_meta=None):
