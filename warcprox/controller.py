@@ -66,9 +66,13 @@ class WarcproxController(object):
         except:
             pass
         finally:
-            self.proxy.stop.set()
+            # First, no new threads
             self.proxy.shutdown()
+            # Then tell the existing threads to finish up
+            self.proxy.stop.set()
+            # Now wait for them to finish
             self.proxy.server_close()
+            # All records should have been submitted so can shut down the writer
             self.warc_writer_thread.stop.set()
 
             if self.warc_writer_thread.warc_writer.dedup_db is not None:

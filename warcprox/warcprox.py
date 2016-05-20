@@ -153,6 +153,10 @@ class ProxyingRecordingHTTPResponse(http_client.HTTPResponse):
 class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
     logger = logging.getLogger("warcprox.warcprox.WarcProxyHandler")
 
+    def __init__(self, request, client_address, server):
+        self.done = None
+        warcprox.mitmproxy.MitmProxyHandler.__init__(self, request, client_address, server)
+
     def _proxy_request(self):
         # Build request
         req_str = '{} {} {}\r\n'.format(self.command, self.path, self.request_version)
@@ -219,6 +223,23 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         self.server.recorded_url_q.put(recorded_url)
         return recorded_url
 
+    def setup(self):
+        warcprox.mitmproxy.MitmProxyHandler.setup(self)
+        self.logger.debug("Setting up handler")
+        # Setup an event which will indicate that this handler is finished.
+        self.done = threading.Event()
+        # Add this to server's list of handlers.
+        self.server.handlers.append(self)
+
+    def finish(self):
+        warcprox.mitmproxy.MitmProxyHandler.finish(self)
+        self.logger.debug("Finishing handler")
+        # Mark this done.
+        self.done.set()
+        # If server's stop event is not set, remove from list of handlers.
+        if not self.server.stop.is_set():
+            self.logger.debug("Removing handler")
+            self.server.handlers.remove(self)
 
 class RecordedUrl(object):
     def __init__(self, url, request_data, response_recorder, remote_ip, warcprox_meta=None):
@@ -257,6 +278,9 @@ class WarcProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
         self.digest_algorithm = digest_algorithm
         self.interrupt_on_terminate = interrupt_on_terminate
 
+        # This will be used to keep track of the handlers to make sure they are shutdown.
+        self.handlers = []
+
         if ca is not None:
             self.ca = ca
         else:
@@ -276,6 +300,10 @@ class WarcProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
 
     def server_close(self):
         self.logger.info('WarcProxy shutting down')
-        http_server.HTTPServer.shutdown(self)
         http_server.HTTPServer.server_close(self)
-
+        # Wait up to 3 seconds until each of the handlers is done.
+        while self.handlers:
+            self.logger.debug("Waiting for %s handlers", len(self.handlers))
+            handler = self.handlers.pop()
+            handler.done.wait(3)
+        self.logger.debug("Done waiting for handlers")
