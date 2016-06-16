@@ -52,7 +52,11 @@ class RethinkCaptures:
         self._batch_lock = threading.RLock()
         with self._batch_lock:
             self._batch = []
-        self._insert_batch() # starts repeating timer
+        self._timer = None
+
+    def start(self):
+        """Starts batch insert repeating timer"""
+        self._insert_batch()
 
     def _insert_batch(self):
         try:
@@ -165,9 +169,13 @@ class RethinkCaptures:
             self._batch.append(entry)
 
     def close(self):
+        self.stop()
+
+    def stop(self):
         self.logger.info("closing rethinkdb captures table")
         self._stop.set()
-        self._timer.join()
+        if self._timer:
+            self._timer.join()
 
 class RethinkCapturesDedup:
     logger = logging.getLogger("warcprox.dedup.RethinkCapturesDedup")
@@ -194,6 +202,12 @@ class RethinkCapturesDedup:
             return dedup_info
         else:
             return None
+
+    def start(self):
+        self.captures_db.start()
+
+    def stop(self):
+        self.captures_db.stop()
 
     def close(self):
         self.captures_db.close()

@@ -71,6 +71,13 @@ class StatsDb:
         self.db = dbm_gnu.open(dbm_file, 'c')
         self.options = options
 
+    def start(self):
+        # method only exists to match RethinkStatsDb
+        pass
+
+    def stop(self):
+        self.close()
+
     def close(self):
         self.db.close()
 
@@ -134,7 +141,7 @@ class StatsDb:
             self.db[b] = json.dumps(bucket_stats, separators=(',',':')).encode("utf-8")
 
 class RethinkStatsDb:
-    """Updates database in batch every 0.5 seconds"""
+    """Updates database in batch every 2.0 seconds"""
     logger = logging.getLogger("warcprox.stats.RethinkStatsDb")
 
     def __init__(self, rethinker, table="stats", shards=None, replicas=None, options=warcprox.Options()):
@@ -149,7 +156,10 @@ class RethinkStatsDb:
         self._batch_lock = threading.RLock()
         with self._batch_lock:
             self._batch = {}
+        self._timer = None
 
+    def start(self):
+        """Starts batch update repeating timer."""
         self._update_batch() # starts repeating timer
 
     def _update_batch(self):
@@ -190,18 +200,27 @@ class RethinkStatsDb:
     def _ensure_db_table(self):
         dbs = self.r.db_list().run()
         if not self.r.dbname in dbs:
-            self.logger.info("creating rethinkdb database %s", repr(self.r.dbname))
+            self.logger.info(
+                    "creating rethinkdb database %s", repr(self.r.dbname))
             self.r.db_create(self.r.dbname).run()
         tables = self.r.table_list().run()
         if not self.table in tables:
-            self.logger.info("creating rethinkdb table %s in database %s shards=%s replicas=%s",
-                             repr(self.table), repr(self.r.dbname), self.shards, self.replicas)
-            self.r.table_create(self.table, primary_key="bucket", shards=self.shards, replicas=self.replicas).run()
+            self.logger.info(
+                    "creating rethinkdb table %s in database %s shards=%s "
+                    "replicas=%s", repr(self.table), repr(self.r.dbname),
+                    self.shards, self.replicas)
+            self.r.table_create(
+                    self.table, primary_key="bucket", shards=self.shards,
+                    replicas=self.replicas).run()
 
     def close(self):
-        self.logger.info("closing rethinkdb stats table")
+        self.stop()
+
+    def stop(self):
+        self.logger.info("stopping rethinkdb stats table batch updates")
         self._stop.set()
-        self._timer.join()
+        if self._timer:
+            self._timer.join()
 
     def sync(self):
         pass

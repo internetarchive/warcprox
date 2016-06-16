@@ -188,6 +188,7 @@ def captures_db(request, rethinkdb_servers, rethinkdb_big_table):
             db = 'warcprox_test_captures_' + "".join(random.sample("abcdefghijklmnopqrstuvwxyz0123456789_",8))
             r = rethinkstuff.Rethinker(servers, db)
             captures_db = warcprox.bigtable.RethinkCaptures(r)
+            captures_db.start()
 
     def fin():
         if captures_db:
@@ -247,6 +248,7 @@ def stats_db(request, rethinkdb_servers):
         db = 'warcprox_test_stats_' + "".join(random.sample("abcdefghijklmnopqrstuvwxyz0123456789_",8))
         r = rethinkstuff.Rethinker(servers, db)
         sdb = warcprox.stats.RethinkStatsDb(r)
+        sdb.start()
     else:
         f = tempfile.NamedTemporaryFile(prefix='warcprox-test-stats-', suffix='.db', delete=False)
         f.close()

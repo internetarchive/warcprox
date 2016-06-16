@@ -149,8 +149,14 @@ class WarcproxController(object):
         Start warcprox and run until shut down. Call
         warcprox_controller.stop.set() to initiate graceful shutdown.
         """
-        proxy_thread = threading.Thread(target=self.proxy.serve_forever, name='ProxyThread')
+        if self.proxy.stats_db:
+            self.proxy.stats_db.start()
+        proxy_thread = threading.Thread(
+                target=self.proxy.serve_forever, name='ProxyThread')
         proxy_thread.start()
+
+        if self.warc_writer_thread.dedup_db:
+            self.warc_writer_thread.dedup_db.start()
         self.warc_writer_thread.start()
 
         if self.playback_proxy is not None:
@@ -199,7 +205,7 @@ class WarcproxController(object):
             self.warc_writer_thread.join()
 
             if self.proxy.stats_db:
-                self.proxy.stats_db.close()
+                self.proxy.stats_db.stop()
             if self.warc_writer_thread.dedup_db:
                 self.warc_writer_thread.dedup_db.close()
 

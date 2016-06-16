@@ -48,6 +48,12 @@ class DedupDb(object):
         self.db = dbm_gnu.open(dbm_file, 'c')
         self.options = options
 
+    def start(self):
+        pass
+
+    def stop(self):
+        self.close()
+
     def close(self):
         self.db.close()
 
@@ -124,6 +130,13 @@ class RethinkDedupDb:
             self.logger.info("creating rethinkdb table %s in database %s shards=%s replicas=%s",
                              repr(self.table), repr(self.r.dbname), self.shards, self.replicas)
             self.r.table_create(self.table, primary_key="key", shards=self.shards, replicas=self.replicas).run()
+
+
+    def start(self):
+        pass
+
+    def stop(self):
+        pass
 
     def close(self):
         pass
