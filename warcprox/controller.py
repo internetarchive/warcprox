@@ -142,7 +142,9 @@ class WarcproxController(object):
         status_info['queue_size'] = self.proxy.recorded_url_q.qsize()
 
         self.status_info = self.service_registry.heartbeat(status_info)
-        self.logger.debug("status in service registry: %s", self.status_info)
+        self.logger.log(
+                warcprox.TRACE, "status in service registry: %s",
+                self.status_info)
 
     def run_until_shutdown(self):
         """

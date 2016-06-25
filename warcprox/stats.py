@@ -194,7 +194,7 @@ class RethinkStatsDb(StatsDb):
         """Starts batch update repeating timer."""
         self._update_batch() # starts repeating timer
 
-    def _bucket_batch_update_reql(bucket):
+    def _bucket_batch_update_reql(self, bucket):
         return self.r.table(self.table).get(bucket).replace(
             lambda old: r.branch(
                 old.eq(None), self._batch[bucket], old.merge({
