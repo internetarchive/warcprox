@@ -100,6 +100,18 @@ class Url:
         return host_parts[-len(domain_parts):] == domain_parts
 
 class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
+    '''
+    XXX add more information.
+
+    Among other things, this class enforces limits specified in the
+    Warcprox-Meta request header. If a limit is deemed to have been reached, no
+    request will be made to the remote destination server. This implementation
+    detail has implications worth noting. For example, if a limit applies to
+    "new" (not deduplicated) bytes, and the limit has already been reached, no
+    request will be made, even if it would have resulted in duplicate content,
+    which would not count toward the limit. To reiterate, this is because the
+    limit enforcer does not know that the content would be deduplicated.
+    '''
     # self.server is WarcProxy
     logger = logging.getLogger("warcprox.warcprox.WarcProxyHandler")
 
@@ -173,16 +185,24 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 key, limit = item
                 bucket0, bucket1, bucket2 = key.rsplit(".", 2)
                 value = self.server.stats_db.value(bucket0, bucket1, bucket2)
-                self.logger.debug("warcprox_meta['limits']=%s stats['%s']=%s recorded_url_q.qsize()=%s",
-                        warcprox_meta['limits'], key, value, self.server.recorded_url_q.qsize())
+                self.logger.debug(
+                        "warcprox_meta['limits']=%s stats['%s']=%s "
+                        "recorded_url_q.qsize()=%s", warcprox_meta['limits'],
+                        key, value, self.server.recorded_url_q.qsize())
                 if value and value >= limit:
-                    body = "request rejected by warcprox: reached limit {}={}\n".format(key, limit).encode("utf-8")
+                    body = ("request rejected by warcprox: reached limit "
+                            "%s=%s\n" % (key, limit)).encode("utf-8")
                     self.send_response(420, "Reached limit")
                     self.send_header("Content-Type", "text/plain;charset=utf-8")
                     self.send_header("Connection", "close")
                     self.send_header("Content-Length", len(body))
-                    response_meta = {"reached-limit":{key:limit}, "stats":{bucket0:self.server.stats_db.value(bucket0)}}
-                    self.send_header("Warcprox-Meta", json.dumps(response_meta, separators=(",",":")))
+                    response_meta = {
+                        "reached-limit": {key:limit},
+                        "stats": {bucket0:self.server.stats_db.value(bucket0)}
+                    }
+                    self.send_header(
+                            "Warcprox-Meta",
+                            json.dumps(response_meta, separators=(",",":")))
                     self.end_headers()
                     if self.command != "HEAD":
                         self.wfile.write(body)

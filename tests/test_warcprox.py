@@ -57,7 +57,8 @@ import certauth.certauth
 
 import warcprox
 
-logging.basicConfig(stream=sys.stdout, level=logging.INFO,
+# logging.basicConfig(stream=sys.stdout, level=logging.INFO,
+logging.basicConfig(stream=sys.stdout, level=warcprox.TRACE,
         format='%(asctime)s %(process)d %(levelname)s %(threadName)s '
         '%(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s')
 logging.getLogger("requests.packages.urllib3").setLevel(logging.WARN)
@@ -563,7 +564,7 @@ def test_dedup_https(https_daemon, warcprox_, archiving_proxies, playback_proxie
 
 def test_limits(http_daemon, warcprox_, archiving_proxies):
     url = 'http://localhost:{}/i/j'.format(http_daemon.server_port)
-    request_meta = {"stats":{"buckets":["job1"]},"limits":{"job1.total.urls":10}}
+    request_meta = {"stats":{"buckets":["test_limits_bucket"]},"limits":{"test_limits_bucket.total.urls":10}}
     headers = {"Warcprox-Meta": json.dumps(request_meta)}
 
     response = requests.get(url, proxies=archiving_proxies, headers=headers, stream=True)
@@ -592,10 +593,10 @@ def test_limits(http_daemon, warcprox_, archiving_proxies):
     response = requests.get(url, proxies=archiving_proxies, headers=headers, stream=True)
     assert response.status_code == 420
     assert response.reason == "Reached limit"
-    expected_response_meta = {'reached-limit': {'job1.total.urls': 10}, 'stats': {'job1': {'bucket': 'job1', 'revisit': {'wire_bytes': 1215, 'urls': 9}, 'total': {'wire_bytes': 1350, 'urls': 10}, 'new': {'wire_bytes': 135, 'urls': 1}}}}
+    expected_response_meta = {'reached-limit': {'test_limits_bucket.total.urls': 10}, 'stats': {'test_limits_bucket': {'bucket': 'test_limits_bucket', 'revisit': {'wire_bytes': 1215, 'urls': 9}, 'total': {'wire_bytes': 1350, 'urls': 10}, 'new': {'wire_bytes': 135, 'urls': 1}}}}
     assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
     assert response.headers["content-type"] == "text/plain;charset=utf-8"
-    assert response.raw.data == b"request rejected by warcprox: reached limit job1.total.urls=10\n"
+    assert response.raw.data == b"request rejected by warcprox: reached limit test_limits_bucket.total.urls=10\n"
 
 def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, playback_proxies):
     url1 = 'http://localhost:{}/k/l'.format(http_daemon.server_port)
@@ -839,6 +840,140 @@ def test_block_rules(http_daemon, https_daemon, warcprox_, archiving_proxies):
     assert response.content.startswith(b"request rejected by warcprox: blocked by rule found in Warcprox-Meta header:")
     assert json.loads(response.headers['warcprox-meta']) == {"blocked-by-rule":rules[3]}
 
+def test_host_doc_limit(
+        http_daemon, https_daemon, warcprox_, archiving_proxies):
+    request_meta = {
+        "stats": {"buckets": [{"bucket":"test_host_doc_limit_bucket","tally-host-stats":True}]},
+        "limits": {"test_host_doc_limit_bucket:localhost.total.urls":10},
+    }
+    headers = {"Warcprox-Meta": json.dumps(request_meta)}
+
+    url = 'http://localhost:{}/o/p'.format(http_daemon.server_port)
+    response = requests.get(
+            url, proxies=archiving_proxies, headers=headers, stream=True)
+    assert response.status_code == 200
+    assert response.headers['warcprox-test-header'] == 'o!'
+    assert response.content == b'I am the warcprox test payload! pppppppppp!\n'
+
+    # wait for writer thread to process
+    time.sleep(0.5)
+    while not warcprox_.warc_writer_thread.idle:
+        time.sleep(0.5)
+    time.sleep(0.5)
+
+    # same host but different scheme and port -- host limit still applies
+    url = 'https://localhost:{}/q/r'.format(https_daemon.server_port)
+    for i in range(9):
+        response = requests.get(
+                url, proxies=archiving_proxies, headers=headers, stream=True,
+                verify=False)
+        assert response.status_code == 200
+        assert response.headers['warcprox-test-header'] == 'q!'
+        assert response.content == b'I am the warcprox test payload! rrrrrrrrrr!\n'
+
+    # wait for writer thread to process
+    time.sleep(0.5)
+    while not warcprox_.warc_writer_thread.idle:
+        time.sleep(0.5)
+    time.sleep(0.5)
+
+    # back to http, and this is the 11th request
+    url = 'http://localhost:{}/u/v'.format(http_daemon.server_port)
+    response = requests.get(
+            url, proxies=archiving_proxies, headers=headers, stream=True)
+    assert response.status_code == 420
+    assert response.reason == "Reached limit"
+    expected_response_meta = {'reached-limit': {'test_host_doc_limit_bucket:localhost.total.urls': 10}, 'stats': {'test_host_doc_limit_bucket:localhost': {'total': {'urls': 10, 'wire_bytes': 1350}, 'revisit': {'urls': 8, 'wire_bytes': 1080}, 'bucket': 'test_host_doc_limit_bucket:localhost', 'new': {'urls': 2, 'wire_bytes': 270}}}}
+    assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
+    assert response.headers["content-type"] == "text/plain;charset=utf-8"
+    assert response.raw.data == b"request rejected by warcprox: reached limit test_host_doc_limit_bucket:localhost.total.urls=10\n"
+
+    # https also blocked
+    url = 'https://localhost:{}/w/x'.format(https_daemon.server_port)
+    response = requests.get(
+            url, proxies=archiving_proxies, headers=headers, stream=True,
+            verify=False)
+    assert response.status_code == 420
+    assert response.reason == "Reached limit"
+    expected_response_meta = {'reached-limit': {'test_host_doc_limit_bucket:localhost.total.urls': 10}, 'stats': {'test_host_doc_limit_bucket:localhost': {'total': {'urls': 10, 'wire_bytes': 1350}, 'revisit': {'urls': 8, 'wire_bytes': 1080}, 'bucket': 'test_host_doc_limit_bucket:localhost', 'new': {'urls': 2, 'wire_bytes': 270}}}}
+    assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
+    assert response.headers["content-type"] == "text/plain;charset=utf-8"
+    assert response.raw.data == b"request rejected by warcprox: reached limit test_host_doc_limit_bucket:localhost.total.urls=10\n"
+
+def test_host_data_limit(
+        http_daemon, https_daemon, warcprox_, archiving_proxies):
+    request_meta = {
+        "stats": {"buckets": [{"bucket":"test_host_data_limit_bucket","tally-host-stats":True}]},
+        # response is 135 bytes, so 3rd novel url should be disallowed
+        "limits": {"test_host_data_limit_bucket:localhost.new.wire_bytes":200},
+    }
+    headers = {"Warcprox-Meta": json.dumps(request_meta)}
+
+    url = 'http://localhost:{}/y/z'.format(http_daemon.server_port)
+    response = requests.get(
+            url, proxies=archiving_proxies, headers=headers, stream=True)
+    assert response.status_code == 200
+    assert response.headers['warcprox-test-header'] == 'y!'
+    assert response.content == b'I am the warcprox test payload! zzzzzzzzzz!\n'
+
+    # wait for writer thread to process
+    time.sleep(0.5)
+    while not warcprox_.warc_writer_thread.idle:
+        time.sleep(0.5)
+    time.sleep(0.5)
+
+    # duplicate, does not count toward limit
+    url = 'https://localhost:{}/y/z'.format(https_daemon.server_port)
+    response = requests.get(
+            url, proxies=archiving_proxies, headers=headers, stream=True,
+            verify=False)
+    assert response.status_code == 200
+    assert response.headers['warcprox-test-header'] == 'y!'
+    assert response.content == b'I am the warcprox test payload! zzzzzzzzzz!\n'
+
+    # wait for writer thread to process
+    time.sleep(0.5)
+    while not warcprox_.warc_writer_thread.idle:
+        time.sleep(0.5)
+    time.sleep(0.5)
+
+    # novel, pushes stats over the limit
+    url = 'https://localhost:{}/z/~'.format(https_daemon.server_port)
+    response = requests.get(
+            url, proxies=archiving_proxies, headers=headers, stream=True,
+            verify=False)
+    assert response.status_code == 200
+    assert response.headers['warcprox-test-header'] == 'z!'
+    assert response.content == b'I am the warcprox test payload! ~~~~~~~~~~!\n'
+
+    # wait for writer thread to process
+    time.sleep(0.5)
+    while not warcprox_.warc_writer_thread.idle:
+        time.sleep(0.5)
+    time.sleep(0.5)
+
+    # blocked because we're over the limit now
+    url = 'http://localhost:{}/y/z'.format(http_daemon.server_port)
+    response = requests.get(
+            url, proxies=archiving_proxies, headers=headers, stream=True)
+    assert response.status_code == 420
+    assert response.reason == "Reached limit"
+    expected_response_meta = {'reached-limit': {'test_host_data_limit_bucket:localhost.new.wire_bytes': 200}, 'stats': {'test_host_data_limit_bucket:localhost': {'total': {'wire_bytes': 405, 'urls': 3}, 'revisit': {'wire_bytes': 135, 'urls': 1}, 'new': {'wire_bytes': 270, 'urls': 2}, 'bucket': 'test_host_data_limit_bucket:localhost'}}}
+    assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
+    assert response.headers["content-type"] == "text/plain;charset=utf-8"
+    assert response.raw.data == b"request rejected by warcprox: reached limit test_host_data_limit_bucket:localhost.new.wire_bytes=200\n"
+
+    # https also blocked
+    url = 'https://localhost:{}/w/x'.format(https_daemon.server_port)
+    response = requests.get(
+            url, proxies=archiving_proxies, headers=headers, stream=True,
+            verify=False)
+    assert response.status_code == 420
+    assert response.reason == "Reached limit"
+    expected_response_meta = {'reached-limit': {'test_host_data_limit_bucket:localhost.new.wire_bytes': 200}, 'stats': {'test_host_data_limit_bucket:localhost': {'total': {'wire_bytes': 405, 'urls': 3}, 'revisit': {'wire_bytes': 135, 'urls': 1}, 'new': {'wire_bytes': 270, 'urls': 2}, 'bucket': 'test_host_data_limit_bucket:localhost'}}}
+    assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
+    assert response.headers["content-type"] == "text/plain;charset=utf-8"
+    assert response.raw.data == b"request rejected by warcprox: reached limit test_host_data_limit_bucket:localhost.new.wire_bytes=200\n"
 
 # XXX this test relies on a tor proxy running at localhost:9050 with a working
 # connection to the internet, and relies on a third party site (facebook) being
