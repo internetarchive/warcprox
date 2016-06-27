@@ -49,8 +49,9 @@ try:
 except:
     deps.append('futures')
 
-setuptools.setup(name='warcprox',
-        version='2.0.dev12',
+setuptools.setup(
+        name='warcprox',
+        version='2.0.dev13',
         description='WARC writing MITM HTTP/S proxy',
         url='https://github.com/internetarchive/warcprox',
         author='Noah Levitt',
@@ -62,7 +63,12 @@ setuptools.setup(name='warcprox',
         tests_require=['requests>=2.0.1', 'pytest'],  # >=2.0.1 for https://github.com/kennethreitz/requests/pull/1636
         cmdclass = {'test': PyTest},
         test_suite='warcprox.tests',
-        scripts=['bin/dump-anydbm', 'bin/warcprox'],
+        entry_points={
+            'console_scripts': [
+                'warcprox=warprox.main:main',
+                'dump-anydbm=warcprox.dump_anydbm:main',
+            ],
+        },
         zip_safe=False,
         classifiers=[
             'Development Status :: 5 - Production/Stable',
