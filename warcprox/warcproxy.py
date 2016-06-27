@@ -175,42 +175,55 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                                 self.client_address[0], self.command,
                                 self.url, rule))
 
+    def _enforce_limit(self, limit_key, limit_value, soft=False):
+        bucket0, bucket1, bucket2 = limit_key.rsplit("/", 2)
+        value = self.server.stats_db.value(bucket0, bucket1, bucket2)
+        if value and value >= limit_value:
+            body = ("request rejected by warcprox: reached %s %s=%s\n" % (
+                        "soft limit" if soft else "limit", limit_key,
+                        limit_value)).encode("utf-8")
+            if soft:
+                self.send_response(430, "Reached soft limit")
+            else:
+                self.send_response(420, "Reached limit")
+            self.send_header("Content-Type", "text/plain;charset=utf-8")
+            self.send_header("Connection", "close")
+            self.send_header("Content-Length", len(body))
+            response_meta = {
+                "stats": {bucket0:self.server.stats_db.value(bucket0)}
+            }
+            if soft:
+                response_meta["reached-soft-limit"] = {limit_key:limit_value}
+            else:
+                response_meta["reached-limit"] = {limit_key:limit_value}
+            self.send_header(
+                    "Warcprox-Meta",
+                    json.dumps(response_meta, separators=(",",":")))
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(body)
+            self.connection.close()
+            raise warcprox.RequestBlockedByRule(
+                    "%s %s %s %s -- reached %s %s=%s" % (
+                        self.client_address[0], 430 if soft else 420,
+                        self.command, self.url,
+                        "soft limit" if soft else "limit",
+                        limit_key, limit_value))
+
     def _enforce_limits(self, warcprox_meta):
         """
-        Sends a 420 response and raises warcprox.RequestBlockedByRule if a
-        limit specified in warcprox_meta is reached.
+        Sends a 420 (hard limit) or 430 (soft limit) response and raises
+        warcprox.RequestBlockedByRule if a limit specified in warcprox_meta is
+        reached.
         """
         if warcprox_meta and "limits" in warcprox_meta:
             for item in warcprox_meta["limits"].items():
-                key, limit = item
-                bucket0, bucket1, bucket2 = key.rsplit(".", 2)
-                value = self.server.stats_db.value(bucket0, bucket1, bucket2)
-                self.logger.debug(
-                        "warcprox_meta['limits']=%s stats['%s']=%s "
-                        "recorded_url_q.qsize()=%s", warcprox_meta['limits'],
-                        key, value, self.server.recorded_url_q.qsize())
-                if value and value >= limit:
-                    body = ("request rejected by warcprox: reached limit "
-                            "%s=%s\n" % (key, limit)).encode("utf-8")
-                    self.send_response(420, "Reached limit")
-                    self.send_header("Content-Type", "text/plain;charset=utf-8")
-                    self.send_header("Connection", "close")
-                    self.send_header("Content-Length", len(body))
-                    response_meta = {
-                        "reached-limit": {key:limit},
-                        "stats": {bucket0:self.server.stats_db.value(bucket0)}
-                    }
-                    self.send_header(
-                            "Warcprox-Meta",
-                            json.dumps(response_meta, separators=(",",":")))
-                    self.end_headers()
-                    if self.command != "HEAD":
-                        self.wfile.write(body)
-                    self.connection.close()
-                    raise warcprox.RequestBlockedByRule(
-                            "%s 420 %s %s -- reached limit %s=%s" % (
-                                self.client_address[0], self.command,
-                                self.url, key, limit))
+                limit_key, limit_value = item
+                self._enforce_limit(limit_key, limit_value, soft=False)
+        if warcprox_meta and "soft-limits" in warcprox_meta:
+            for item in warcprox_meta["soft-limits"].items():
+                limit_key, limit_value = item
+                self._enforce_limit(limit_key, limit_value, soft=True)
 
     def _connect_to_remote_server(self):
         '''

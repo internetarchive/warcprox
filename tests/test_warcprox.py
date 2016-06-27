@@ -564,7 +564,7 @@ def test_dedup_https(https_daemon, warcprox_, archiving_proxies, playback_proxie
 
 def test_limits(http_daemon, warcprox_, archiving_proxies):
     url = 'http://localhost:{}/i/j'.format(http_daemon.server_port)
-    request_meta = {"stats":{"buckets":["test_limits_bucket"]},"limits":{"test_limits_bucket.total.urls":10}}
+    request_meta = {"stats":{"buckets":["test_limits_bucket"]},"limits":{"test_limits_bucket/total/urls":10}}
     headers = {"Warcprox-Meta": json.dumps(request_meta)}
 
     response = requests.get(url, proxies=archiving_proxies, headers=headers, stream=True)
@@ -593,10 +593,10 @@ def test_limits(http_daemon, warcprox_, archiving_proxies):
     response = requests.get(url, proxies=archiving_proxies, headers=headers, stream=True)
     assert response.status_code == 420
     assert response.reason == "Reached limit"
-    expected_response_meta = {'reached-limit': {'test_limits_bucket.total.urls': 10}, 'stats': {'test_limits_bucket': {'bucket': 'test_limits_bucket', 'revisit': {'wire_bytes': 1215, 'urls': 9}, 'total': {'wire_bytes': 1350, 'urls': 10}, 'new': {'wire_bytes': 135, 'urls': 1}}}}
+    expected_response_meta = {'reached-limit': {'test_limits_bucket/total/urls': 10}, 'stats': {'test_limits_bucket': {'bucket': 'test_limits_bucket', 'revisit': {'wire_bytes': 1215, 'urls': 9}, 'total': {'wire_bytes': 1350, 'urls': 10}, 'new': {'wire_bytes': 135, 'urls': 1}}}}
     assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
     assert response.headers["content-type"] == "text/plain;charset=utf-8"
-    assert response.raw.data == b"request rejected by warcprox: reached limit test_limits_bucket.total.urls=10\n"
+    assert response.raw.data == b"request rejected by warcprox: reached limit test_limits_bucket/total/urls=10\n"
 
 def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, playback_proxies):
     url1 = 'http://localhost:{}/k/l'.format(http_daemon.server_port)
@@ -840,11 +840,11 @@ def test_block_rules(http_daemon, https_daemon, warcprox_, archiving_proxies):
     assert response.content.startswith(b"request rejected by warcprox: blocked by rule found in Warcprox-Meta header:")
     assert json.loads(response.headers['warcprox-meta']) == {"blocked-by-rule":rules[3]}
 
-def test_host_doc_limit(
+def test_host_doc_soft_limit(
         http_daemon, https_daemon, warcprox_, archiving_proxies):
     request_meta = {
         "stats": {"buckets": [{"bucket":"test_host_doc_limit_bucket","tally-host-stats":True}]},
-        "limits": {"test_host_doc_limit_bucket:localhost.total.urls":10},
+        "soft-limits": {"test_host_doc_limit_bucket:localhost/total/urls":10},
     }
     headers = {"Warcprox-Meta": json.dumps(request_meta)}
 
@@ -896,31 +896,31 @@ def test_host_doc_limit(
     url = 'http://localhost:{}/o/p'.format(http_daemon.server_port)
     response = requests.get(
             url, proxies=archiving_proxies, headers=headers, stream=True)
-    assert response.status_code == 420
-    assert response.reason == "Reached limit"
-    expected_response_meta = {'reached-limit': {'test_host_doc_limit_bucket:localhost.total.urls': 10}, 'stats': {'test_host_doc_limit_bucket:localhost': {'bucket': 'test_host_doc_limit_bucket:localhost', 'revisit': {'wire_bytes': 1215, 'urls': 9}, 'new': {'wire_bytes': 135, 'urls': 1}, 'total': {'wire_bytes': 1350, 'urls': 10}}}}
+    assert response.status_code == 430
+    assert response.reason == "Reached soft limit"
+    expected_response_meta = {'reached-soft-limit': {'test_host_doc_limit_bucket:localhost/total/urls': 10}, 'stats': {'test_host_doc_limit_bucket:localhost': {'bucket': 'test_host_doc_limit_bucket:localhost', 'revisit': {'wire_bytes': 1215, 'urls': 9}, 'new': {'wire_bytes': 135, 'urls': 1}, 'total': {'wire_bytes': 1350, 'urls': 10}}}}
     assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
     assert response.headers["content-type"] == "text/plain;charset=utf-8"
-    assert response.raw.data == b"request rejected by warcprox: reached limit test_host_doc_limit_bucket:localhost.total.urls=10\n"
+    assert response.raw.data == b"request rejected by warcprox: reached soft limit test_host_doc_limit_bucket:localhost/total/urls=10\n"
 
     # https also blocked
     url = 'https://localhost:{}/o/p'.format(https_daemon.server_port)
     response = requests.get(
             url, proxies=archiving_proxies, headers=headers, stream=True,
             verify=False)
-    assert response.status_code == 420
-    assert response.reason == "Reached limit"
-    expected_response_meta = {'reached-limit': {'test_host_doc_limit_bucket:localhost.total.urls': 10}, 'stats': {'test_host_doc_limit_bucket:localhost': {'bucket': 'test_host_doc_limit_bucket:localhost', 'revisit': {'wire_bytes': 1215, 'urls': 9}, 'new': {'wire_bytes': 135, 'urls': 1}, 'total': {'wire_bytes': 1350, 'urls': 10}}}}
+    assert response.status_code == 430
+    assert response.reason == "Reached soft limit"
+    expected_response_meta = {'reached-soft-limit': {'test_host_doc_limit_bucket:localhost/total/urls': 10}, 'stats': {'test_host_doc_limit_bucket:localhost': {'bucket': 'test_host_doc_limit_bucket:localhost', 'revisit': {'wire_bytes': 1215, 'urls': 9}, 'new': {'wire_bytes': 135, 'urls': 1}, 'total': {'wire_bytes': 1350, 'urls': 10}}}}
     assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
     assert response.headers["content-type"] == "text/plain;charset=utf-8"
-    assert response.raw.data == b"request rejected by warcprox: reached limit test_host_doc_limit_bucket:localhost.total.urls=10\n"
+    assert response.raw.data == b"request rejected by warcprox: reached soft limit test_host_doc_limit_bucket:localhost/total/urls=10\n"
 
-def test_host_data_limit(
+def test_host_data_soft_limit(
         http_daemon, https_daemon, warcprox_, archiving_proxies):
     request_meta = {
         "stats": {"buckets": [{"bucket":"test_host_data_limit_bucket","tally-host-stats":True}]},
         # response is 135 bytes, so 3rd novel url should be disallowed
-        "limits": {"test_host_data_limit_bucket:localhost.new.wire_bytes":200},
+        "soft-limits": {"test_host_data_limit_bucket:localhost/new/wire_bytes":200},
     }
     headers = {"Warcprox-Meta": json.dumps(request_meta)}
 
@@ -974,24 +974,24 @@ def test_host_data_limit(
     url = 'http://localhost:{}/y/z'.format(http_daemon.server_port)
     response = requests.get(
             url, proxies=archiving_proxies, headers=headers, stream=True)
-    assert response.status_code == 420
-    assert response.reason == "Reached limit"
-    expected_response_meta = {'reached-limit': {'test_host_data_limit_bucket:localhost.new.wire_bytes': 200}, 'stats': {'test_host_data_limit_bucket:localhost': {'total': {'wire_bytes': 405, 'urls': 3}, 'revisit': {'wire_bytes': 135, 'urls': 1}, 'new': {'wire_bytes': 270, 'urls': 2}, 'bucket': 'test_host_data_limit_bucket:localhost'}}}
+    assert response.status_code == 430
+    assert response.reason == "Reached soft limit"
+    expected_response_meta = {'reached-soft-limit': {'test_host_data_limit_bucket:localhost/new/wire_bytes': 200}, 'stats': {'test_host_data_limit_bucket:localhost': {'total': {'wire_bytes': 405, 'urls': 3}, 'revisit': {'wire_bytes': 135, 'urls': 1}, 'new': {'wire_bytes': 270, 'urls': 2}, 'bucket': 'test_host_data_limit_bucket:localhost'}}}
     assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
     assert response.headers["content-type"] == "text/plain;charset=utf-8"
-    assert response.raw.data == b"request rejected by warcprox: reached limit test_host_data_limit_bucket:localhost.new.wire_bytes=200\n"
+    assert response.raw.data == b"request rejected by warcprox: reached soft limit test_host_data_limit_bucket:localhost/new/wire_bytes=200\n"
 
     # https also blocked
     url = 'https://localhost:{}/w/x'.format(https_daemon.server_port)
     response = requests.get(
             url, proxies=archiving_proxies, headers=headers, stream=True,
             verify=False)
-    assert response.status_code == 420
-    assert response.reason == "Reached limit"
-    expected_response_meta = {'reached-limit': {'test_host_data_limit_bucket:localhost.new.wire_bytes': 200}, 'stats': {'test_host_data_limit_bucket:localhost': {'total': {'wire_bytes': 405, 'urls': 3}, 'revisit': {'wire_bytes': 135, 'urls': 1}, 'new': {'wire_bytes': 270, 'urls': 2}, 'bucket': 'test_host_data_limit_bucket:localhost'}}}
+    assert response.status_code == 430
+    assert response.reason == "Reached soft limit"
+    expected_response_meta = {'reached-soft-limit': {'test_host_data_limit_bucket:localhost/new/wire_bytes': 200}, 'stats': {'test_host_data_limit_bucket:localhost': {'total': {'wire_bytes': 405, 'urls': 3}, 'revisit': {'wire_bytes': 135, 'urls': 1}, 'new': {'wire_bytes': 270, 'urls': 2}, 'bucket': 'test_host_data_limit_bucket:localhost'}}}
     assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
     assert response.headers["content-type"] == "text/plain;charset=utf-8"
-    assert response.raw.data == b"request rejected by warcprox: reached limit test_host_data_limit_bucket:localhost.new.wire_bytes=200\n"
+    assert response.raw.data == b"request rejected by warcprox: reached soft limit test_host_data_limit_bucket:localhost/new/wire_bytes=200\n"
 
 # XXX this test relies on a tor proxy running at localhost:9050 with a working
 # connection to the internet, and relies on a third party site (facebook) being

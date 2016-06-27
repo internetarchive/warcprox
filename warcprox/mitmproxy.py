@@ -319,7 +319,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             self.logger.info("%s: %s", repr(self.requestline), e)
             return
         except Exception as e:
-            self.logger.error("problem processing request {}: {}".format(repr(self.requestline), e))
+            self.logger.error("problem processing request {}: {}".format(repr(self.requestline), e), exc_info=True)
             self.send_error(500, str(e))
             return
 
