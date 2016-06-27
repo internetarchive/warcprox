@@ -22,11 +22,12 @@ USA.
 
 import sys
 import setuptools
+import setuptools.command.test
 
 # special class needs to be added to support the pytest written dump-anydbm tests
-class PyTest(setuptools.command.test.TestCommand):
+class PyTest(setuptools.command.test.test):
     def finalize_options(self):
-        setuptools.command.test.TestCommand.finalize_options(self)
+        setuptools.command.test.test.finalize_options(self)
         self.test_args = []
         self.test_suite = True
     def run_tests(self):
@@ -49,7 +50,7 @@ except:
     deps.append('futures')
 
 setuptools.setup(name='warcprox',
-        version='2.0.dev11',
+        version='2.0.dev12',
         description='WARC writing MITM HTTP/S proxy',
         url='https://github.com/internetarchive/warcprox',
         author='Noah Levitt',

@@ -1,26 +1,26 @@
-#
-# warcprox/controller.py - contains WarcproxController class, responsible for
-# starting up and shutting down the various components of warcprox, and for
-# sending heartbeats to the service registry if configured to do so; also has
-# some memory profiling capabilities
-#
-# Copyright (C) 2013-2016 Internet Archive
-#
-# This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License
-# as published by the Free Software Foundation; either version 2
-# of the License, or (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
-# USA.
-#
+'''
+warcprox/controller.py - contains WarcproxController class, responsible for
+starting up and shutting down the various components of warcprox, and for
+sending heartbeats to the service registry if configured to do so; also has
+some memory profiling capabilities
+
+Copyright (C) 2013-2016 Internet Archive
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+USA.
+'''
 
 from __future__ import absolute_import
 
@@ -60,11 +60,16 @@ class WarcproxController(object):
         else:
             self.warc_writer_thread = warcprox.warcwriter.WarcWriterThread(recorded_url_q=self.proxy.recorded_url_q)
 
+        self.proxy_thread = None
+        self.playback_proxy_thread = None
         self.playback_proxy = playback_proxy
         self.service_registry = service_registry
         self.options = options
 
         self._last_rss = None
+
+        self.stop = threading.Event()
+        self._start_stop_lock = threading.Lock()
 
     def debug_mem(self):
         self.logger.info("self.proxy.recorded_url_q.qsize()=%s", self.proxy.recorded_url_q.qsize())
@@ -147,51 +152,57 @@ class WarcproxController(object):
                 self.status_info)
 
     def start(self):
-        # XXX check if already started
-        if self.proxy.stats_db:
-            self.proxy.stats_db.start()
-        self.proxy_thread = threading.Thread(
-                target=self.proxy.serve_forever, name='ProxyThread')
-        self.proxy_thread.start()
+        with self._start_stop_lock:
+            if self.proxy_thread and self.proxy_thread.is_alive():
+                self.logger.info('warcprox is already running')
+                return
 
-        if self.warc_writer_thread.dedup_db:
-            self.warc_writer_thread.dedup_db.start()
-        self.warc_writer_thread.start()
+            if self.proxy.stats_db:
+                self.proxy.stats_db.start()
+            self.proxy_thread = threading.Thread(
+                    target=self.proxy.serve_forever, name='ProxyThread')
+            self.proxy_thread.start()
 
-        if self.playback_proxy is not None:
-            self.playback_proxy_thread = threading.Thread(
-                    target=self.playback_proxy.serve_forever,
-                    name='PlaybackProxyThread')
-            playback_proxy_thread.start()
+            if self.warc_writer_thread.dedup_db:
+                self.warc_writer_thread.dedup_db.start()
+            self.warc_writer_thread.start()
 
-        self.stop = threading.Event()
+            if self.playback_proxy is not None:
+                self.playback_proxy_thread = threading.Thread(
+                        target=self.playback_proxy.serve_forever,
+                        name='PlaybackProxyThread')
+                self.playback_proxy_thread.start()
 
     def shutdown(self):
-        # XXX check if already shut down
-        self.warc_writer_thread.stop.set()
-        self.proxy.shutdown()
-        self.proxy.server_close()
+        with self._start_stop_lock:
+            if not self.proxy_thread or not self.proxy_thread.is_alive():
+                self.logger.info('warcprox is not running')
+                return
 
-        if self.playback_proxy is not None:
-            self.playback_proxy.shutdown()
-            self.playback_proxy.server_close()
-            if self.playback_proxy.playback_index_db is not None:
-                self.playback_proxy.playback_index_db.close()
+            self.warc_writer_thread.stop.set()
+            self.proxy.shutdown()
+            self.proxy.server_close()
 
-        # wait for threads to finish
-        self.warc_writer_thread.join()
+            if self.playback_proxy is not None:
+                self.playback_proxy.shutdown()
+                self.playback_proxy.server_close()
+                if self.playback_proxy.playback_index_db is not None:
+                    self.playback_proxy.playback_index_db.close()
 
-        if self.proxy.stats_db:
-            self.proxy.stats_db.stop()
-        if self.warc_writer_thread.dedup_db:
-            self.warc_writer_thread.dedup_db.close()
+            # wait for threads to finish
+            self.warc_writer_thread.join()
 
-        self.proxy_thread.join()
-        if self.playback_proxy is not None:
-            self.playback_proxy_thread.join()
+            if self.proxy.stats_db:
+                self.proxy.stats_db.stop()
+            if self.warc_writer_thread.dedup_db:
+                self.warc_writer_thread.dedup_db.close()
 
-        if self.service_registry and hasattr(self, "status_info"):
-            self.service_registry.unregister(self.status_info["id"])
+            self.proxy_thread.join()
+            if self.playback_proxy is not None:
+                self.playback_proxy_thread.join()
+
+            if self.service_registry and hasattr(self, "status_info"):
+                self.service_registry.unregister(self.status_info["id"])
 
     def run_until_shutdown(self):
         """
@@ -214,10 +225,16 @@ class WarcproxController(object):
 
         try:
             while not self.stop.is_set():
-                if self.service_registry and (not hasattr(self, "status_info") or (datetime.datetime.now(utc) - self.status_info["last_heartbeat"]).total_seconds() > self.HEARTBEAT_INTERVAL):
+                if self.service_registry and (
+                        not hasattr(self, "status_info") or (
+                            datetime.datetime.now(utc)
+                            - self.status_info["last_heartbeat"]
+                        ).total_seconds() > self.HEARTBEAT_INTERVAL):
                     self._service_heartbeat()
 
-                if self.options.profile and (datetime.datetime.utcnow() - last_mem_dbg).total_seconds() > 60:
+                if self.options.profile and (
+                            datetime.datetime.utcnow() - last_mem_dbg
+                        ).total_seconds() > 60:
                     self.debug_mem()
                     last_mem_dbg = datetime.datetime.utcnow()
 
