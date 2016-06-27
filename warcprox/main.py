@@ -209,14 +209,15 @@ def init_controller(args):
         warc_writer_thread, playback_proxy, service_registry=svcreg,
         options=options)
 
-    signal.signal(signal.SIGTERM, lambda a,b: controller.stop.set())
-    signal.signal(signal.SIGINT, lambda a,b: controller.stop.set())
-    signal.signal(signal.SIGQUIT, dump_state)
-
     return controller
 
 def real_main(args):
     controller = init_controller(args)
+
+    signal.signal(signal.SIGTERM, lambda a,b: controller.stop.set())
+    signal.signal(signal.SIGINT, lambda a,b: controller.stop.set())
+    signal.signal(signal.SIGQUIT, dump_state)
+
     controller.run_until_shutdown()
 
 def parse_args(argv=sys.argv):

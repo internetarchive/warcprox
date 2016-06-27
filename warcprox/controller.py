@@ -146,26 +146,59 @@ class WarcproxController(object):
                 warcprox.TRACE, "status in service registry: %s",
                 self.status_info)
 
-    def run_until_shutdown(self):
-        """
-        Start warcprox and run until shut down. Call
-        warcprox_controller.stop.set() to initiate graceful shutdown.
-        """
+    def start(self):
+        # XXX check if already started
         if self.proxy.stats_db:
             self.proxy.stats_db.start()
-        proxy_thread = threading.Thread(
+        self.proxy_thread = threading.Thread(
                 target=self.proxy.serve_forever, name='ProxyThread')
-        proxy_thread.start()
+        self.proxy_thread.start()
 
         if self.warc_writer_thread.dedup_db:
             self.warc_writer_thread.dedup_db.start()
         self.warc_writer_thread.start()
 
         if self.playback_proxy is not None:
-            playback_proxy_thread = threading.Thread(target=self.playback_proxy.serve_forever, name='PlaybackProxyThread')
+            self.playback_proxy_thread = threading.Thread(
+                    target=self.playback_proxy.serve_forever,
+                    name='PlaybackProxyThread')
             playback_proxy_thread.start()
 
         self.stop = threading.Event()
+
+    def shutdown(self):
+        # XXX check if already shut down
+        self.warc_writer_thread.stop.set()
+        self.proxy.shutdown()
+        self.proxy.server_close()
+
+        if self.playback_proxy is not None:
+            self.playback_proxy.shutdown()
+            self.playback_proxy.server_close()
+            if self.playback_proxy.playback_index_db is not None:
+                self.playback_proxy.playback_index_db.close()
+
+        # wait for threads to finish
+        self.warc_writer_thread.join()
+
+        if self.proxy.stats_db:
+            self.proxy.stats_db.stop()
+        if self.warc_writer_thread.dedup_db:
+            self.warc_writer_thread.dedup_db.close()
+
+        self.proxy_thread.join()
+        if self.playback_proxy is not None:
+            self.playback_proxy_thread.join()
+
+        if self.service_registry and hasattr(self, "status_info"):
+            self.service_registry.unregister(self.status_info["id"])
+
+    def run_until_shutdown(self):
+        """
+        Start warcprox and run until shut down. Call
+        warcprox_controller.stop.set() to initiate graceful shutdown.
+        """
+        self.start()
 
         last_mem_dbg = datetime.datetime.utcfromtimestamp(0)
 
@@ -190,31 +223,10 @@ class WarcproxController(object):
 
                 time.sleep(0.5)
         except:
-            self.logger.critical("fatal exception, shutting down", exc_info=True)
+            self.logger.critical(
+                    "shutting down in response to fatal exception",
+                    exc_info=True)
             pass
         finally:
-            self.warc_writer_thread.stop.set()
-            self.proxy.shutdown()
-            self.proxy.server_close()
-
-            if self.playback_proxy is not None:
-                self.playback_proxy.shutdown()
-                self.playback_proxy.server_close()
-                if self.playback_proxy.playback_index_db is not None:
-                    self.playback_proxy.playback_index_db.close()
-
-            # wait for threads to finish
-            self.warc_writer_thread.join()
-
-            if self.proxy.stats_db:
-                self.proxy.stats_db.stop()
-            if self.warc_writer_thread.dedup_db:
-                self.warc_writer_thread.dedup_db.close()
-
-            proxy_thread.join()
-            if self.playback_proxy is not None:
-                playback_proxy_thread.join()
-
-            if self.service_registry and hasattr(self, "status_info"):
-                self.service_registry.unregister(self.status_info["id"])
+            self.shutdown()
 
