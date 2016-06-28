@@ -177,6 +177,14 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
 
     def _enforce_limit(self, limit_key, limit_value, soft=False):
         bucket0, bucket1, bucket2 = limit_key.rsplit("/", 2)
+
+        # if limit_key looks like 'job1:foo.com/total/urls' then we only want
+        # to apply this rule if the requested url is on host foo.com
+        bucket0_fields = bucket0.split(':')
+        if len(bucket0_fields) == 2:
+            if self.hostname.lower() != bucket0_fields[1].lower():
+                return # else host matches, go ahead and enforce the limit
+
         value = self.server.stats_db.value(bucket0, bucket1, bucket2)
         if value and value >= limit_value:
             body = ("request rejected by warcprox: reached %s %s=%s\n" % (
