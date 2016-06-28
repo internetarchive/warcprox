@@ -120,7 +120,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
     def _scope_rule_applies(self, rule):
         u = Url(self.url)
 
-        if "host" in rule and not u.matches_ip_or_domain(rule["host"]):
+        if "domain" in rule and not u.matches_ip_or_domain(rule["domain"]):
             return False
         if "url_match" in rule:
             if rule["url_match"] == "STRING_MATCH":
@@ -139,7 +139,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 self.logger.warn("invalid rule.url_match=%s", rule.url_match)
                 return False
         else:
-            if "host" in rule:
+            if "domain" in rule:
                 # we already know that it matches from earlier check
                 return True
             else:

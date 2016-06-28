@@ -732,7 +732,7 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
 def test_block_rules(http_daemon, https_daemon, warcprox_, archiving_proxies):
     rules = [
         {
-            "host": "localhost",
+            "domain": "localhost",
             "url_match": "STRING_MATCH",
             "value": "bar",
         },
@@ -746,7 +746,7 @@ def test_block_rules(http_daemon, https_daemon, warcprox_, archiving_proxies):
             "value": "http://(localhost:%s,)/fuh/" % (https_daemon.server_port),
         },
         {
-            "host": "badhost.com",
+            "domain": "bad.domain.com",
         },
     ]
     request_meta = {"blocks":rules}
@@ -790,16 +790,16 @@ def test_block_rules(http_daemon, https_daemon, warcprox_, archiving_proxies):
             verify=False)
     assert response.status_code == 200
 
-    # blocked by blanket host block
-    url = 'http://badhost.com/'
+    # blocked by blanket domain block
+    url = 'http://bad.domain.com/'
     response = requests.get(
             url, proxies=archiving_proxies, headers=headers, stream=True)
     assert response.status_code == 403
     assert response.content.startswith(b"request rejected by warcprox: blocked by rule found in Warcprox-Meta header:")
     assert json.loads(response.headers['warcprox-meta']) == {"blocked-by-rule":rules[3]}
 
-    # blocked by blanket host block
-    url = 'https://badhost.com/'
+    # blocked by blanket domain block
+    url = 'https://bad.domain.com/'
     response = requests.get(
             url, proxies=archiving_proxies, headers=headers, stream=True,
             verify=False)
@@ -807,24 +807,24 @@ def test_block_rules(http_daemon, https_daemon, warcprox_, archiving_proxies):
     assert response.content.startswith(b"request rejected by warcprox: blocked by rule found in Warcprox-Meta header:")
     assert json.loads(response.headers['warcprox-meta']) == {"blocked-by-rule":rules[3]}
 
-    # blocked by blanket host block
-    url = 'http://badhost.com:1234/'
+    # blocked by blanket domain block
+    url = 'http://bad.domain.com:1234/'
     response = requests.get(
             url, proxies=archiving_proxies, headers=headers, stream=True)
     assert response.status_code == 403
     assert response.content.startswith(b"request rejected by warcprox: blocked by rule found in Warcprox-Meta header:")
     assert json.loads(response.headers['warcprox-meta']) == {"blocked-by-rule":rules[3]}
 
-    # blocked by blanket host block
-    url = 'http://foo.bar.badhost.com/'
+    # blocked by blanket domain block
+    url = 'http://foo.bar.bad.domain.com/'
     response = requests.get(
             url, proxies=archiving_proxies, headers=headers, stream=True)
     assert response.status_code == 403
     assert response.content.startswith(b"request rejected by warcprox: blocked by rule found in Warcprox-Meta header:")
     assert json.loads(response.headers['warcprox-meta']) == {"blocked-by-rule":rules[3]}
 
-    # host block also applies to subdomains
-    url = 'https://foo.bar.badhost.com/'
+    # domain block also applies to subdomains
+    url = 'https://foo.bar.bad.domain.com/'
     response = requests.get(
             url, proxies=archiving_proxies, headers=headers, stream=True,
             verify=False)
@@ -832,8 +832,8 @@ def test_block_rules(http_daemon, https_daemon, warcprox_, archiving_proxies):
     assert response.content.startswith(b"request rejected by warcprox: blocked by rule found in Warcprox-Meta header:")
     assert json.loads(response.headers['warcprox-meta']) == {"blocked-by-rule":rules[3]}
 
-    # blocked by blanket host block
-    url = 'http://foo.bar.badhost.com:1234/'
+    # blocked by blanket domain block
+    url = 'http://foo.bar.bad.domain.com:1234/'
     response = requests.get(
             url, proxies=archiving_proxies, headers=headers, stream=True)
     assert response.status_code == 403
