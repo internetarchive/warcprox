@@ -113,15 +113,15 @@ class StatsDb:
         definition can either be a string, which signifies the name of the
         bucket, or a dict. If a dict it is expected to have at least an item
         with key 'bucket' whose value is the name of the bucket. The other
-        currently recognized item is 'tally-host-stats', which if true,
-        instructs warcprox to additionally tally substats of the given bucket
-        by host.  Host stats are stored in the stats table under the key
-        '{parent-bucket}:{host}'.
+        currently recognized item is 'tally-domains', which if supplied should
+        be a list of domains. This instructs warcprox to additionally tally
+        substats of the given bucket by domain.  Host stats are stored in the
+        stats table under the key '{parent-bucket}:{domain(normalized)}'.
 
         Example Warcprox-Meta header (a real one will likely have other
         sections besides 'stats'):
 
-        Warcprox-Meta: {'stats':{'buckets':['bucket1',{'bucket':'bucket2','tally-host-stats':true}]}}
+        Warcprox-Meta: {'stats':{'buckets':['bucket1',{'bucket':'bucket2','tally-domains':['foo.bar.com','192.168.10.20'}]}}
         '''
         buckets = ["__all__"]
         if (recorded_url.warcprox_meta
@@ -135,14 +135,13 @@ class StatsDb:
                                 'warcprox-meta header %s', bucket)
                         continue
                     buckets.append(bucket['bucket'])
-                    # XXX maybe host has been computed elsewhere and can be
-                    # cached somewhere, but maybe the performance gain would be
-                    # negligible
-                    if bucket.get('tally-host-stats'):
-                        buckets.append('%s:%s' % (
-                            bucket['bucket'],
-                            surt.handyurl.parse(recorded_url.url.decode(
-                                'utf-8')).host))
+                    if bucket.get('tally-domains'):
+                        url = warcprox.Url(recorded_url.url.decode('utf-8'))
+                        for domain in bucket['tally-domains']:
+                            if url.matches_ip_or_domain(domain):
+                                buckets.append('%s:%s' % (
+                                    bucket['bucket'],
+                                    warcprox.normalize_host(domain)))
                 else:
                     buckets.append(bucket)
         else:

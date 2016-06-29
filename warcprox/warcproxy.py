@@ -48,57 +48,6 @@ import resource
 import ipaddress
 import surt
 
-class Url:
-    def __init__(self, url):
-        self.url = url
-        self._surt = None
-        self._host = None
-
-    @property
-    def surt(self):
-        if not self._surt:
-            hurl = surt.handyurl.parse(self.url)
-            surt.GoogleURLCanonicalizer.canonicalize(hurl)
-            hurl.query = None
-            hurl.hash = None
-            self._surt = hurl.getURLString(surt=True, trailing_comma=True)
-        return self._surt
-
-    @property
-    def host(self):
-        if not self._host:
-            self._host = surt.handyurl.parse(self.url).host
-        return self._host
-
-    def matches_ip_or_domain(self, ip_or_domain):
-        """Returns true if
-           - ip_or_domain is an ip address and self.host is the same ip address
-           - ip_or_domain is a domain and self.host is the same domain
-           - ip_or_domain is a domain and self.host is a subdomain of it
-        """
-        if ip_or_domain == self.host:
-            return True
-
-        # if either ip_or_domain or self.host are ip addresses, and they're not
-        # identical (previous check), not a match
-        try:
-            ipaddress.ip_address(ip_or_domain)
-            return False
-        except:
-            pass
-        try:
-            ipaddress.ip_address(self.host)
-            return False
-        except:
-            pass
-
-        # if we get here, we're looking at two hostnames
-        # XXX do we need to handle case of one punycoded idn, other not?
-        domain_parts = ip_or_domain.split(".")
-        host_parts = self.host.split(".")
-
-        return host_parts[-len(domain_parts):] == domain_parts
-
 class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
     '''
     XXX add more information.
@@ -118,7 +67,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
     # XXX nearly identical to brozzler.site.Site._scope_rule_applies() but
     # there's no obvious common dependency where this code should go... TBD
     def _scope_rule_applies(self, rule):
-        u = Url(self.url)
+        u = warcprox.Url(self.url)
 
         if "domain" in rule and not u.matches_ip_or_domain(rule["domain"]):
             return False
@@ -179,10 +128,11 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         bucket0, bucket1, bucket2 = limit_key.rsplit("/", 2)
 
         # if limit_key looks like 'job1:foo.com/total/urls' then we only want
-        # to apply this rule if the requested url is on host foo.com
+        # to apply this rule if the requested url is within domain
         bucket0_fields = bucket0.split(':')
         if len(bucket0_fields) == 2:
-            if self.hostname.lower() != bucket0_fields[1].lower():
+            if not warcprox.host_matches_ip_or_domain(
+                    self.hostname.lower(), bucket0_fields[1].lower()):
                 return # else host matches, go ahead and enforce the limit
 
         value = self.server.stats_db.value(bucket0, bucket1, bucket2)
