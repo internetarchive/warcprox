@@ -126,19 +126,26 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
 
     def _enforce_limit(self, limit_key, limit_value, soft=False):
         bucket0, bucket1, bucket2 = limit_key.rsplit("/", 2)
+        _limit_key = limit_key
 
         # if limit_key looks like 'job1:foo.com/total/urls' then we only want
         # to apply this rule if the requested url is within domain
         bucket0_fields = bucket0.split(':')
         if len(bucket0_fields) == 2:
+            self.logger.info(
+                    'checking %s:%s', repr(limit_key), repr(limit_value))
             if not warcprox.host_matches_ip_or_domain(
-                    self.hostname.lower(), bucket0_fields[1].lower()):
+                    self.hostname, bucket0_fields[1]):
                 return # else host matches, go ahead and enforce the limit
+            bucket0 = '%s:%s' % (
+                    bucket0_fields[0],
+                    warcprox.normalize_host(bucket0_fields[1]))
+            _limit_key = '%s/%s/%s' % (bucket0, bucket1, bucket2)
 
         value = self.server.stats_db.value(bucket0, bucket1, bucket2)
         if value and value >= limit_value:
             body = ("request rejected by warcprox: reached %s %s=%s\n" % (
-                        "soft limit" if soft else "limit", limit_key,
+                        "soft limit" if soft else "limit", _limit_key,
                         limit_value)).encode("utf-8")
             if soft:
                 self.send_response(430, "Reached soft limit")
@@ -151,9 +158,9 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 "stats": {bucket0:self.server.stats_db.value(bucket0)}
             }
             if soft:
-                response_meta["reached-soft-limit"] = {limit_key:limit_value}
+                response_meta["reached-soft-limit"] = {_limit_key:limit_value}
             else:
-                response_meta["reached-limit"] = {limit_key:limit_value}
+                response_meta["reached-limit"] = {_limit_key:limit_value}
             self.send_header(
                     "Warcprox-Meta",
                     json.dumps(response_meta, separators=(",",":")))
@@ -166,7 +173,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                         self.client_address[0], 430 if soft else 420,
                         self.command, self.url,
                         "soft limit" if soft else "limit",
-                        limit_key, limit_value))
+                        _limit_key, limit_value))
 
     def _enforce_limits(self, warcprox_meta):
         """

@@ -121,7 +121,9 @@ def host_matches_ip_or_domain(host, ip_or_domain):
     domain_parts = _ip_or_domain.split(".")
     host_parts = _host.split(".")
 
-    return host_parts[-len(domain_parts):] == domain_parts
+    result = host_parts[-len(domain_parts):] == domain_parts
+    return result
+
 
 # logging level more fine-grained than logging.DEBUG==10
 TRACE = 5

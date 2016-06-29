@@ -184,24 +184,21 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
     def _determine_host_port(self):
         # Get hostname and port to connect to
         if self.is_connect:
-            self.hostname, self.port = self.path.split(':')
+            host, self.port = self.path.split(':')
         else:
             self.url = self.path
             u = urllib_parse.urlparse(self.url)
             if u.scheme != 'http':
-                raise Exception('unable to parse request "{}" as a proxy request'.format(self.requestline))
-            self.hostname = u.hostname
+                raise Exception(
+                        'unable to parse request %s as a proxy request' % (
+                            repr(self.requestline)))
+            host = u.hostname
             self.port = u.port or 80
             self.path = urllib_parse.urlunparse(
                 urllib_parse.ParseResult(
-                    scheme='',
-                    netloc='',
-                    params=u.params,
-                    path=u.path or '/',
-                    query=u.query,
-                    fragment=u.fragment
-                )
-            )
+                    scheme='', netloc='', params=u.params, path=u.path or '/',
+                    query=u.query, fragment=u.fragment))
+        self.hostname = warcprox.normalize_host(host)
 
     def _connect_to_remote_server(self):
         # Connect to destination
