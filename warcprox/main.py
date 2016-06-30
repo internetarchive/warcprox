@@ -248,6 +248,49 @@ def main(argv=sys.argv):
 
     real_main(args)
 
+def ensure_rethinkdb_tables():
+    '''
+    Creates rethinkdb tables if they don't already exist. Warcprox normally
+    creates the tables it needs on demand at startup, but if multiple instances
+    are starting up at the same time, you can end up with duplicate broken
+    tables. So it's a good idea to use this utility at an early step when
+    spinning up a cluster.
+    '''
+    arg_parser = argparse.ArgumentParser(
+            prog=os.path.basename(sys.argv[0]),
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    arg_parser.add_argument(
+            '--rethinkdb-servers', dest='rethinkdb_servers', default='localhost',
+            help='rethinkdb servers e.g. db0.foo.org,db0.foo.org:38015,db1.foo.org')
+    arg_parser.add_argument(
+            '--rethinkdb-db', dest='rethinkdb_db', default='warcprox',
+            help='rethinkdb database name')
+    arg_parser.add_argument(
+            '-q', '--quiet', dest='log_level',
+            action='store_const', default=logging.INFO, const=logging.WARN)
+    arg_parser.add_argument(
+            '-v', '--verbose', dest='log_level',
+            action='store_const', default=logging.INFO, const=logging.DEBUG)
+    args = arg_parser.parse_args(args=sys.argv[1:])
+
+    logging.basicConfig(
+            stream=sys.stdout, level=args.log_level,
+            format=(
+                '%(asctime)s %(levelname)s %(name)s.%(funcName)s'
+                '(%(filename)s:%(lineno)d) %(message)s'))
+
+    r = rethinkstuff.Rethinker(
+            args.rethinkdb_servers.split(','), args.rethinkdb_db)
+
+    # services table
+    rethinkstuff.ServiceRegistry(r)
+
+    # stats table
+    warcprox.stats.RethinkStatsDb(r)
+
+    # captures table
+    warcprox.bigtable.RethinkCaptures(r)
+
 if __name__ == '__main__':
     main()
 

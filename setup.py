@@ -51,7 +51,7 @@ except:
 
 setuptools.setup(
         name='warcprox',
-        version='2.0.dev21',
+        version='2.0.dev22',
         description='WARC writing MITM HTTP/S proxy',
         url='https://github.com/internetarchive/warcprox',
         author='Noah Levitt',
@@ -66,6 +66,8 @@ setuptools.setup(
         entry_points={
             'console_scripts': [
                 'warcprox=warcprox.main:main',
+                ('warcprox-ensure-rethinkdb-tables='
+                    'warcprox.main:ensure_rethinkdb_tables'),
                 'dump-anydbm=warcprox.dump_anydbm:main',
             ],
         },
