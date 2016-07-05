@@ -1,24 +1,24 @@
-#
-# warcprox/kafkafeed.py - support for publishing information about archived
-# urls to apache kafka
-#
-# Copyright (C) 2015-2016 Internet Archive
-#
-# This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License
-# as published by the Free Software Foundation; either version 2
-# of the License, or (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
-# USA.
-#
+'''
+warcprox/kafkafeed.py - support for publishing information about archived
+urls to apache kafka
+
+Copyright (C) 2015-2016 Internet Archive
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
+USA.
+'''
 
 import kafka
 import datetime
@@ -29,13 +29,17 @@ from hanzo import warctools
 class CaptureFeed:
     logger = logging.getLogger('warcprox.kafkafeed.CaptureFeed')
 
-    def __init__(self, broker_list, topic):
+    def __init__(self, broker_list, topic=None):
         self.broker_list = broker_list
         self.topic = topic
         self._producer = kafka.KafkaProducer(bootstrap_servers=broker_list)
 
     def notify(self, recorded_url, records):
         if records[0].type not in (b'revisit', b'response'):
+            return
+
+        topic = recorded_url.warcprox_meta.get('capture-feed-topic', self.topic)
+        if not topic:
             return
 
         try:
@@ -71,8 +75,6 @@ class CaptureFeed:
         if recorded_url.warcprox_meta and 'capture-feed-extra-fields' in recorded_url.warcprox_meta:
             for (k,v) in recorded_url.warcprox_meta['capture-feed-extra-fields'].items():
                 d[k] = v
-
-        topic = recorded_url.warcprox_meta.get('capture-feed-topic', self.topic)
 
         msg = json.dumps(d, separators=(',', ':')).encode('utf-8')
         self.logger.debug('feeding kafka topic=%s msg=%s', repr(topic), msg)

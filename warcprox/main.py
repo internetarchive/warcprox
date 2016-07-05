@@ -34,7 +34,6 @@ import hashlib
 import argparse
 import os
 import socket
-import pprint
 import traceback
 import signal
 import threading
@@ -118,18 +117,19 @@ def dump_state(signum=None, frame=None):
     '''
     Signal handler, logs stack traces of active threads.
     '''
-    pp = pprint.PrettyPrinter(indent=4)
     state_strs = []
 
     for th in threading.enumerate():
         try:
             state_strs.append(str(th))
         except AssertionError:
-            state_strs.append("<n/a:AssertionError>")
+            state_strs.append('<n/a:AssertionError>')
         stack = traceback.format_stack(sys._current_frames()[th.ident])
-        state_strs.append("".join(stack))
+        state_strs.append(''.join(stack))
 
-    logging.warn("dumping state (caught signal {})\n{}".format(signum, "\n".join(state_strs)))
+    logging.warn(
+            'dumping state (caught signal %s)\n%s',
+            signum, '\n'.join(state_strs))
 
 def init_controller(args):
     '''
@@ -171,8 +171,9 @@ def init_controller(args):
         stats_db = warcprox.stats.StatsDb(args.stats_db_file, options=options)
         listeners.append(stats_db)
 
-    if args.kafka_broker_list and args.kafka_capture_feed_topic:
-        kafka_capture_feed = warcprox.kafkafeed.CaptureFeed(args.kafka_broker_list, args.kafka_capture_feed_topic)
+    if args.kafka_broker_list:
+        kafka_capture_feed = warcprox.kafkafeed.CaptureFeed(
+                args.kafka_broker_list, args.kafka_capture_feed_topic)
         listeners.append(kafka_capture_feed)
 
     recorded_url_q = queue.Queue(maxsize=args.queue_size)

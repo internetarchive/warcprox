@@ -132,8 +132,6 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         # to apply this rule if the requested url is within domain
         bucket0_fields = bucket0.split(':')
         if len(bucket0_fields) == 2:
-            self.logger.info(
-                    'checking %s:%s', repr(limit_key), repr(limit_value))
             if not warcprox.host_matches_ip_or_domain(
                     self.hostname, bucket0_fields[1]):
                 return # else host matches, go ahead and enforce the limit
