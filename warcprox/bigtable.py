@@ -1,26 +1,26 @@
-#
-# warcprox/bigtable.py - module for "big" RethinkDB table for deduplication;
-# the table is "big" in the sense that it is designed to be usable as an index
-# for playback software outside of warcprox, and contains information not
-# needed merely for deduplication
-#
-# Copyright (C) 2015-2016 Internet Archive
-#
-# This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License
-# as published by the Free Software Foundation; either version 2
-# of the License, or (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
-# USA.
-#
+"""
+warcprox/bigtable.py - module for "big" RethinkDB table for deduplication;
+the table is "big" in the sense that it is designed to be usable as an index
+for playback software outside of warcprox, and contains information not
+needed merely for deduplication
+
+Copyright (C) 2015-2016 Internet Archive
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
+USA.
+"""
 
 from __future__ import absolute_import
 
@@ -63,9 +63,14 @@ class RethinkCaptures:
             with self._batch_lock:
                 if len(self._batch) > 0:
                     result = self.r.table(self.table).insert(self._batch).run()
-                    if result["inserted"] != len(self._batch) or sorted(result.values()) != [0,0,0,0,0,len(self._batch)]:
-                        raise Exception("unexpected result %s saving batch of %s entries", result, len(self._batch))
-                    self.logger.info("saved %s entries to big capture table db", len(self._batch))
+                    if result["inserted"] != len(self._batch) or sorted(
+                            result.values()) != [0,0,0,0,0,len(self._batch)]:
+                        raise Exception(
+                                "unexpected result %s saving batch of %s "
+                                "entries", result, len(self._batch))
+                    self.logger.debug(
+                            "saved %s entries to big capture table db",
+                            len(self._batch))
                     self._batch = []
         except BaseException as e:
             self.logger.error(
