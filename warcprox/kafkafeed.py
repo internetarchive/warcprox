@@ -32,7 +32,9 @@ class CaptureFeed:
     def __init__(self, broker_list, topic=None):
         self.broker_list = broker_list
         self.topic = topic
-        self._producer = kafka.KafkaProducer(bootstrap_servers=broker_list)
+        # acks=0 to avoid ever blocking
+        self._producer = kafka.KafkaProducer(
+                bootstrap_servers=broker_list, acks=0)
 
     def notify(self, recorded_url, records):
         if records[0].type not in (b'revisit', b'response'):

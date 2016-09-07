@@ -13,7 +13,6 @@ Warcprox runs on python 3.4.
 
 To install latest release run:
 
-
 ::
 
     # apt-get install libffi-dev libssl-dev python3-gdbm
