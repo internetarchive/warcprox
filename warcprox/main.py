@@ -41,6 +41,7 @@ import certauth.certauth
 import warcprox
 import re
 import rethinkstuff
+import cryptography.hazmat.backends.openssl
 
 def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
     arg_parser = argparse.ArgumentParser(prog=prog,
@@ -213,6 +214,9 @@ def init_controller(args):
     return controller
 
 def real_main(args):
+    # see https://github.com/pyca/cryptography/issues/2911
+    cryptography.hazmat.backends.openssl.backend.activate_builtin_random()
+
     controller = init_controller(args)
 
     signal.signal(signal.SIGTERM, lambda a,b: controller.stop.set())
