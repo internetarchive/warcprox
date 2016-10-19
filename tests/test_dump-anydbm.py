@@ -1,4 +1,24 @@
 #!/usr/bin/env python
+#
+# tests/test_dump-anydbm.py - tests for dump-anydbm
+#
+# Copyright (C) 2013-2016 Internet Archive
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
+# USA.
+#
 
 import pytest
 import os
@@ -6,6 +26,7 @@ import tempfile
 import subprocess # to access the script from shell
 import sys
 import glob
+import distutils
 
 # will try as python 3 then default to python 2 modules
 try:
@@ -38,7 +59,7 @@ val1 = 'very first value'
 val2 = 'second value'
 
 py = sys.executable
-dump_anydbm_loc = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "bin/dump-anydbm")
+dump_anydbm_loc = distutils.spawn.find_executable("dump-anydbm")
 
 @pytest.fixture(scope="function")
 def gdbm_test_db(request):

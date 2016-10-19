@@ -1,44 +1,57 @@
 #!/usr/bin/env python
-# vim: set sw=4 et:
+'''
+setup.py - setuptools installation configuration for warcprox
 
-from setuptools.command.test import test as TestCommand
+Copyright (C) 2013-2016 Internet Archive
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
+USA.
+'''
+
 import sys
-import setuptools 
-
-VERSION_BYTES = b'1.4'
-
-def full_version_bytes():
-    import subprocess, time
-    try:
-        commit_bytes = subprocess.check_output(['git', 'log', '-1', '--pretty=format:%h'])
-
-        t_bytes = subprocess.check_output(['git', 'log', '-1', '--pretty=format:%ct'])
-        t = int(t_bytes.strip().decode('utf-8'))
-        tm = time.gmtime(t)
-        timestamp_utc = time.strftime("%Y%m%d%H%M%S", time.gmtime(t))
-        return VERSION_BYTES + b'-' + timestamp_utc.encode('utf-8') + b'-' + commit_bytes.strip()
-    except subprocess.CalledProcessError:
-        return VERSION_BYTES
-
-version_bytes = full_version_bytes()
-with open('warcprox/version.txt', 'wb') as out:
-    out.write(version_bytes)
-    out.write(b'\n');
+import setuptools
+import setuptools.command.test
 
 # special class needs to be added to support the pytest written dump-anydbm tests
-class PyTest(TestCommand):
+class PyTest(setuptools.command.test.test):
     def finalize_options(self):
-        TestCommand.finalize_options(self)
+        setuptools.command.test.test.finalize_options(self)
         self.test_args = []
         self.test_suite = True
     def run_tests(self):
-        #import here, cause outside the eggs aren't loaded
+        # import here, because outside the eggs aren't loaded
         import pytest
         errno = pytest.main(self.test_args)
         sys.exit(errno)
 
-setuptools.setup(name='warcprox',
-        version=version_bytes.decode('utf-8'),
+deps = [
+    'certauth>=1.1.0',
+    'warctools',
+    'kafka-python>=1.0.1',
+    'surt>=0.3b4',
+    'rethinkstuff',
+    'PySocks',
+]
+try:
+    import concurrent.futures
+except:
+    deps.append('futures')
+
+setuptools.setup(
+        name='warcprox',
+        version='2.0b2.dev32',
         description='WARC writing MITM HTTP/S proxy',
         url='https://github.com/internetarchive/warcprox',
         author='Noah Levitt',
@@ -46,13 +59,18 @@ setuptools.setup(name='warcprox',
         long_description=open('README.rst').read(),
         license='GPL',
         packages=['warcprox'],
-        package_data={'warcprox':['version.txt']},
-        install_requires=['certauth>=1.1.0', 'warctools>=4.8.3'],  # gdbm not in pip :(
-        dependency_links=['git+https://github.com/internetarchive/warctools.git#egg=warctools-4.8.3'],
+        install_requires=deps,
         tests_require=['requests>=2.0.1', 'pytest'],  # >=2.0.1 for https://github.com/kennethreitz/requests/pull/1636
         cmdclass = {'test': PyTest},
         test_suite='warcprox.tests',
-        scripts=['bin/dump-anydbm', 'bin/warcprox'],
+        entry_points={
+            'console_scripts': [
+                'warcprox=warcprox.main:main',
+                ('warcprox-ensure-rethinkdb-tables='
+                    'warcprox.main:ensure_rethinkdb_tables'),
+                'dump-anydbm=warcprox.dump_anydbm:main',
+            ],
+        },
         zip_safe=False,
         classifiers=[
             'Development Status :: 5 - Production/Stable',
@@ -60,6 +78,7 @@ setuptools.setup(name='warcprox',
             'License :: OSI Approved :: GNU General Public License (GPL)',
             'Programming Language :: Python :: 2.7',
             'Programming Language :: Python :: 3.4',
+            'Programming Language :: Python :: 3.5',
             'Topic :: Internet :: Proxy Servers',
             'Topic :: Internet :: WWW/HTTP',
             'Topic :: Software Development :: Libraries :: Python Modules',

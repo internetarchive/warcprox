@@ -1,12 +1,28 @@
 #!/usr/bin/env python
-# vim:set sw=4 et:
-#
+'''
+dump-anydbm - dumps contents of dbm file to stdout
 
-"""
 Dump contents of database to stdout. Database can be any file that the anydbm
 module can read. Included with warcprox because it's useful for inspecting a
 deduplication database or a playback index database, but it is a generic tool.
-"""
+
+Copyright (C) 2013-2016 Internet Archive
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
+USA.
+'''
 
 try:
     import dbm
@@ -14,7 +30,7 @@ try:
     whichdb = dbm.whichdb
 
 except:
-    import anydbm 
+    import anydbm
     dbm = anydbm
     from whichdb import whichdb
 
@@ -22,6 +38,9 @@ import sys
 import os.path
 
 if __name__ == "__main__":
+    main()
+
+def main():
     if len(sys.argv) != 2:
         sys.stderr.write("usage: {} DBM_FILE\n".format(sys.argv[0]))
         exit(1)
