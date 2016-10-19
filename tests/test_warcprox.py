@@ -123,6 +123,11 @@ class _TestHttpRequestHandler(http_server.BaseHTTPRequestHandler):
                     +  special_header + b'\r\n'
                     +  b'Content-Length: ' + str(len(payload)).encode('ascii') + b'\r\n'
                     +  b'\r\n')
+        elif self.path == '/missing-content-length':
+            headers = (b'HTTP/1.1 200 OK\r\n'
+                    +  b'Content-Type: text/plain\r\n'
+                    +  b'\r\n')
+            payload = b'This response is missing a Content-Length http header.'
         else:
             payload = b'404 Not Found\n'
             headers = (b'HTTP/1.1 404 Not Found\r\n'
@@ -1102,6 +1107,43 @@ def _test_tor_onion(archiving_proxies):
     response = requests.get('https://www.facebookcorewwwi.onion/',
         proxies=archiving_proxies, verify=False, allow_redirects=False)
     assert response.status_code == 200
+
+def test_missing_content_length(archiving_proxies, http_daemon, https_daemon):
+    # double-check that our test http server is responding as expected
+    url = 'http://localhost:%s/missing-content-length' % (
+            http_daemon.server_port)
+    response = requests.get(url, verify=False, timeout=10)
+    assert response.content == (
+            b'This response is missing a Content-Length http header.')
+    assert not 'content-length' in response.headers
+
+    # double-check that our test https server is responding as expected
+    url = 'https://localhost:%s/missing-content-length' % (
+            https_daemon.server_port)
+    response = requests.get(url, verify=False, timeout=10)
+    assert response.content == (
+            b'This response is missing a Content-Length http header.')
+    assert not 'content-length' in response.headers
+
+    # now check that the proxy doesn't hang (http)
+    url = 'http://localhost:%s/missing-content-length' % (
+            http_daemon.server_port)
+    response = requests.get(
+            url, proxies=archiving_proxies, verify=False, timeout=10)
+    assert response.content == (
+            b'This response is missing a Content-Length http header.')
+    assert not 'content-length' in response.headers
+
+    # now check that the proxy doesn't hang (https)
+    url = 'https://localhost:%s/missing-content-length' % (
+            https_daemon.server_port)
+    # before fixing the issue this tests for, this would fail by raising
+    # requests.exceptions.ConnectionError: ... Read timed out
+    response = requests.get(
+            url, proxies=archiving_proxies, verify=False, timeout=10)
+    assert response.content == (
+            b'This response is missing a Content-Length http header.')
+    assert not 'content-length' in response.headers
 
 if __name__ == '__main__':
     pytest.main()
