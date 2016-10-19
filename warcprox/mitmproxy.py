@@ -48,6 +48,12 @@ import datetime
 import socks
 import tempfile
 import hashlib
+try:
+    import socketserver
+except ImportError:
+    import SocketServer as socketserver
+import resource
+import concurrent.futures
 
 class ProxyingRecorder(object):
     """
@@ -396,4 +402,68 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
 
     def log_error(self, fmt, *args):
         self.logger.warn(fmt, *args)
+
+class PooledMixIn(socketserver.ThreadingMixIn):
+    logger = logging.getLogger("warcprox.mitmproxy.PooledMixIn")
+    def __init__(self, max_threads=None):
+        '''
+        If max_threads is not supplied, calculates a reasonable value based
+        on system resource limits.
+        '''
+        if not max_threads:
+            # man getrlimit: "RLIMIT_NPROC The maximum number of processes (or,
+            # more precisely on Linux, threads) that can be created for the
+            # real user ID of the calling process."
+            rlimit_nproc = resource.getrlimit(resource.RLIMIT_NPROC)[0]
+            rlimit_nofile = resource.getrlimit(resource.RLIMIT_NOFILE)[0]
+            max_threads = min(rlimit_nofile // 10, rlimit_nproc // 2)
+            self.logger.info(
+                    "max_threads=%s (rlimit_nproc=%s, rlimit_nofile=%s)",
+                    max_threads, rlimit_nproc, rlimit_nofile)
+        self.pool = concurrent.futures.ThreadPoolExecutor(max_threads)
+
+    def process_request(self, request, client_address):
+        self.pool.submit(self.process_request_thread, request, client_address)
+
+class MitmProxy(http_server.HTTPServer):
+    def finish_request(self, request, client_address):
+        '''
+        We override socketserver.BaseServer.finish_request to get at
+        MitmProxyHandler's self.request. A normal socket server's self.request
+        is set to `request` and never changes, but in our case, it may be
+        replaced with an SSL socket. The caller of this method (e.g.
+        self.process_request or PooledMitmProxy.process_request_thread) needs
+        to get a hold of that socket so it can close it.
+        '''
+        req_handler = self.RequestHandlerClass(request, client_address, self)
+        return req_handler.request
+
+    def process_request(self, request, client_address):
+        '''
+        This an almost verbatim copy/paste of
+        socketserver.BaseServer.process_request.
+        The only difference is that it expects self.finish_request to return
+        the request (i.e. the socket). This new value of request is passed on
+        to self.shutdown_request. See the comment on self.finish_request for
+        the rationale.
+        '''
+        request = self.finish_request(request, client_address)
+        self.shutdown_request(request)
+
+class PooledMitmProxy(PooledMixIn, MitmProxy):
+    def process_request_thread(self, request, client_address):
+        '''
+        This an almost verbatim copy/paste of
+        socketserver.ThreadingMixIn.process_request_thread.
+        The only difference is that it expects self.finish_request to return
+        the request (i.e. the socket). This new value of request is passed on
+        to self.shutdown_request. See the comment on MitmProxy.finish_request
+        for the rationale.
+        '''
+        try:
+            request = self.finish_request(request, client_address)
+            self.shutdown_request(request)
+        except:
+            self.handle_error(request, client_address)
+            self.shutdown_request(request)
 

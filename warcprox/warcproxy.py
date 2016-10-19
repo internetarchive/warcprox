@@ -43,8 +43,6 @@ from hanzo import warctools
 from certauth.certauth import CertificateAuthority
 import warcprox
 import datetime
-import concurrent.futures
-import resource
 import ipaddress
 import surt
 
@@ -387,64 +385,31 @@ class SingleThreadedWarcProxy(http_server.HTTPServer):
 
         self.options = options
 
+class WarcProxy(SingleThreadedWarcProxy, warcprox.mitmproxy.PooledMitmProxy):
+    logger = logging.getLogger("warcprox.warcproxy.WarcProxy")
+
+    def __init__(
+            self, ca=None, recorded_url_q=None, stats_db=None,
+            options=warcprox.Options()):
+        if options.max_threads:
+            self.logger.info(
+                    "max_threads=%s set by command line option",
+                    options.max_threads)
+        warcprox.mitmproxy.PooledMitmProxy.__init__(self, options.max_threads)
+        SingleThreadedWarcProxy.__init__(
+                self, ca, recorded_url_q, stats_db, options)
+
     def server_activate(self):
         http_server.HTTPServer.server_activate(self)
-        self.logger.info('WarcProxy listening on {0}:{1}'.format(self.server_address[0], self.server_address[1]))
+        self.logger.info(
+                'listening on %s:%s', self.server_address[0],
+                self.server_address[1])
 
     def server_close(self):
-        self.logger.info('WarcProxy shutting down')
+        self.logger.info('shutting down')
         http_server.HTTPServer.server_close(self)
 
     def handle_error(self, request, client_address):
-        self.logger.warn("exception processing request %s from %s", request, client_address, exc_info=True)
-
-    def finish_request(self, request, client_address):
-        '''
-        We override socketserver.BaseServer.finish_request to get at
-        WarcProxyHandler's self.request. A normal socket server's self.request
-        is set to `request` and never changes, but in our case, it may be
-        replaced with an SSL socket. The caller of this method, e.g.
-        PooledMixIn.process_request_thread, needs to get a hold of that socket
-        so it can close it.
-        '''
-        req_handler = WarcProxyHandler(request, client_address, self)
-        return req_handler.request
-
-class PooledMixIn(socketserver.ThreadingMixIn):
-    def process_request(self, request, client_address):
-        self.pool.submit(self.process_request_thread, request, client_address)
-    def process_request_thread(self, request, client_address):
-        '''
-        This an almost verbatim copy/paste of
-        socketserver.ThreadingMixIn.process_request_thread.
-        The only difference is that it expects self.finish_request to return
-        a request. See the comment on SingleThreadedWarcProxy.finish_request
-        above.
-        '''
-        try:
-            request = self.finish_request(request, client_address)
-            self.shutdown_request(request)
-        except:
-            self.handle_error(request, client_address)
-            self.shutdown_request(request)
-
-class WarcProxy(PooledMixIn, SingleThreadedWarcProxy):
-    logger = logging.getLogger("warcprox.warcproxy.WarcProxy")
-
-    def __init__(self, *args, **kwargs):
-        SingleThreadedWarcProxy.__init__(self, *args, **kwargs)
-        if self.options.max_threads:
-            max_threads = self.options.max_threads
-            self.logger.info("max_threads=%s set by command line option",
-                             max_threads)
-        else:
-            # man getrlimit: "RLIMIT_NPROC The maximum number of processes (or,
-            # more precisely on Linux, threads) that can be created for the
-            # real user ID of the calling process."
-            rlimit_nproc = resource.getrlimit(resource.RLIMIT_NPROC)[0]
-            rlimit_nofile = resource.getrlimit(resource.RLIMIT_NOFILE)[0]
-            max_threads = min(rlimit_nofile // 10, rlimit_nproc // 2)
-            self.logger.info("max_threads=%s (rlimit_nproc=%s, rlimit_nofile=%s)",
-                             max_threads, rlimit_nproc, rlimit_nofile)
-
-        self.pool = concurrent.futures.ThreadPoolExecutor(max_threads)
+        self.logger.warn(
+                "exception processing request %s from %s", request,
+                client_address, exc_info=True)
