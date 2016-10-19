@@ -349,8 +349,12 @@ class RecordedUrl:
 class SingleThreadedWarcProxy(http_server.HTTPServer):
     logger = logging.getLogger("warcprox.warcproxy.WarcProxy")
 
-    def __init__(self, ca=None, recorded_url_q=None, stats_db=None, options=warcprox.Options()):
-        server_address = (options.address or 'localhost', options.port if options.port is not None else 8000)
+    def __init__(
+            self, ca=None, recorded_url_q=None, stats_db=None,
+            options=warcprox.Options()):
+        server_address = (
+                options.address or 'localhost',
+                options.port if options.port is not None else 8000)
 
         if options.onion_tor_socks_proxy:
             try:
@@ -361,7 +365,8 @@ class SingleThreadedWarcProxy(http_server.HTTPServer):
                 WarcProxyHandler.onion_tor_socks_proxy_host = options.onion_tor_socks_proxy
                 WarcProxyHandler.onion_tor_socks_proxy_port = None
 
-        http_server.HTTPServer.__init__(self, server_address, WarcProxyHandler, bind_and_activate=True)
+        http_server.HTTPServer.__init__(
+                self, server_address, WarcProxyHandler, bind_and_activate=True)
 
         self.digest_algorithm = options.digest_algorithm or 'sha1'
 
@@ -393,9 +398,35 @@ class SingleThreadedWarcProxy(http_server.HTTPServer):
     def handle_error(self, request, client_address):
         self.logger.warn("exception processing request %s from %s", request, client_address, exc_info=True)
 
+    def finish_request(self, request, client_address):
+        '''
+        We override socketserver.BaseServer.finish_request to get at
+        WarcProxyHandler's self.request. A normal socket server's self.request
+        is set to `request` and never changes, but in our case, it may be
+        replaced with an SSL socket. The caller of this method, e.g.
+        PooledMixIn.process_request_thread, needs to get a hold of that socket
+        so it can close it.
+        '''
+        req_handler = WarcProxyHandler(request, client_address, self)
+        return req_handler.request
+
 class PooledMixIn(socketserver.ThreadingMixIn):
     def process_request(self, request, client_address):
         self.pool.submit(self.process_request_thread, request, client_address)
+    def process_request_thread(self, request, client_address):
+        '''
+        This an almost verbatim copy/paste of
+        socketserver.ThreadingMixIn.process_request_thread.
+        The only difference is that it expects self.finish_request to return
+        a request. See the comment on SingleThreadedWarcProxy.finish_request
+        above.
+        '''
+        try:
+            request = self.finish_request(request, client_address)
+            self.shutdown_request(request)
+        except:
+            self.handle_error(request, client_address)
+            self.shutdown_request(request)
 
 class WarcProxy(PooledMixIn, SingleThreadedWarcProxy):
     logger = logging.getLogger("warcprox.warcproxy.WarcProxy")
