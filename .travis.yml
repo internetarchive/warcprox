@@ -3,14 +3,16 @@ python:
 - 3.5
 - 3.4
 - 2.7
-- nightly
 - pypy
 - pypy3
+- 3.6-dev
+- nightly
 
 matrix:
   allow_failures:
-  - python: pypy
   - python: pypy3
+  - python: nightly
+  - python: 3.6-dev
 
 addons:
   apt:

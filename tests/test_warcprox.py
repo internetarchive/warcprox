@@ -1099,7 +1099,7 @@ def test_domain_data_soft_limit(
 # XXX this test relies on a tor proxy running at localhost:9050 with a working
 # connection to the internet, and relies on a third party site (facebook) being
 # up and behaving a certain way
-def _test_tor_onion(archiving_proxies):
+def test_tor_onion(archiving_proxies):
     response = requests.get('http://www.facebookcorewwwi.onion/',
         proxies=archiving_proxies, verify=False, allow_redirects=False)
     assert response.status_code == 302
