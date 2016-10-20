@@ -1,7 +1,7 @@
 warcprox - WARC writing MITM HTTP/S proxy
 -----------------------------------------
-.. image:: https://travis-ci.org/internetarchive/warcprox.png?branch=master
-        :target: https://travis-ci.org/internetarchive/warcprox
+.. image:: https://travis-ci.org/internetarchive/warcprox.svg?branch=master
+    :target: https://travis-ci.org/internetarchive/warcprox
 
 Based on the excellent and simple pymiproxy by Nadeem Douba.
 https://github.com/allfro/pymiproxy
