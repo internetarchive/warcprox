@@ -417,6 +417,9 @@ class PooledMixIn(socketserver.ThreadingMixIn):
             rlimit_nproc = resource.getrlimit(resource.RLIMIT_NPROC)[0]
             rlimit_nofile = resource.getrlimit(resource.RLIMIT_NOFILE)[0]
             max_threads = min(rlimit_nofile // 10, rlimit_nproc // 2)
+            # resource.RLIM_INFINITY == -1 which can result in max_threads == 0
+            if max_threads <= 0 or max_threads > 5000:
+                max_threads = 5000
             self.logger.info(
                     "max_threads=%s (rlimit_nproc=%s, rlimit_nofile=%s)",
                     max_threads, rlimit_nproc, rlimit_nofile)
