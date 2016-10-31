@@ -213,6 +213,34 @@ def test_service_registry(r):
     assert len(svcreg.available_services("yes-such-role")) == 2
     assert len(svcreg.available_services()) == 4
 
+def test_svcreg_heartbeat_server_down(r):
+    class MockRethinker:
+        def table(self, *args, **kwargs):
+            raise Exception('catch me if you can')
+
+    class SortOfFakeServiceRegistry(rethinkstuff.ServiceRegistry):
+        def __init__(self, rethinker):
+            self.r = rethinker
+            # self._ensure_table() # not doing this here
+
+    # no such rethinkdb server
+    r = MockRethinker()
+    svcreg = SortOfFakeServiceRegistry(r)
+    svc0 = {
+        "role": "role-foo",
+        "load": 100.0,
+        "heartbeat_interval": 0.4,
+    }
+    # no exception thrown
+    svc0 = svcreg.heartbeat(svc0)
+
+    # check that status_info was *not* updated
+    assert not 'id' in svc0
+    assert not 'last_heartbeat' in svc0
+    assert not 'first_heartbeat' in svc0
+    assert not 'host' in svc0
+    assert not 'pid' in svc0
+
 def test_utcnow():
     now_notz = datetime.datetime.utcnow()  # has no timezone :(
     assert not now_notz.tzinfo
