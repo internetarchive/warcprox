@@ -1009,13 +1009,13 @@ def test_domain_data_soft_limit(
         http_daemon, https_daemon, warcprox_, archiving_proxies):
     # using idn
     request_meta = {
-        "stats": {"buckets": [{"bucket":"test_domain_data_limit_bucket","tally-domains":['♛zZ.LOCALhost']}]},
+        "stats": {"buckets": [{"bucket":"test_domain_data_limit_bucket","tally-domains":['ÞzZ.LOCALhost']}]},
         # response is 135 bytes, so 3rd novel url should be disallowed
-        "soft-limits": {"test_domain_data_limit_bucket:♛ZZ.localhost/new/wire_bytes":200},
+        "soft-limits": {"test_domain_data_limit_bucket:ÞZZ.localhost/new/wire_bytes":200},
     }
     headers = {"Warcprox-Meta": json.dumps(request_meta)}
 
-    url = 'http://♛Zz.localhost:{}/y/z'.format(http_daemon.server_port)
+    url = 'http://ÞZz.localhost:{}/y/z'.format(http_daemon.server_port)
     response = requests.get(
             url, proxies=archiving_proxies, headers=headers, stream=True)
     assert response.status_code == 200
@@ -1030,7 +1030,7 @@ def test_domain_data_soft_limit(
     time.sleep(2.0)
 
     # duplicate, does not count toward limit
-    url = 'https://baz.♛zz.localhost:{}/y/z'.format(https_daemon.server_port)
+    url = 'https://baz.Þzz.localhost:{}/y/z'.format(https_daemon.server_port)
     response = requests.get(
             url, proxies=archiving_proxies, headers=headers, stream=True,
             verify=False)
@@ -1046,7 +1046,7 @@ def test_domain_data_soft_limit(
     time.sleep(2.0)
 
     # novel, pushes stats over the limit
-    url = 'https://muh.XN--Zz-xZX.locALHOst:{}/z/~'.format(https_daemon.server_port)
+    url = 'https://muh.XN--Zz-2Ka.locALHOst:{}/z/~'.format(https_daemon.server_port)
     response = requests.get(
             url, proxies=archiving_proxies, headers=headers, stream=True,
             verify=False)
@@ -1070,31 +1070,31 @@ def test_domain_data_soft_limit(
     assert response.content == b'I am the warcprox test payload! ~~~~~~~~~~!\n'
 
     # blocked because we're over the limit now
-    url = 'http://lOl.wHut.♛ZZ.lOcALHOst:{}/y/z'.format(http_daemon.server_port)
+    url = 'http://lOl.wHut.ÞZZ.lOcALHOst:{}/y/z'.format(http_daemon.server_port)
     response = requests.get(
             url, proxies=archiving_proxies, headers=headers, stream=True)
     assert response.status_code == 430
     assert response.reason == "Reached soft limit"
-    expected_response_meta = {'reached-soft-limit': {'test_domain_data_limit_bucket:xn--zz-xzx.localhost/new/wire_bytes': 200}, 'stats': {'test_domain_data_limit_bucket:xn--zz-xzx.localhost': {'total': {'wire_bytes': 405, 'urls': 3}, 'revisit': {'wire_bytes': 135, 'urls': 1}, 'new': {'wire_bytes': 270, 'urls': 2}, 'bucket': 'test_domain_data_limit_bucket:xn--zz-xzx.localhost'}}}
+    expected_response_meta = {'reached-soft-limit': {'test_domain_data_limit_bucket:xn--zz-2ka.localhost/new/wire_bytes': 200}, 'stats': {'test_domain_data_limit_bucket:xn--zz-2ka.localhost': {'total': {'wire_bytes': 405, 'urls': 3}, 'revisit': {'wire_bytes': 135, 'urls': 1}, 'new': {'wire_bytes': 270, 'urls': 2}, 'bucket': 'test_domain_data_limit_bucket:xn--zz-2ka.localhost'}}}
     assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
     assert response.headers["content-type"] == "text/plain;charset=utf-8"
-    assert response.raw.data == b"request rejected by warcprox: reached soft limit test_domain_data_limit_bucket:xn--zz-xzx.localhost/new/wire_bytes=200\n"
+    assert response.raw.data == b"request rejected by warcprox: reached soft limit test_domain_data_limit_bucket:xn--zz-2ka.localhost/new/wire_bytes=200\n"
 
     # XXX this check is resulting in a segfault on mac and linux, from ssl I
     # think, probably because of the dns resolution monkey-patching
     # https://travis-ci.org/internetarchive/warcprox/builds/141187342
     #
     ### # https also blocked
-    ### url = 'https://xn--zz-xzxh.loCAlhost:{}/w/x'.format(https_daemon.server_port)
+    ### url = 'https://xn--zz-2ka.loCAlhost:{}/w/x'.format(https_daemon.server_port)
     ### response = requests.get(
     ###         url, proxies=archiving_proxies, headers=headers, stream=True,
     ###         verify=False)
     ### assert response.status_code == 430
     ### assert response.reason == "Reached soft limit"
-    ### expected_response_meta = {'reached-soft-limit': {'test_domain_data_limit_bucket:xn--zz-xzx.localhost/new/wire_bytes': 200}, 'stats': {'test_domain_data_limit_bucket:xn--zz-xzx.localhost': {'total': {'wire_bytes': 405, 'urls': 3}, 'revisit': {'wire_bytes': 135, 'urls': 1}, 'new': {'wire_bytes': 270, 'urls': 2}, 'bucket': 'test_domain_data_limit_bucket:xn--zz-xzx.localhost'}}}
+    ### expected_response_meta = {'reached-soft-limit': {'test_domain_data_limit_bucket:xn--zz-2ka.localhost/new/wire_bytes': 200}, 'stats': {'test_domain_data_limit_bucket:xn--zz-2ka.localhost': {'total': {'wire_bytes': 405, 'urls': 3}, 'revisit': {'wire_bytes': 135, 'urls': 1}, 'new': {'wire_bytes': 270, 'urls': 2}, 'bucket': 'test_domain_data_limit_bucket:xn--zz-2ka.localhost'}}}
     ### assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
     ### assert response.headers["content-type"] == "text/plain;charset=utf-8"
-    ### assert response.raw.data == b"request rejected by warcprox: reached soft limit test_domain_data_limit_bucket:xn--zz-xzx.localhost/new/wire_bytes=200\n"
+    ### assert response.raw.data == b"request rejected by warcprox: reached soft limit test_domain_data_limit_bucket:xn--zz-2ka.localhost/new/wire_bytes=200\n"
 
 # XXX this test relies on a tor proxy running at localhost:9050 with a working
 # connection to the internet, and relies on a third party site (facebook) being
