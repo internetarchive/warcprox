@@ -77,6 +77,8 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
             default='sha1', help='digest algorithm, one of {}'.format(', '.join(hash_algos)))
     arg_parser.add_argument('--base32', dest='base32', action='store_true',
             default=False, help='write digests in Base32 instead of hex')
+    arg_parser.add_argument('--method-filter', metavar='HTTP_METHOD',
+                            action='append', help='only record requests with the given http method(s) (can be used more than once)')
     arg_parser.add_argument('--stats-db-file', dest='stats_db_file',
             default='./warcprox-stats.db', help='persistent statistics database file; empty string or /dev/null disables statistics tracking')
     arg_parser.add_argument('-P', '--playback-port', dest='playback_port',

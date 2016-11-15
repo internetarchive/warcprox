@@ -56,12 +56,16 @@ class WarcWriterThread(threading.Thread):
         self.listeners = listeners
         self.options = options
         self.idle = None
+        self.method_filter = set(method.upper() for method in self.options.method_filter or [])
 
     def run(self):
         if self.options.profile:
             cProfile.runctx('self._run()', globals(), locals(), sort='cumulative')
         else:
             self._run()
+
+    def _filter_accepts(self, recorded_url):
+        return not self.method_filter or recorded_url.method.upper() in self.method_filter
 
     def _run(self):
         while not self.stop.is_set():
@@ -76,11 +80,12 @@ class WarcWriterThread(threading.Thread):
 
                         recorded_url = self.recorded_url_q.get(block=True, timeout=0.5)
                         self.idle = None
-                        if self.dedup_db:
-                            warcprox.dedup.decorate_with_dedup_info(self.dedup_db,
-                                    recorded_url, base32=self.options.base32)
-                        records = self.writer_pool.write_records(recorded_url)
-                        self._final_tasks(recorded_url, records)
+                        if self._filter_accepts(recorded_url):
+                            if self.dedup_db:
+                                warcprox.dedup.decorate_with_dedup_info(self.dedup_db,
+                                        recorded_url, base32=self.options.base32)
+                            records = self.writer_pool.write_records(recorded_url)
+                            self._final_tasks(recorded_url, records)
 
                         # try to release resources in a timely fashion
                         if recorded_url.response_recorder and recorded_url.response_recorder.tempfile:
