@@ -111,9 +111,7 @@ def dump_state(signum=None, frame=None):
 signal.signal(signal.SIGQUIT, dump_state)
 
 class _TestHttpRequestHandler(http_server.BaseHTTPRequestHandler):
-    def do_GET(self):
-        logging.info('GET {}'.format(self.path))
-
+    def build_response(self):
         m = re.match(r'^/([^/]+)/([^/]+)$', self.path)
         if m is not None:
             special_header = 'warcprox-test-header: {}!'.format(m.group(1)).encode('utf-8')
@@ -134,9 +132,18 @@ class _TestHttpRequestHandler(http_server.BaseHTTPRequestHandler):
                     +  b'Content-Type: text/plain\r\n'
                     +  b'Content-Length: ' + str(len(payload)).encode('ascii') + b'\r\n'
                     +  b'\r\n')
+        return headers, payload
 
+    def do_GET(self):
+        logging.info('GET {}'.format(self.path))
+        headers, payload = self.build_response()
         self.connection.sendall(headers)
         self.connection.sendall(payload)
+
+    def do_HEAD(self):
+        logging.info('HEAD {}'.format(self.path))
+        headers, payload = self.build_response()
+        self.connection.sendall(headers)
 
 @pytest.fixture(scope="module")
 def cert(request):
@@ -346,10 +353,14 @@ def warcprox_(request, captures_db, dedup_db, stats_db, service_registry):
             playback_index_db=playback_index_db, options=options)
     options.playback_proxy = playback_proxy.server_port
 
+    options.method_filter = ['GET','POST']
+
     writer_pool = warcprox.writer.WarcWriterPool(options)
     warc_writer_thread = warcprox.writerthread.WarcWriterThread(
             recorded_url_q=recorded_url_q, writer_pool=writer_pool,
-            dedup_db=dedup_db, listeners=[captures_db or dedup_db, playback_index_db, stats_db])
+            dedup_db=dedup_db, listeners=[
+                captures_db or dedup_db, playback_index_db, stats_db],
+            options=options)
 
     warcprox_ = warcprox.controller.WarcproxController(proxy=proxy,
         warc_writer_thread=warc_writer_thread, playback_proxy=playback_proxy,
@@ -1144,6 +1155,22 @@ def test_missing_content_length(archiving_proxies, http_daemon, https_daemon):
     assert response.content == (
             b'This response is missing a Content-Length http header.')
     assert not 'content-length' in response.headers
+
+def test_method_filter(
+        https_daemon, http_daemon, archiving_proxies, playback_proxies):
+    # we've configured warcprox with method_filters=['GET','POST'] so HEAD
+    # requests should not be archived
+
+    url = 'http://localhost:{}/z/a'.format(http_daemon.server_port)
+
+    response = requests.head(url, proxies=archiving_proxies)
+    assert response.status_code == 200
+    assert response.headers['warcprox-test-header'] == 'z!'
+    assert response.content == b''
+
+    response = _poll_playback_until(playback_proxies, url, status=200, timeout_sec=10)
+    assert response.status_code == 404
+    assert response.content == b'404 Not in Archive\n'
 
 if __name__ == '__main__':
     pytest.main()
