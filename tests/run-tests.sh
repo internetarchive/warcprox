@@ -33,7 +33,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 docker build -t internetarchive/warcprox-tests $script_dir
 
-for python in python2.7 python3.4
+for python in python2.7 python3
 do
     docker run --rm --volume="$script_dir/..:/warcprox" internetarchive/warcprox-tests /sbin/my_init -- \
         bash -x -c "cd /tmp && git clone /warcprox && cd /tmp/warcprox \
