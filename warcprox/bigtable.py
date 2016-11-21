@@ -168,7 +168,12 @@ class RethinkCaptures:
             "response_code": recorded_url.status,
             "http_method": recorded_url.method,
             "bucket": bucket,
-            "length": records[0].length,
+            "record_length": records[0].length, # compressed (or not) length of
+                                                # warc record including record
+                                                # headers
+            "wire_bytes": recorded_url.size, # count of bytes transferred over
+                                             # the wire, including http headers
+                                             # if any
         }
 
         if (recorded_url.warcprox_meta and
