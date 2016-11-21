@@ -9,7 +9,7 @@ https://github.com/allfro/pymiproxy
 Install
 ~~~~~~~
 
-Warcprox runs on python 3.4.
+Warcprox runs on python 2.7 or 3.4+.
 
 To install latest release run:
 
@@ -131,8 +131,8 @@ License
 Warcprox is a derivative work of pymiproxy, which is GPL. Thus warcprox is also
 GPL.
 
-Copyright (C) 2012 Cygnos Corporation
-Copyright (C) 2013-2016 Internet Archive
+| Copyright (C) 2012 Cygnos Corporation
+| Copyright (C) 2013-2016 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
