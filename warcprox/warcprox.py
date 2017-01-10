@@ -305,9 +305,9 @@ class WarcProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
     def server_close(self):
         self.logger.info('WarcProxy shutting down')
         http_server.HTTPServer.server_close(self)
-        # Wait up to 3 seconds until each of the handlers is done.
+        # Wait up to 45 seconds until each of the handlers is done.
         while self.handlers:
             self.logger.debug("Waiting for %s handlers", len(self.handlers))
             handler = self.handlers.pop()
-            handler.done.wait(3)
+            handler.done.wait(45)
         self.logger.debug("Done waiting for handlers")
