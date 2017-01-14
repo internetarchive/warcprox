@@ -114,7 +114,10 @@ class RethinkCaptures:
                     "digest type is %s but big captures table is indexed by "
                     "sha1" % algo)
         sha1base32 = base64.b32encode(raw_digest).decode("utf-8")
-        results_iter = self.r.table(self.table).get_all([sha1base32, "response", bucket], index="sha1_warc_type").run()
+        results_iter = self.r.table(self.table).get_all(
+                [sha1base32, "response", bucket],
+                index="sha1_warc_type").filter(
+                        self.r.row["dedup_ok"], default=True).run()
         results = list(results_iter)
         if len(results) > 0:
             if len(results) > 1:
@@ -176,11 +179,14 @@ class RethinkCaptures:
                                              # if any
         }
 
-        if (recorded_url.warcprox_meta and
-                "captures-table-extra-fields" in recorded_url.warcprox_meta):
-            extras = recorded_url.warcprox_meta["captures-table-extra-fields"]
-            for extra_field in extras:
-                entry[extra_field] = extras[extra_field]
+        if recorded_url.warcprox_meta:
+            if "dedup-ok" in recorded_url.warcprox_meta:
+                entry["dedup_ok"] = recorded_url.warcprox_meta["dedup-ok"]
+            if "captures-table-extra-fields" in recorded_url.warcprox_meta:
+                extras = recorded_url.warcprox_meta[
+                        "captures-table-extra-fields"]
+                for extra_field in extras:
+                    entry[extra_field] = extras[extra_field]
 
         return entry
 

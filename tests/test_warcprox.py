@@ -217,10 +217,6 @@ def https_daemon(request, cert):
 
     return https_daemon
 
-# @pytest.fixture(scope="module")
-# def options(request):
-#     return warcprox.Options(base32=True)
-
 @pytest.fixture(scope="module")
 def captures_db(request, rethinkdb_servers, rethinkdb_big_table):
     captures_db = None
@@ -1171,6 +1167,79 @@ def test_method_filter(
     response = _poll_playback_until(playback_proxies, url, status=200, timeout_sec=10)
     assert response.status_code == 404
     assert response.content == b'404 Not in Archive\n'
+
+def test_dedup_ok_flag(
+        https_daemon, http_daemon, warcprox_, archiving_proxies,
+        rethinkdb_big_table):
+    if not rethinkdb_big_table:
+        # this feature is n/a unless using rethinkdb big table
+        return
+
+    url = 'http://localhost:{}/z/b'.format(http_daemon.server_port)
+
+    # check not in dedup db
+    dedup_lookup = warcprox_.warc_writer_thread.dedup_db.lookup(
+            b'sha1:2d7f13181b90a256ce5e5ebfd6e9c9826ece9079',
+            bucket='test_dedup_ok_flag')
+    assert dedup_lookup is None
+
+    # archive with dedup_ok:False
+    request_meta = {'captures-bucket':'test_dedup_ok_flag','dedup-ok':False}
+    headers = {'Warcprox-Meta': json.dumps(request_meta)}
+    response = requests.get(
+            url, proxies=archiving_proxies, headers=headers, verify=False)
+    assert response.status_code == 200
+    assert response.headers['warcprox-test-header'] == 'z!'
+    assert response.content == b'I am the warcprox test payload! bbbbbbbbbb!\n'
+
+    time.sleep(0.5)
+    while not warcprox_.warc_writer_thread.idle:
+        time.sleep(0.5)
+    time.sleep(0.5)
+
+    # check that dedup db doesn't give us anything for this
+    dedup_lookup = warcprox_.warc_writer_thread.dedup_db.lookup(
+            b'sha1:2d7f13181b90a256ce5e5ebfd6e9c9826ece9079',
+            bucket='test_dedup_ok_flag')
+    assert dedup_lookup is None
+
+    # archive without dedup_ok:False
+    request_meta = {'captures-bucket':'test_dedup_ok_flag'}
+    headers = {'Warcprox-Meta': json.dumps(request_meta)}
+    response = requests.get(
+            url, proxies=archiving_proxies, headers=headers, verify=False)
+
+    assert response.status_code == 200
+    assert response.headers['warcprox-test-header'] == 'z!'
+    assert response.content == b'I am the warcprox test payload! bbbbbbbbbb!\n'
+
+    time.sleep(0.5)
+    while not warcprox_.warc_writer_thread.idle:
+        time.sleep(0.5)
+    time.sleep(0.5)
+
+    # check that dedup db gives us something for this
+    dedup_lookup = warcprox_.warc_writer_thread.dedup_db.lookup(
+            b'sha1:2d7f13181b90a256ce5e5ebfd6e9c9826ece9079',
+            bucket='test_dedup_ok_flag')
+    assert dedup_lookup
+
+    # inspect what's in rethinkdb more closely
+    rethink_captures = warcprox_.warc_writer_thread.dedup_db.captures_db
+    results_iter = rethink_captures.r.table(rethink_captures.table).get_all(
+                ['FV7RGGA3SCRFNTS6L275N2OJQJXM5EDZ', 'response',
+                    'test_dedup_ok_flag'], index='sha1_warc_type').order_by(
+                            'timestamp').run()
+    results = list(results_iter)
+    assert len(results) == 2
+    assert results[0].get('dedup_ok') == False
+    assert not 'dedup_ok' in results[1]
+    assert results[0]['url'] == url
+    assert results[1]['url'] == url
+    assert results[0]['warc_type'] == 'response'
+    assert results[1]['warc_type'] == 'response' # not revisit
+    assert results[0]['filename'] == results[1]['filename']
+    assert results[0]['offset'] < results[1]['offset']
 
 if __name__ == '__main__':
     pytest.main()
