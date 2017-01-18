@@ -201,17 +201,23 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 digest_algorithm=self.server.digest_algorithm)
         h.begin()
 
-        buf = h.read(8192)
-        while buf != b'':
-            # Check if should interrupt reading the response.
-            if self.server.interrupt_on_terminate and self.server.stop.is_set():
-                self.logger.debug("Interrupting stream since stop is set")
-                break
+        remote_ip = self._proxy_sock.getpeername()[0]
+
+        try:
             buf = h.read(8192)
+            while buf != b'':
+                # Check if should interrupt reading the response.
+                if self.server.interrupt_on_terminate and self.server.stop.is_set():
+                    self.logger.debug("Interrupting stream since stop is set")
+                    break
+                buf = h.read(8192)
+        except http_client.IncompleteRead, e:
+            if self.server.interrupt_on_terminate and self.server.stop.is_set():
+                self.logger.debug("Incomplete read due to interrupt in order to stop")
+            else:
+                raise e
 
         self.log_request(h.status, h.recorder.len)
-
-        remote_ip = self._proxy_sock.getpeername()[0]
 
         # Let's close off the remote end
         h.close()
@@ -244,6 +250,11 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 self.server.handlers.remove(self)
             except TypeError:
                 pass
+
+    def interrupt(self):
+        if self._proxy_sock:
+            self._proxy_sock.shutdown(socket.SHUT_RDWR)
+            self._proxy_sock.close()
 
 class RecordedUrl(object):
     def __init__(self, url, request_data, response_recorder, remote_ip, warcprox_meta=None):
@@ -305,9 +316,14 @@ class WarcProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
     def server_close(self):
         self.logger.info('WarcProxy shutting down')
         http_server.HTTPServer.server_close(self)
-        # Wait up to 45 seconds until each of the handlers is done.
+        # Wait up to 30 seconds until each of the handlers is done.
         while self.handlers:
             self.logger.debug("Waiting for %s handlers", len(self.handlers))
             handler = self.handlers.pop()
-            handler.done.wait(45)
+            if not handler.done.wait(30):
+                self.logger.debug("Since waiting didn't work, interrupting handler")
+                # Interrupt
+                handler.interrupt()
+                handler.done.wait(15)
+
         self.logger.debug("Done waiting for handlers")
