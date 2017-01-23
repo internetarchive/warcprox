@@ -66,15 +66,17 @@ class RethinkCaptures:
                 if len(self._batch) > 0:
                     result = self.r.table(self.table).insert(
                             self._batch, conflict="replace").run()
-                    if result["inserted"] + result["replaced"] != len(self._batch):
+                    if (result["inserted"] + result["replaced"]
+                            + result["unchanged"] != len(self._batch)):
                         raise Exception(
-                                "unexpected result %s saving batch of %s "
-                                "entries", result, len(self._batch))
-                    if result["replaced"] > 0:
+                                "unexpected result saving batch of %s: %s "
+                                "entries" % (len(self._batch), result))
+                    if result["replaced"] > 0 or result["unchanged"] > 0:
                         self.logger.warn(
-                                "inserted %s entries and replaced %s entries "
-                                "in big captures table", result["inserted"],
-                                result["replaced"])
+                                "inserted=%s replaced=%s unchanged=%s in big "
+                                "captures table (normally replaced=0 and "
+                                "unchanged=0)", result["inserted"],
+                                result["replaced"], result["unchanged"])
                     else:
                         self.logger.debug(
                                 "inserted %s entries to big captures table",
