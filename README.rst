@@ -43,6 +43,7 @@ Usage
                     [--certs-dir CERTS_DIR] [-d DIRECTORY] [-z] [-n PREFIX]
                     [-s SIZE] [--rollover-idle-time ROLLOVER_IDLE_TIME]
                     [-g DIGEST_ALGORITHM] [--base32]
+                    [--method-filter HTTP_METHOD]
                     [--stats-db-file STATS_DB_FILE] [-P PLAYBACK_PORT]
                     [--playback-index-db-file PLAYBACK_INDEX_DB_FILE]
                     [-j DEDUP_DB_FILE | --rethinkdb-servers RETHINKDB_SERVERS]
@@ -50,7 +51,7 @@ Usage
                     [--kafka-broker-list KAFKA_BROKER_LIST]
                     [--kafka-capture-feed-topic KAFKA_CAPTURE_FEED_TOPIC]
                     [--onion-tor-socks-proxy ONION_TOR_SOCKS_PROXY]
-                    [--version] [-v] [-q]
+                    [--version] [-v] [--trace] [-q]
 
     warcprox - WARC writing MITM HTTP/S proxy
 
@@ -79,10 +80,13 @@ Usage
                             (so that Friday's last open WARC doesn't sit there
                             all weekend waiting for more data) (default: None)
       -g DIGEST_ALGORITHM, --digest-algorithm DIGEST_ALGORITHM
-                            digest algorithm, one of sha1, sha256, md5,
-                            sha224, sha512, sha384 (default: sha1)
+                            digest algorithm, one of sha1, md5, sha512,
+                            sha224, sha384, sha256 (default: sha1)
       --base32              write digests in Base32 instead of hex (default:
                             False)
+      --method-filter HTTP_METHOD
+                            only record requests with the given http method(s)
+                            (can be used more than once) (default: None)
       --stats-db-file STATS_DB_FILE
                             persistent statistics database file; empty string
                             or /dev/null disables statistics tracking
@@ -122,8 +126,8 @@ Usage
                             to .onion sites (default: None)
       --version             show program's version number and exit
       -v, --verbose
+      --trace
       -q, --quiet
-
 
 License
 ~~~~~~~
@@ -132,7 +136,7 @@ Warcprox is a derivative work of pymiproxy, which is GPL. Thus warcprox is also
 GPL.
 
 * Copyright (C) 2012 Cygnos Corporation
-* Copyright (C) 2013-2016 Internet Archive
+* Copyright (C) 2013-2017 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
