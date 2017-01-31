@@ -51,7 +51,7 @@ except:
 
 setuptools.setup(
         name='warcprox',
-        version='2.0b3.dev45',
+        version='2.0',
         description='WARC writing MITM HTTP/S proxy',
         url='https://github.com/internetarchive/warcprox',
         author='Noah Levitt',
@@ -79,6 +79,7 @@ setuptools.setup(
             'Programming Language :: Python :: 2.7',
             'Programming Language :: Python :: 3.4',
             'Programming Language :: Python :: 3.5',
+            'Programming Language :: Python :: 3.6',
             'Topic :: Internet :: Proxy Servers',
             'Topic :: Internet :: WWW/HTTP',
             'Topic :: Software Development :: Libraries :: Python Modules',
