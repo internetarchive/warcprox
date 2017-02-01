@@ -64,8 +64,12 @@ class WarcWriterThread(threading.Thread):
         else:
             self._run()
 
+    _ALWAYS_ACCEPT = {'WARCPROX_WRITE_RECORD'}
     def _filter_accepts(self, recorded_url):
-        return not self.method_filter or recorded_url.method.upper() in self.method_filter
+        if not self.method_filter:
+            return True
+        meth = recorded_url.method.upper()
+        return meth in self._ALWAYS_ACCEPT or meth in self.method_filter
 
     def _run(self):
         while not self.stop.is_set():

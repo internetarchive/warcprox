@@ -182,7 +182,13 @@ class PlaybackProxyHandler(MitmProxyHandler):
                 return self._send_headers_and_refd_payload(record.content[1], refers_to, refers_to_target_uri, refers_to_date)
 
             else:
-                raise Exception('unknown warc record type {}'.format(warc_type))
+                # send it back raw, whatever it is
+                headers_buf = bytearray()
+                headers_buf.extend(b'HTTP/1.0 200 OK\r\n')
+                headers_buf.extend(b'content-length: ' + record.get_header(b'content-length') + b'\r\n')
+                headers_buf.extend(b'content-type: ' + record.get_header(b'content-type') + b'\r\n')
+                headers_buf.extend(b'\r\n')
+                return self._send_response(headers_buf, record.content_file)
 
         finally:
             fh.close()
