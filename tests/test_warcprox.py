@@ -60,21 +60,21 @@ import certauth.certauth
 
 import warcprox
 
-import http.client
-orig_send = http.client.HTTPConnection.send
-def _send(self, data):
-    if isinstance(data, bytes):
-        logging.info('sending data (bytes): ')
-        logging.root.handlers[0].stream.buffer.write(data)
-        logging.root.handlers[0].stream.buffer.write(b'\n')
-    elif isinstance(data, str):
-        logging.info('sending data (str): ')
-        logging.root.handlers[0].stream.write(data)
-        logging.root.handlers[0].stream.write('\n')
-    else:
-        logging.info('sending data from %s', repr(data))
-    orig_send(self, data)
-### uncomment this to see raw requests going over the wire
+### uncomment this to block see raw requests going over the wire
+# import http.client
+# orig_send = http.client.HTTPConnection.send
+# def _send(self, data):
+#     if isinstance(data, bytes):
+#         logging.info('sending data (bytes): ')
+#         logging.root.handlers[0].stream.buffer.write(data)
+#         logging.root.handlers[0].stream.buffer.write(b'\n')
+#     elif isinstance(data, str):
+#         logging.info('sending data (str): ')
+#         logging.root.handlers[0].stream.write(data)
+#         logging.root.handlers[0].stream.write('\n')
+#     else:
+#         logging.info('sending data from %s', repr(data))
+#     orig_send(self, data)
 # http.client.HTTPConnection.send = _send
 
 logging.basicConfig(
