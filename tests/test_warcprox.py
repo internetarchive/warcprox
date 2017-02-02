@@ -3,7 +3,7 @@
 '''
 tests/test_warcprox.py - automated tests for warcprox
 
-Copyright (C) 2013-2016 Internet Archive
+Copyright (C) 2013-2017 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -44,7 +44,6 @@ import traceback
 import signal
 from collections import Counter
 import socket
-import urllib
 
 try:
     import http.server as http_server
@@ -60,22 +59,26 @@ import certauth.certauth
 
 import warcprox
 
+try:
+    import http.client as http_client
+except ImportError:
+    import httplib as http_client
+orig_send = http_client.HTTPConnection.send
+def _send(self, data):
+    if isinstance(data, bytes) and hasattr(
+            logging.root.handlers[0].stream, 'buffer'):
+        logging.info('sending data (bytes): ')
+        logging.root.handlers[0].stream.buffer.write(data)
+        logging.root.handlers[0].stream.buffer.write(b'\n')
+    elif isinstance(data, str):
+        logging.info('sending data (str): ')
+        logging.root.handlers[0].stream.write(data)
+        logging.root.handlers[0].stream.write('\n')
+    else:
+        logging.info('sending data from %s', repr(data))
+    orig_send(self, data)
 ### uncomment this to block see raw requests going over the wire
-# import http.client
-# orig_send = http.client.HTTPConnection.send
-# def _send(self, data):
-#     if isinstance(data, bytes):
-#         logging.info('sending data (bytes): ')
-#         logging.root.handlers[0].stream.buffer.write(data)
-#         logging.root.handlers[0].stream.buffer.write(b'\n')
-#     elif isinstance(data, str):
-#         logging.info('sending data (str): ')
-#         logging.root.handlers[0].stream.write(data)
-#         logging.root.handlers[0].stream.write('\n')
-#     else:
-#         logging.info('sending data from %s', repr(data))
-#     orig_send(self, data)
-# http.client.HTTPConnection.send = _send
+# http_client.HTTPConnection.send = _send
 
 logging.basicConfig(
         stream=sys.stdout, level=logging.INFO, # level=warcprox.TRACE,
@@ -1171,8 +1174,7 @@ def test_missing_content_length(archiving_proxies, http_daemon, https_daemon):
     assert not 'content-length' in response.headers
 
 def test_method_filter(
-        https_daemon, http_daemon, archiving_proxies, playback_proxies,
-        warcprox_):
+        https_daemon, http_daemon, archiving_proxies, playback_proxies):
     # we've configured warcprox with method_filters=['GET','POST'] so HEAD
     # requests should not be archived
 
@@ -1188,23 +1190,17 @@ def test_method_filter(
     assert response.content == b'404 Not in Archive\n'
 
     # WARCPROX_WRITE_RECORD is exempt from method filter
+    url = 'http://fakeurl/'
+    payload = b'I am the WARCPROX_WRITE_RECORD payload'
     headers = {
         'Content-Type': 'text/plain',
         'WARC-Type': 'metadata',
         'Host': 'N/A'
     }
-    url = 'http://fakeurl/'
-    payload = b'I am the WARCPROX_WRITE_RECORD payload'
-    request = urllib.request.Request(
-            url, method="WARCPROX_WRITE_RECORD", headers=headers, data=payload)
-
-    # XXX setting request.type="http" is a hack to stop urllib from trying
-    # to tunnel if url is https
-    request.type = 'http'
-    request.set_proxy('localhost:%s' % warcprox_.proxy.server_port, 'http')
-
-    with urllib.request.urlopen(request) as response:
-        assert response.getcode() == 204
+    response = requests.request(
+            method='WARCPROX_WRITE_RECORD', url=url, data=payload,
+            headers=headers, proxies=archiving_proxies)
+    assert response.status_code == 204
 
     response = _poll_playback_until(
             playback_proxies, url, status=200, timeout_sec=10)
