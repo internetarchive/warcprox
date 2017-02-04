@@ -139,7 +139,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
             _limit_key = '%s/%s/%s' % (bucket0, bucket1, bucket2)
 
         value = self.server.stats_db.value(bucket0, bucket1, bucket2)
-        if value and value >= limit_value:
+        if value and limit_value and limit_value > 0 and value >= limit_value:
             body = ("request rejected by warcprox: reached %s %s=%s\n" % (
                         "soft limit" if soft else "limit", _limit_key,
                         limit_value)).encode("utf-8")
