@@ -343,8 +343,10 @@ class RecordedUrl:
         self.host = host
         self.duration = duration
 
-
-class SingleThreadedWarcProxy(http_server.HTTPServer):
+# inherit from object so that multiple inheritance from this class works
+# properly in python 2
+# http://stackoverflow.com/questions/1713038/super-fails-with-error-typeerror-argument-1-must-be-type-not-classobj#18392639
+class SingleThreadedWarcProxy(http_server.HTTPServer, object):
     logger = logging.getLogger("warcprox.warcproxy.WarcProxy")
 
     def __init__(
