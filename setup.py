@@ -3,12 +3,13 @@ import codecs
 
 setuptools.setup(
     name='rethinkstuff',
-    version='0.1.7',
+    version='0.2.0.dev57',
     packages=['rethinkstuff'],
     classifiers=[
         'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.6',
     ],
     install_requires=['rethinkdb'],
     url='https://github.com/nlevitt/rethinkstuff',

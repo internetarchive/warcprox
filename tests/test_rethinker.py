@@ -1,7 +1,7 @@
 '''
 tests_rethinker.py - unit tests for rethinkstuff
 
-Copyright (C) 2015-2016 Internet Archive
+Copyright (C) 2015-2017 Internet Archive
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -275,3 +275,89 @@ def test_utcnow():
 
     ## XXX what else can we test without jumping through hoops?
 
+class SomeDoc(rethinkstuff.Document):
+    pass
+
+def test_orm(r):
+    d = SomeDoc(rethinker=r, d={
+        'a': 'b',
+        'c': {'d': 'e'},
+        'f': ['g', 'h'],
+        'i': ['j', {'k': 'l'}]})
+
+    d.table_create()
+    d.insert()
+
+    assert d._updates == {}
+    d.m = 'n'
+    assert d._updates == {'m': 'n'}
+    d['c']['o'] = 'p'
+    assert d._updates == {'m': 'n', 'c': {'d': 'e', 'o': 'p'}}
+    d.f[0] = 'q'
+    assert d._updates == {'m': 'n', 'c': {'d': 'e', 'o': 'p'}, 'f': ['q', 'h']}
+    d['i'][1]['k'] = 's'
+    assert d._updates == {
+            'm': 'n',
+            'c': {'d': 'e', 'o': 'p'},
+            'f': ['q', 'h'],
+            'i': ['j', {'k': 's'}]}
+
+    del d['i']
+    assert d._deletes == {'i'}
+    assert d._updates == {'m': 'n', 'c': {'d': 'e', 'o': 'p'}, 'f': ['q', 'h']}
+
+    d.i = 't'
+    assert d._deletes == set()
+    assert d._updates == {
+            'm': 'n', 'c': {'d': 'e', 'o': 'p'}, 'f': ['q', 'h'], 'i': 't'}
+
+    d.f.append(['sublist'])
+    assert d._updates == {
+            'm': 'n', 'c': {'d': 'e', 'o': 'p'},
+            'f': ['q', 'h', ['sublist']], 'i': 't'}
+
+    ### list.clear not in python 2.7
+    # d.f[2].clear()
+    # assert d._updates == {
+    #         'm': 'n', 'c': {'d': 'e', 'o': 'p'},
+    #         'f': ['q', 'h', []], 'i': 't'}
+
+    result = d.f.pop()
+    assert result == ['sublist']
+    assert d._updates == {
+            'm': 'n', 'c': {'d': 'e', 'o': 'p'},
+            'f': ['q', 'h'], 'i': 't'}
+
+    del d.f[0]
+    assert d._updates == {
+            'm': 'n', 'c': {'d': 'e', 'o': 'p'},
+            'f': ['h'], 'i': 't'}
+
+    d.f.insert(0, 'u')
+    assert d._updates == {
+            'm': 'n', 'c': {'d': 'e', 'o': 'p'},
+            'f': ['u', 'h'], 'i': 't'}
+
+    d.f.extend(('v', {'w': 'x'}))
+    assert d._updates == {
+            'm': 'n', 'c': {'d': 'e', 'o': 'p'},
+            'f': ['u', 'h', 'v', {'w': 'x'}], 'i': 't'}
+
+    # check that stuff added by extend() is watched properly
+    d.f[3]['y'] = 'z'
+    assert d._updates == {
+            'm': 'n', 'c': {'d': 'e', 'o': 'p'},
+            'f': ['u', 'h', 'v', {'w': 'x', 'y': 'z'}], 'i': 't'}
+
+    d.f.remove('h')
+    assert d._updates == {
+            'm': 'n', 'c': {'d': 'e', 'o': 'p'},
+            'f': ['u', 'v', {'w': 'x', 'y': 'z'}], 'i': 't'}
+
+    expected = dict(d)
+    d.update()
+    assert d._updates == {}
+    assert d._deletes == set()
+
+    d.refresh()
+    assert d == expected
