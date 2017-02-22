@@ -6,7 +6,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 docker build -t internetarchive/rethinkdb $script_dir
 
-for python in python2.7 python3.4
+for python in python2.7 python3
 do
     docker run --rm -it --volume="$script_dir/..:/rethinkstuff" internetarchive/rethinkdb /sbin/my_init -- \
         bash -x -c "cd /tmp && git clone /rethinkstuff \
