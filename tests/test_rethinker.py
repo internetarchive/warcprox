@@ -43,10 +43,14 @@ class RethinkerForTesting(rethinkstuff.Rethinker):
 @pytest.fixture(scope="module")
 def r():
     r = RethinkerForTesting()
-    result = r.db_create("my_db").run()
+    try:
+        r.db_drop("rethinkstuff_test_db").run()
+    except rethinkdb.errors.ReqlOpFailedError:
+        pass
+    result = r.db_create("rethinkstuff_test_db").run()
     assert not r.last_conn.is_open()
     assert result["dbs_created"] == 1
-    return RethinkerForTesting(db="my_db")
+    return RethinkerForTesting(db="rethinkstuff_test_db")
 
 @pytest.fixture(scope="module")
 def my_table(r):
@@ -275,18 +279,24 @@ def test_utcnow():
 
     ## XXX what else can we test without jumping through hoops?
 
-class SomeDoc(rethinkstuff.Document):
-    pass
-
 def test_orm(r):
+    class SomeDoc(rethinkstuff.Document):
+        table = 'some_doc'
+
+    SomeDoc.table_create(r)
+    with pytest.raises(Exception):
+        SomeDoc.table_create(r)
+
+    # test that overriding Document.table works
+    assert 'some_doc' in r.table_list().run()
+    assert not 'somedoc' in r.table_list().run()
+
     d = SomeDoc(rethinker=r, d={
         'a': 'b',
         'c': {'d': 'e'},
         'f': ['g', 'h'],
         'i': ['j', {'k': 'l'}]})
-
-    d.table_create()
-    d.insert()
+    d.save()
 
     assert d._updates == {}
     d.m = 'n'
@@ -355,9 +365,66 @@ def test_orm(r):
             'f': ['u', 'v', {'w': 'x', 'y': 'z'}], 'i': 't'}
 
     expected = dict(d)
-    d.update()
+    d.save()
     assert d._updates == {}
     assert d._deletes == set()
 
-    d.refresh()
-    assert d == expected
+    d_copy = SomeDoc.get(r, d.id)
+    assert d == d_copy
+
+    d['zuh'] = 'toot'
+    d.save()
+    assert d != d_copy
+    d_copy.refresh()
+    assert d == d_copy
+
+def test_orm_pk(r):
+    class NonstandardPrimaryKey(rethinkstuff.Document):
+        @classmethod
+        def table_create(cls, rethinker):
+            rethinker.table_create(cls.table, primary_key='not_id').run()
+
+    with pytest.raises(Exception):
+        NonstandardPrimaryKey.get(r, 'no_such_thing')
+
+    NonstandardPrimaryKey.table_create(r)
+
+    # new empty doc
+    f = NonstandardPrimaryKey(r, {})
+    f.save()
+    assert f.pk_value
+    assert 'not_id' in f
+    assert f.not_id == f.pk_value
+    assert len(f.keys()) == 1
+
+    with pytest.raises(KeyError):
+        NonstandardPrimaryKey.get(r, 'no_such_thing')
+
+    # new doc with (only) primary key
+    d = NonstandardPrimaryKey(r, {'not_id': 1})
+    assert d.not_id == 1
+    assert d.pk_value == 1
+    d.save()
+
+    d_copy = NonstandardPrimaryKey.get(r, 1)
+    assert d == d_copy
+
+    # new doc with something in it
+    e = NonstandardPrimaryKey(r, {'some_field': 'something'})
+    with pytest.raises(KeyError):
+        e.not_id
+    with pytest.raises(KeyError):
+        e['not_id']
+    e.save()
+    assert e.not_id
+
+    e_copy = NonstandardPrimaryKey.get(r, e.not_id)
+    assert e == e_copy
+    e_copy['blah'] = 'toot'
+    e_copy.save()
+
+    e.refresh()
+    assert e['blah'] == 'toot'
+    assert e == e_copy
+
+

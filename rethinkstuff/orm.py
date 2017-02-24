@@ -18,6 +18,7 @@ limitations under the License.
 
 import rethinkdb as r
 import logging
+import rethinkstuff
 
 class WatchedDict(dict):
     def __init__(self, d, callback, field):
@@ -119,6 +120,13 @@ def watch(obj, callback, field):
     else:
         return obj
 
+
+class classproperty(object):
+    def __init__(self, fget):
+        self.fget = fget
+    def __get__(self, owner_self, owner_cls):
+        return self.fget(owner_cls)
+
 class Document(dict, object):
     '''
     Base class for ORM.
@@ -134,16 +142,47 @@ class Document(dict, object):
     field. For example, if your document starts as {'a': {'b': 'c'}}, then
     you run d['a']['x'] = 'y', then the update will replace the whole 'a'
     field. Nested field updates get too complicated any other way.
-
-    The primary key must be `id`, the rethinkdb default. (XXX we could find out
-    what the primary key is from the "table_config" system table.)
     '''
+
+    @classproperty
+    def table(cls):
+        '''
+        Returns default table name, which is the class name, lowercased.
+
+        Subclasses can override this default more simply:
+
+            class Something(rethinkstuff.Document):
+                table = 'my_table_name'
+        '''
+        return cls.__name__.lower()
+
+    @classmethod
+    def get(cls, rethinker, pk):
+        '''
+        Retrieve an instance from the database.
+        '''
+        doc = cls(rethinker)
+        doc[doc.pk_field] = pk
+        doc.refresh()
+        return doc
+
+    @classmethod
+    def table_create(cls, rethinker):
+        '''
+        Creates the table.
+
+        Can be run on an instance of the class: `my_doc.table_create
+        Subclasses may want to override this method to do more things, such as
+        creating indexes.
+        '''
+        rethinker.table_create(cls.table).run()
+
     def __init__(self, rethinker, d={}):
         dict.__setattr__(self, '_r', rethinker)
-        for k in d:
-            dict.__setitem__(
-                    self, k, watch(d[k], callback=self._updated, field=k))
+        dict.__setattr__(self, '_pk', None)
         self._clear_updates()
+        for k in d:
+            self[k] = watch(d[k], callback=self._updated, field=k)
 
     def _clear_updates(self):
         dict.__setattr__(self, '_updates', {})
@@ -163,7 +202,7 @@ class Document(dict, object):
         if key in self._updates:
             del self._updates[key]
 
-    # XXX do we need the other stuff like in WatchedDict?
+    # XXX probably need the other stuff like in WatchedDict
 
     def _updated(self, field):
         # callback for all updates
@@ -172,47 +211,84 @@ class Document(dict, object):
             self._deletes.remove(field)
 
     @property
-    def table(self):
+    def pk_field(self):
         '''
-        Name of the rethinkdb table.
-
-        Defaults to the name of the class, lowercased. Can be overridden.
+        Name of the primary key field as retrieved from rethinkdb table
+        metadata, 'id' by default. Should not be overridden. Override
+        `table_create` if you want to use a nonstandard field as the primary
+        key.
         '''
-        return self.__class__.__name__.lower()
+        if not self._pk:
+            try:
+                pk = self._r.db('rethinkdb').table('table_config').filter({
+                    'db': self._r.dbname, 'name': self.table}).get_field(
+                            'primary_key')[0].run()
+                dict.__setattr__(self, '_pk', pk)
+            except Exception as e:
+                raise Exception(
+                        'problem determining primary key for table %s.%s: %s',
+                        self._r.dbname, self.table, e)
+        return self._pk
 
-    def table_create(self):
+    @property
+    def pk_value(self):
         '''
-        Creates the table.
-
-        Subclasses may want to override this method to do more things, such as
-        creating indexes.
+        Value of primary key field.
         '''
-        self._r.table_create(self.table).run()
+        return getattr(self, self.pk_field)
 
-    def insert(self):
-        result = self._r.table(self.table).insert(self).run()
-        if 'generated_keys' in result:
-            dict.__setitem__(self, 'id', result['generated_keys'][0])
-        self._clear_updates()
+    def save(self):
+        '''
+        Saves 
+        '''
+        should_insert = False
+        try:
+            self.pk_value  # raise KeyError if unset
+            if self._updates:
+                # r.literal() to replace, not merge with, nested fields
+                updates = {field: r.literal(self._updates[field])
+                           for field in self._updates}
+                query = self._r.table(self.table).get(
+                        self.pk_value).update(updates)
+                result = query.run()
+                if result['skipped']:  # primary key not found
+                    should_insert = True
+                elif result['errors'] or result['deleted']:
+                    raise Exception(
+                            'unexpected result %s from rethinkdb query %s' % (
+                                result, query))
+            if not should_insert and self._deletes:
+                self._r.table(self.table).replace(
+                        r.row.without(self._deletes)).run()
+                if result['errors']:   # primary key not found
+                    should_insert = True
+                elif not result['replaced'] == 0:
+                    raise Exception(
+                            'unexpected result %s from rethinkdb query %s' % (
+                                result, query))
+        except KeyError:
+            should_insert = True
 
-    def update(self):
-        # hmm, masks dict.update()
-        if self._updates:
-            # r.literal() to replace, not merge with, nested fields
-            updates = {
-                    field: r.literal(
-                        self._updates[field]) for field in self._updates}
-            self._r.table(self.table).get(self.id).update(updates).run()
-        if self._deletes:
-            self._r.table(self.table).replace(
-                    r.row.without(self._deletes)).run()
+        if should_insert:
+            query = self._r.table(self.table).insert(self)
+            result = query.run()
+            if result['inserted'] != 1:
+                    raise Exception(
+                            'unexpected result %s from rethinkdb query %s' % (
+                                result, query))
+            if 'generated_keys' in result:
+                dict.__setitem__(
+                        self, self.pk_field, result['generated_keys'][0])
+
         self._clear_updates()
 
     def refresh(self):
         '''
         Refresh from the database.
         '''
-        d = self._r.table(self.table).get(self.id).run()
+        d = self._r.table(self.table).get(self.pk_value).run()
+        if d is None:
+            raise KeyError
         for k in d:
             dict.__setitem__(
                     self, k, watch(d[k], callback=self._updated, field=k))
