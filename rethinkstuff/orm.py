@@ -157,7 +157,7 @@ class Document(dict, object):
         return cls.__name__.lower()
 
     @classmethod
-    def get(cls, rethinker, pk):
+    def load(cls, rethinker, pk):
         '''
         Retrieve an instance from the database.
         '''

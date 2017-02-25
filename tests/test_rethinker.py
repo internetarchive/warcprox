@@ -369,7 +369,7 @@ def test_orm(r):
     assert d._updates == {}
     assert d._deletes == set()
 
-    d_copy = SomeDoc.get(r, d.id)
+    d_copy = SomeDoc.load(r, d.id)
     assert d == d_copy
 
     d['zuh'] = 'toot'
@@ -385,7 +385,7 @@ def test_orm_pk(r):
             rethinker.table_create(cls.table, primary_key='not_id').run()
 
     with pytest.raises(Exception):
-        NonstandardPrimaryKey.get(r, 'no_such_thing')
+        NonstandardPrimaryKey.load(r, 'no_such_thing')
 
     NonstandardPrimaryKey.table_create(r)
 
@@ -398,7 +398,7 @@ def test_orm_pk(r):
     assert len(f.keys()) == 1
 
     with pytest.raises(KeyError):
-        NonstandardPrimaryKey.get(r, 'no_such_thing')
+        NonstandardPrimaryKey.load(r, 'no_such_thing')
 
     # new doc with (only) primary key
     d = NonstandardPrimaryKey(r, {'not_id': 1})
@@ -406,7 +406,7 @@ def test_orm_pk(r):
     assert d.pk_value == 1
     d.save()
 
-    d_copy = NonstandardPrimaryKey.get(r, 1)
+    d_copy = NonstandardPrimaryKey.load(r, 1)
     assert d == d_copy
 
     # new doc with something in it
@@ -418,7 +418,7 @@ def test_orm_pk(r):
     e.save()
     assert e.not_id
 
-    e_copy = NonstandardPrimaryKey.get(r, e.not_id)
+    e_copy = NonstandardPrimaryKey.load(r, e.not_id)
     assert e == e_copy
     e_copy['blah'] = 'toot'
     e_copy.save()
