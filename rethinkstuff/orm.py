@@ -178,20 +178,24 @@ class Document(dict, object):
         rethinker.table_create(cls.table).run()
 
     def __init__(self, rethinker, d={}):
-        dict.__setattr__(self, '_r', rethinker)
-        dict.__setattr__(self, '_pk', None)
+        self._r = rethinker
+        self._pk = None
         self._clear_updates()
         for k in d:
             self[k] = watch(d[k], callback=self._updated, field=k)
 
     def _clear_updates(self):
-        dict.__setattr__(self, '_updates', {})
-        dict.__setattr__(self, '_deletes', set())
+        self._updates = {}
+        self._deletes = set()
 
     def __setitem__(self, key, value):
-        dict.__setitem__(
-                self, key, watch(value, callback=self._updated, field=key))
-        self._updated(key)
+        # keys starting with underscore are not part of the document
+        if key[:1] == '_':
+            dict.__setattr__(self, key, value)
+        else:
+            dict.__setitem__(
+                    self, key, watch(value, callback=self._updated, field=key))
+            self._updated(key)
 
     __setattr__ = __setitem__
     __getattr__ = dict.__getitem__
@@ -223,7 +227,7 @@ class Document(dict, object):
                 pk = self._r.db('rethinkdb').table('table_config').filter({
                     'db': self._r.dbname, 'name': self.table}).get_field(
                             'primary_key')[0].run()
-                dict.__setattr__(self, '_pk', pk)
+                self._pk = pk
             except Exception as e:
                 raise Exception(
                         'problem determining primary key for table %s.%s: %s',
@@ -292,5 +296,4 @@ class Document(dict, object):
         for k in d:
             dict.__setitem__(
                     self, k, watch(d[k], callback=self._updated, field=k))
-
 

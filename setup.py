@@ -3,7 +3,7 @@ import codecs
 
 setuptools.setup(
     name='rethinkstuff',
-    version='0.2.0.dev60',
+    version='0.2.0.dev61',
     packages=['rethinkstuff'],
     classifiers=[
         'Programming Language :: Python :: 2.7',
@@ -15,7 +15,7 @@ setuptools.setup(
     url='https://github.com/nlevitt/rethinkstuff',
     author='Noah Levitt',
     author_email='nlevitt@archive.org',
-    description='Rudimentary rethinkdb python library with some smarts, perhaps some dumbs',
+    description='rethinkdb python library',
     long_description=codecs.open(
         'README.rst', mode='r', encoding='utf-8').read(),
 )
