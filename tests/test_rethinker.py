@@ -412,9 +412,9 @@ def test_orm_pk(r):
     # new doc with something in it
     e = NonstandardPrimaryKey(r, {'some_field': 'something'})
     with pytest.raises(KeyError):
-        e.not_id
-    with pytest.raises(KeyError):
         e['not_id']
+    assert e.not_id is None
+    assert e.get('not_id') is None
     e.save()
     assert e.not_id
 

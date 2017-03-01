@@ -3,7 +3,7 @@ import codecs
 
 setuptools.setup(
     name='rethinkstuff',
-    version='0.2.0.dev62',
+    version='0.2.0.dev63',
     packages=['rethinkstuff'],
     classifiers=[
         'Programming Language :: Python :: 2.7',

@@ -20,7 +20,7 @@ import rethinkdb as r
 import logging
 import rethinkstuff
 
-class WatchedDict(dict):
+class WatchedDict(dict, object):
     def __init__(self, d, callback, field):
         self.callback = callback
         self.field = field
@@ -61,7 +61,7 @@ class WatchedDict(dict):
         # looks a little tricky
         raise Exception('not implemented')
 
-class WatchedList(list):
+class WatchedList(list, object):
     def __init__(self, l, callback, field):
         self.callback = callback
         self.field = field
@@ -120,7 +120,6 @@ def watch(obj, callback, field):
     else:
         return obj
 
-
 class classproperty(object):
     def __init__(self, fget):
         self.fget = fget
@@ -129,10 +128,9 @@ class classproperty(object):
 
 class Document(dict, object):
     '''
-    Base class for ORM.
-
-    You should subclass this class for each of your rethinkdb tables. You can
-    add custom functionality in your subclass if appropriate.
+    Base class for ORM. You should subclass this class for each of your
+    rethinkdb tables. You can add custom functionality in your subclass if
+    appropriate.
 
     This class keeps track of changes made to the object and any nested fields.
     After you have made some changes, call update() to persist them to the
@@ -140,8 +138,21 @@ class Document(dict, object):
 
     Changes in nested fields result in updates to their first-level ancestor
     field. For example, if your document starts as {'a': {'b': 'c'}}, then
-    you run d['a']['x'] = 'y', then the update will replace the whole 'a'
-    field. Nested field updates get too complicated any other way.
+    you run doc['a']['x'] = 'y', then the update will replace the whole 'a'
+    field. (Nested field updates get too complicated any other way.)
+
+    This class subclasses dict. Thus attributes can be accessed with
+    `doc['foo']` or `doc.get('foo')`, depending on what you want to happen if
+    the attribute is missing. In addition, this class overrides `__getattr__`
+    to point to `dict.get`, so that first level attributes can be accessed as
+    if they were member variables, e.g. `doc.foo`. If there is no attribute
+    foo, `doc.foo` returns None. (XXX is this definitely what we want?)
+
+    The default table name is the class name, lowercased. Subclasses can
+    specify different table name like so:
+
+        class Something(rethinkstuff.Document):
+            table = 'my_table_name'
     '''
 
     @classproperty
@@ -149,7 +160,7 @@ class Document(dict, object):
         '''
         Returns default table name, which is the class name, lowercased.
 
-        Subclasses can override this default more simply:
+        Subclasses can override the table name like so:
 
             class Something(rethinkstuff.Document):
                 table = 'my_table_name'
@@ -159,7 +170,7 @@ class Document(dict, object):
     @classmethod
     def load(cls, rethinker, pk):
         '''
-        Retrieve an instance from the database.
+        Retrieves a document from the database, by primary key.
         '''
         doc = cls(rethinker)
         doc[doc.pk_field] = pk
@@ -169,11 +180,8 @@ class Document(dict, object):
     @classmethod
     def table_create(cls, rethinker):
         '''
-        Creates the table.
-
-        Can be run on an instance of the class: `my_doc.table_create
-        Subclasses may want to override this method to do more things, such as
-        creating indexes.
+        Creates the table. Subclasses may want to override this method to do
+        more things, such as creating secondary indexes.
         '''
         rethinker.table_create(cls.table).run()
 
@@ -198,7 +206,7 @@ class Document(dict, object):
             self._updated(key)
 
     __setattr__ = __setitem__
-    __getattr__ = dict.__getitem__
+    __getattr__ = dict.get
 
     def __delitem__(self, key):
         dict.__delitem__(self, key)
@@ -243,11 +251,18 @@ class Document(dict, object):
 
     def save(self):
         '''
-        Saves 
+        Persist changes to rethinkdb. Updates only the fields that have
+        changed. Performs insert rather than update if the document has no
+        primary key or if the primary key is absent from the database.
+
+        If there have been any changes to nested fields, updates the first
+        level attribute. For example, if foo['bar']['baz']['quux'] has changed,
+        all of foo['bar'] is replaced, but foo['something_else'] is not
+        touched.
         '''
         should_insert = False
         try:
-            self.pk_value  # raise KeyError if unset
+            self[self.pk_field]  # raises KeyError if missing
             if self._updates:
                 # r.literal() to replace, not merge with, nested fields
                 updates = {field: r.literal(self._updates[field])
@@ -288,7 +303,7 @@ class Document(dict, object):
 
     def refresh(self):
         '''
-        Refresh from the database.
+        Refresh the document from the database.
         '''
         d = self._r.table(self.table).get(self.pk_value).run()
         if d is None:
