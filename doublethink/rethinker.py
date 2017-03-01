@@ -1,5 +1,5 @@
 '''
-rethinkstuff/rethinker.py - rethinkdb connection-manager
+doublethink/rethinker.py - rethinkdb connection-manager
 
 Copyright (C) 2015-2017 Internet Archive
 
@@ -23,7 +23,7 @@ import time
 import types
 
 class RethinkerWrapper(object):
-    logger = logging.getLogger('rethinkstuff.RethinkerWrapper')
+    logger = logging.getLogger('doublethink.RethinkerWrapper')
     def __init__(self, rethinker, wrapped):
         self.rethinker = rethinker
         self.wrapped = wrapped
@@ -75,7 +75,7 @@ class Rethinker(object):
     >>> r = Rethinker(db='my_db')
     >>> doc = r.table('my_table').get(1).run()
     '''
-    logger = logging.getLogger('rethinkstuff.Rethinker')
+    logger = logging.getLogger('doublethink.Rethinker')
 
     def __init__(self, servers=['localhost'], db=None):
         if isinstance(servers, str):

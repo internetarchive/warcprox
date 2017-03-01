@@ -1,5 +1,5 @@
 '''
-rethinkstuff/services.py - rethinkdb service registry
+doublethink/services.py - rethinkdb service registry
 
 Copyright (C) 2015-2017 Internet Archive
 
@@ -37,7 +37,7 @@ class ServiceRegistry(object):
     }
     '''
 
-    logger = logging.getLogger('rethinkstuff.ServiceRegistry')
+    logger = logging.getLogger('doublethink.ServiceRegistry')
 
     def __init__(self, rethinker):
         self.r = rethinker

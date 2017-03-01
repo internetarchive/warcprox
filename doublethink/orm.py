@@ -1,5 +1,5 @@
 '''
-rethinkstuff/orm.py - rethinkdb ORM
+doublethink/orm.py - rethinkdb ORM
 
 Copyright (C) 2017 Internet Archive
 
@@ -18,7 +18,7 @@ limitations under the License.
 
 import rethinkdb as r
 import logging
-import rethinkstuff
+import doublethink
 
 class WatchedDict(dict, object):
     def __init__(self, d, callback, field):
@@ -151,7 +151,7 @@ class Document(dict, object):
     The default table name is the class name, lowercased. Subclasses can
     specify different table name like so:
 
-        class Something(rethinkstuff.Document):
+        class Something(doublethink.Document):
             table = 'my_table_name'
     '''
 
@@ -162,7 +162,7 @@ class Document(dict, object):
 
         Subclasses can override the table name like so:
 
-            class Something(rethinkstuff.Document):
+            class Something(doublethink.Document):
                 table = 'my_table_name'
         '''
         return cls.__name__.lower()

@@ -1,7 +1,7 @@
-.. image:: https://travis-ci.org/nlevitt/rethinkstuff.svg?branch=master
-    :target: https://travis-ci.org/nlevitt/rethinkstuff
+.. image:: https://travis-ci.org/nlevitt/doublethink.svg?branch=master
+    :target: https://travis-ci.org/nlevitt/doublethink
 
-rethinkstuff
+doublethink
 ============
 
 RethinkDB python library. Provides connection manager and ORM framework
@@ -24,8 +24,8 @@ Usage Example
 
 ::
 
-    import rethinkstuff
-    r = rethinkstuff.Rethinker(['db0.foo.com', 'db0.foo.com:38015', 'db1.foo.com'], 'my_db')
+    import doublethink
+    r = doublethink.Rethinker(['db0.foo.com', 'db0.foo.com:38015', 'db1.foo.com'], 'my_db')
     r.table('mytable').insert({'foo':'bar','baz':2}).run()
     for result in r.table('mytable'):
         print("result={}".format(result))
@@ -40,11 +40,11 @@ Usage Example
 
 ::
 
-    import rethinkstuff
+    import doublethink
 
-    r = rethinkstuff.Rethinker(['db0.foo.com', 'db0.foo.com:38015', 'db1.foo.com'], 'my_db')
+    r = doublethink.Rethinker(['db0.foo.com', 'db0.foo.com:38015', 'db1.foo.com'], 'my_db')
 
-    class MyTable(rethinkstuff.Document):
+    class MyTable(doublethink.Document):
         pass
     MyTable.table_create()
 

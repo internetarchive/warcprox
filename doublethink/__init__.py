@@ -1,5 +1,5 @@
 '''
-rethinkstuff/__init__.py - rethinkdb connection-manager-ish thing and service
+doublethink/__init__.py - rethinkdb connection-manager-ish thing and service
 registry thing
 
 Copyright (C) 2015-2017 Internet Archive
@@ -20,9 +20,9 @@ limitations under the License.
 import rethinkdb
 import datetime
 
-from rethinkstuff.orm import Document
-from rethinkstuff.rethinker import Rethinker
-from rethinkstuff.services import ServiceRegistry
+from doublethink.orm import Document
+from doublethink.rethinker import Rethinker
+from doublethink.services import ServiceRegistry
 
 __all__ = ['Document', 'Rethinker', 'ServiceRegistry', 'UTC', 'utcnow']
 

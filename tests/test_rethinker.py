@@ -1,5 +1,5 @@
 '''
-tests_rethinker.py - unit tests for rethinkstuff
+tests_rethinker.py - unit tests for doublethink
 
 Copyright (C) 2015-2017 Internet Archive
 
@@ -16,7 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 '''
 
-import rethinkstuff
+import doublethink
 import logging
 import sys
 import types
@@ -31,7 +31,7 @@ import datetime
 logging.basicConfig(stream=sys.stderr, level=logging.INFO,
         format="%(asctime)s %(process)d %(levelname)s %(threadName)s %(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s")
 
-class RethinkerForTesting(rethinkstuff.Rethinker):
+class RethinkerForTesting(doublethink.Rethinker):
     def __init__(self, *args, **kwargs):
         super(RethinkerForTesting, self).__init__(*args, **kwargs)
 
@@ -44,13 +44,13 @@ class RethinkerForTesting(rethinkstuff.Rethinker):
 def r():
     r = RethinkerForTesting()
     try:
-        r.db_drop("rethinkstuff_test_db").run()
+        r.db_drop("doublethink_test_db").run()
     except rethinkdb.errors.ReqlOpFailedError:
         pass
-    result = r.db_create("rethinkstuff_test_db").run()
+    result = r.db_create("doublethink_test_db").run()
     assert not r.last_conn.is_open()
     assert result["dbs_created"] == 1
-    return RethinkerForTesting(db="rethinkstuff_test_db")
+    return RethinkerForTesting(db="doublethink_test_db")
 
 @pytest.fixture(scope="module")
 def my_table(r):
@@ -116,7 +116,7 @@ def test_slice(r, my_table):
     assert n == 5
 
 def test_service_registry(r):
-    svcreg = rethinkstuff.ServiceRegistry(r)
+    svcreg = doublethink.ServiceRegistry(r)
     assert svcreg.available_service("yes-such-role") == None
     assert svcreg.available_services("yes-such-role") == []
     assert svcreg.available_services() == []
@@ -240,7 +240,7 @@ def test_svcreg_heartbeat_server_down(r):
         def table(self, *args, **kwargs):
             raise Exception('catch me if you can')
 
-    class SortOfFakeServiceRegistry(rethinkstuff.ServiceRegistry):
+    class SortOfFakeServiceRegistry(doublethink.ServiceRegistry):
         def __init__(self, rethinker):
             self.r = rethinker
             # self._ensure_table() # not doing this here
@@ -267,7 +267,7 @@ def test_utcnow():
     now_notz = datetime.datetime.utcnow()  # has no timezone :(
     assert not now_notz.tzinfo
 
-    now_tz = rethinkstuff.utcnow() # solution to that problem
+    now_tz = doublethink.utcnow() # solution to that problem
     assert now_tz.tzinfo
 
     ## .timestamp() was added in python 3.3
@@ -280,7 +280,7 @@ def test_utcnow():
     ## XXX what else can we test without jumping through hoops?
 
 def test_orm(r):
-    class SomeDoc(rethinkstuff.Document):
+    class SomeDoc(doublethink.Document):
         table = 'some_doc'
 
     SomeDoc.table_create(r)
@@ -379,7 +379,7 @@ def test_orm(r):
     assert d == d_copy
 
 def test_orm_pk(r):
-    class NonstandardPrimaryKey(rethinkstuff.Document):
+    class NonstandardPrimaryKey(doublethink.Document):
         @classmethod
         def table_create(cls, rethinker):
             rethinker.table_create(cls.table, primary_key='not_id').run()
