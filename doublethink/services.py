@@ -39,20 +39,20 @@ class ServiceRegistry(object):
 
     logger = logging.getLogger('doublethink.ServiceRegistry')
 
-    def __init__(self, rethinker):
-        self.r = rethinker
+    def __init__(self, rr):
+        self.rr = rr
         self._ensure_table()
 
     def _ensure_table(self):
-        dbs = self.r.db_list().run()
-        if not self.r.dbname in dbs:
-            self.logger.info('creating rethinkdb database %s', repr(self.r.dbname))
-            self.r.db_create(self.r.dbname).run()
-        tables = self.r.table_list().run()
+        dbs = self.rr.db_list().run()
+        if not self.rr.dbname in dbs:
+            self.logger.info('creating rethinkdb database %s', repr(self.rr.dbname))
+            self.rr.db_create(self.rr.dbname).run()
+        tables = self.rr.table_list().run()
         if not 'services' in tables:
-            self.logger.info("creating rethinkdb table 'services' in database %s", repr(self.r.dbname))
-            self.r.table_create('services', shards=1, replicas=min(3, len(self.r.servers))).run()
-            # self.r.table('sites').index_create...?
+            self.logger.info("creating rethinkdb table 'services' in database %s", repr(self.rr.dbname))
+            self.rr.table_create('services', shards=1, replicas=min(3, len(self.rr.servers))).run()
+            # self.rr.table('sites').index_create...?
 
     def heartbeat(self, status_info):
         '''
@@ -68,7 +68,7 @@ class ServiceRegistry(object):
         if not 'pid' in updated_status_info:
             updated_status_info['pid'] = os.getpid()
         try:
-            result = self.r.table('services').insert(
+            result = self.rr.table('services').insert(
                     updated_status_info, conflict='replace',
                     return_changes=True).run()
             return result['changes'][0]['new_val'] # XXX check
@@ -77,13 +77,13 @@ class ServiceRegistry(object):
             return status_info
 
     def unregister(self, id):
-        result = self.r.table('services').get(id).delete().run()
+        result = self.rr.table('services').get(id).delete().run()
         if result != {'deleted':1,'errors':0,'inserted':0,'replaced':0,'skipped':0,'unchanged':0}:
             self.logger.warn('unexpected result attempting to delete id=%s from rethinkdb services table: %s', id, result)
 
     def available_service(self, role):
         try:
-            result = self.r.table('services').filter({"role":role}).filter(
+            result = self.rr.table('services').filter({"role":role}).filter(
                 lambda svc: r.now().sub(svc["last_heartbeat"]) < 3 * svc["heartbeat_interval"]   #.default(20.0)
             ).order_by("load")[0].run()
             return result
@@ -92,7 +92,7 @@ class ServiceRegistry(object):
 
     def available_services(self, role=None):
         try:
-            query = self.r.table('services')
+            query = self.rr.table('services')
             if role:
                 query = query.filter({"role":role})
             query = query.filter(

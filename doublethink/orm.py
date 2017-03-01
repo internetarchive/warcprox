@@ -158,25 +158,25 @@ class Document(dict, object):
         return cls.__name__.lower()
 
     @classmethod
-    def load(cls, rethinker, pk):
+    def load(cls, rr, pk):
         '''
         Retrieves a document from the database, by primary key.
         '''
-        doc = cls(rethinker)
+        doc = cls(rr)
         doc[doc.pk_field] = pk
         doc.refresh()
         return doc
 
     @classmethod
-    def table_create(cls, rethinker):
+    def table_create(cls, rr):
         '''
         Creates the table. Subclasses may want to override this method to do
         more things, such as creating secondary indexes.
         '''
-        rethinker.table_create(cls.table).run()
+        rr.table_create(cls.table).run()
 
-    def __init__(self, rethinker, d={}):
-        self._r = rethinker
+    def __init__(self, rr, d={}):
+        dict.__setattr__(self, 'rr', rr)
         self._pk = None
         self._clear_updates()
         for k in d:
@@ -235,14 +235,14 @@ class Document(dict, object):
         '''
         if not self._pk:
             try:
-                pk = self._r.db('rethinkdb').table('table_config').filter({
-                    'db': self._r.dbname, 'name': self.table}).get_field(
+                pk = self.rr.db('rethinkdb').table('table_config').filter({
+                    'db': self.rr.dbname, 'name': self.table}).get_field(
                             'primary_key')[0].run()
                 self._pk = pk
             except Exception as e:
                 raise Exception(
                         'problem determining primary key for table %s.%s: %s',
-                        self._r.dbname, self.table, e)
+                        self.rr.dbname, self.table, e)
         return self._pk
 
     @property
@@ -270,7 +270,7 @@ class Document(dict, object):
                 # r.literal() to replace, not merge with, nested fields
                 updates = {field: r.literal(self._updates[field])
                            for field in self._updates}
-                query = self._r.table(self.table).get(
+                query = self.rr.table(self.table).get(
                         self.pk_value).update(updates)
                 result = query.run()
                 if result['skipped']:  # primary key not found
@@ -280,7 +280,7 @@ class Document(dict, object):
                             'unexpected result %s from rethinkdb query %s' % (
                                 result, query))
             if not should_insert and self._deletes:
-                query = self._r.table(self.table).replace(
+                query = self.rr.table(self.table).replace(
                         r.row.without(self._deletes))
                 result = query.run()
                 if result['errors']:   # primary key not found
@@ -293,7 +293,7 @@ class Document(dict, object):
             should_insert = True
 
         if should_insert:
-            query = self._r.table(self.table).insert(self)
+            query = self.rr.table(self.table).insert(self)
             result = query.run()
             if result['inserted'] != 1:
                     raise Exception(
@@ -309,7 +309,7 @@ class Document(dict, object):
         '''
         Refresh the document from the database.
         '''
-        d = self._r.table(self.table).get(self.pk_value).run()
+        d = self.rr.table(self.table).get(self.pk_value).run()
         if d is None:
             raise KeyError
         for k in d:

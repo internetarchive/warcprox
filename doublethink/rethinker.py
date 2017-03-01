@@ -24,16 +24,16 @@ import types
 
 class RethinkerWrapper(object):
     logger = logging.getLogger('doublethink.RethinkerWrapper')
-    def __init__(self, rethinker, wrapped):
-        self.rethinker = rethinker
+    def __init__(self, rr, wrapped):
+        self.rr = rr
         self.wrapped = wrapped
 
     def __getattr__(self, name):
         delegate = getattr(self.wrapped, name)
-        return self.rethinker.wrap(delegate)
+        return self.rr.wrap(delegate)
 
     def __getitem__(self, key):
-        return self.rethinker.wrap(self.wrapped.__getitem__)(key)
+        return self.rr.wrap(self.wrapped.__getitem__)(key)
 
     def __repr__(self):
         return '<RethinkerWrapper{}>'.format(repr(self.wrapped))
@@ -41,10 +41,10 @@ class RethinkerWrapper(object):
     def run(self, db=None):
         self.wrapped.run  # raise AttributeError early
         while True:
-            conn = self.rethinker._random_server_connection()
+            conn = self.rr._random_server_connection()
             is_iter = False
             try:
-                result = self.wrapped.run(conn, db=db or self.rethinker.dbname)
+                result = self.wrapped.run(conn, db=db or self.rr.dbname)
                 if hasattr(result, '__next__'):
                     is_iter = True
                     def gen():
@@ -72,8 +72,8 @@ class RethinkerWrapper(object):
 
 class Rethinker(object):
     '''
-    >>> r = Rethinker(db='my_db')
-    >>> doc = r.table('my_table').get(1).run()
+    >>> rr = Rethinker(db='my_db')
+    >>> doc = rr.table('my_table').get(1).run()
     '''
     logger = logging.getLogger('doublethink.Rethinker')
 

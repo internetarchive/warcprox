@@ -25,9 +25,9 @@ Usage Example
 ::
 
     import doublethink
-    r = doublethink.Rethinker(['db0.foo.com', 'db0.foo.com:38015', 'db1.foo.com'], 'my_db')
-    r.table('mytable').insert({'foo':'bar','baz':2}).run()
-    for result in r.table('mytable'):
+    rr = doublethink.Rethinker(['db0.foo.com', 'db0.foo.com:38015', 'db1.foo.com'], 'my_db')
+    rr.table('mytable').insert({'foo':'bar','baz':2}).run()
+    for result in rr.table('mytable'):
         print("result={}".format(result))
 
 ORM
@@ -42,16 +42,16 @@ Usage Example
 
     import doublethink
 
-    r = doublethink.Rethinker(['db0.foo.com', 'db0.foo.com:38015', 'db1.foo.com'], 'my_db')
+    rr = doublethink.Rethinker(['db0.foo.com', 'db0.foo.com:38015', 'db1.foo.com'], 'my_db')
 
     class MyTable(doublethink.Document):
         pass
-    MyTable.table_create()
+    MyTable.table_create(rr)
 
-    doc1 = MyTable(r, {'animal': 'elephant', 'size': 'large'})
+    doc1 = MyTable(rr, {'animal': 'elephant', 'size': 'large'})
     doc1.save()
 
-    doc1_copy = MyTable.get(r, doc1.id)
+    doc1_copy = MyTable.get(rr, doc1.id)
     doc1_copy.food = 'bread'
     doc1_copy.save()
 

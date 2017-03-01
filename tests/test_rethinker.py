@@ -22,7 +22,7 @@ import sys
 import types
 import gc
 import pytest
-import rethinkdb
+import rethinkdb as r
 import time
 import socket
 import os
@@ -41,82 +41,82 @@ class RethinkerForTesting(doublethink.Rethinker):
         return self.last_conn
 
 @pytest.fixture(scope="module")
-def r():
-    r = RethinkerForTesting()
+def rr():
+    rr = RethinkerForTesting()
     try:
-        r.db_drop("doublethink_test_db").run()
-    except rethinkdb.errors.ReqlOpFailedError:
+        rr.db_drop("doublethink_test_db").run()
+    except r.errors.ReqlOpFailedError:
         pass
-    result = r.db_create("doublethink_test_db").run()
-    assert not r.last_conn.is_open()
+    result = rr.db_create("doublethink_test_db").run()
+    assert not rr.last_conn.is_open()
     assert result["dbs_created"] == 1
     return RethinkerForTesting(db="doublethink_test_db")
 
 @pytest.fixture(scope="module")
-def my_table(r):
-    assert r.table_list().run() == []
-    result = r.table_create("my_table").run()
-    assert not r.last_conn.is_open()
+def my_table(rr):
+    assert rr.table_list().run() == []
+    result = rr.table_create("my_table").run()
+    assert not rr.last_conn.is_open()
     assert result["tables_created"] == 1
 
-def test_rethinker(r, my_table):
-    assert r.table("my_table").index_create("foo").run() == {"created": 1}
-    assert not r.last_conn.is_open()
+def test_rethinker(rr, my_table):
+    assert rr.table("my_table").index_create("foo").run() == {"created": 1}
+    assert not rr.last_conn.is_open()
 
-    result = r.table("my_table").insert(({"foo":i,"bar":"repeat"*i} for i in range(2000))).run()
-    assert not r.last_conn.is_open()
+    result = rr.table("my_table").insert(({"foo":i,"bar":"repeat"*i} for i in range(2000))).run()
+    assert not rr.last_conn.is_open()
     assert len(result["generated_keys"]) == 2000
     assert result["inserted"] == 2000
 
-    result = r.table("my_table").run()
-    assert r.last_conn.is_open() # should still be open this time
+    result = rr.table("my_table").run()
+    assert rr.last_conn.is_open() # should still be open this time
     assert isinstance(result, types.GeneratorType)
     n = 0
     for x in result:
         n += 1
         pass
     # connection should be closed after finished iterating over results
-    assert not r.last_conn.is_open()
+    assert not rr.last_conn.is_open()
     assert n == 2000
 
-    result = r.table("my_table").run()
-    assert r.last_conn.is_open() # should still be open this time
+    result = rr.table("my_table").run()
+    assert rr.last_conn.is_open() # should still be open this time
     assert isinstance(result, types.GeneratorType)
     next(result)
     result = None
     gc.collect()
     # connection should be closed after result is garbage-collected
-    assert not r.last_conn.is_open()
+    assert not rr.last_conn.is_open()
 
-    result = r.table("my_table").run()
-    assert r.last_conn.is_open() # should still be open this time
+    result = rr.table("my_table").run()
+    assert rr.last_conn.is_open() # should still be open this time
     assert isinstance(result, types.GeneratorType)
     result = None
     gc.collect()
     # connection should be closed after result is garbage-collected
-    assert not r.last_conn.is_open()
+    assert not rr.last_conn.is_open()
 
-def test_too_many_errors(r):
-    with pytest.raises(rethinkdb.errors.ReqlOpFailedError):
-        r.table_create("too_many_replicas", replicas=99).run()
-    with pytest.raises(rethinkdb.errors.ReqlOpFailedError):
-        r.table_create("too_many_shards", shards=99).run()
+def test_too_many_errors(rr):
+    with pytest.raises(r.errors.ReqlOpFailedError):
+        rr.table_create("too_many_replicas", replicas=99).run()
+    with pytest.raises(r.errors.ReqlOpFailedError):
+        rr.table_create("too_many_shards", shards=99).run()
 
-def test_slice(r, my_table):
+def test_slice(rr, my_table):
     """Tests RethinkerWrapper.__getitem__()"""
-    result = r.table("my_table")[5:10].run()
-    assert r.last_conn.is_open() # should still be open this time
+    result = rr.table("my_table")[5:10].run()
+    assert rr.last_conn.is_open() # should still be open this time
     assert isinstance(result, types.GeneratorType)
     n = 0
     for x in result:
         n += 1
         pass
     # connection should be closed after finished iterating over results
-    assert not r.last_conn.is_open()
+    assert not rr.last_conn.is_open()
     assert n == 5
 
-def test_service_registry(r):
-    svcreg = doublethink.ServiceRegistry(r)
+def test_service_registry(rr):
+    svcreg = doublethink.ServiceRegistry(rr)
     assert svcreg.available_service("yes-such-role") == None
     assert svcreg.available_services("yes-such-role") == []
     assert svcreg.available_services() == []
@@ -235,19 +235,19 @@ def test_service_registry(r):
     assert len(svcreg.available_services("yes-such-role")) == 2
     assert len(svcreg.available_services()) == 4
 
-def test_svcreg_heartbeat_server_down(r):
+def test_svcreg_heartbeat_server_down(rr):
     class MockRethinker:
         def table(self, *args, **kwargs):
             raise Exception('catch me if you can')
 
     class SortOfFakeServiceRegistry(doublethink.ServiceRegistry):
         def __init__(self, rethinker):
-            self.r = rethinker
+            self.rr = rethinker
             # self._ensure_table() # not doing this here
 
     # no such rethinkdb server
-    r = MockRethinker()
-    svcreg = SortOfFakeServiceRegistry(r)
+    rr = MockRethinker()
+    svcreg = SortOfFakeServiceRegistry(rr)
     svc0 = {
         "role": "role-foo",
         "load": 100.0,
@@ -279,19 +279,19 @@ def test_utcnow():
 
     ## XXX what else can we test without jumping through hoops?
 
-def test_orm(r):
+def test_orm(rr):
     class SomeDoc(doublethink.Document):
         table = 'some_doc'
 
-    SomeDoc.table_create(r)
+    SomeDoc.table_create(rr)
     with pytest.raises(Exception):
-        SomeDoc.table_create(r)
+        SomeDoc.table_create(rr)
 
     # test that overriding Document.table works
-    assert 'some_doc' in r.table_list().run()
-    assert not 'somedoc' in r.table_list().run()
+    assert 'some_doc' in rr.table_list().run()
+    assert not 'somedoc' in rr.table_list().run()
 
-    d = SomeDoc(rethinker=r, d={
+    d = SomeDoc(rr, d={
         'a': 'b',
         'c': {'d': 'e'},
         'f': ['g', 'h'],
@@ -410,7 +410,7 @@ def test_orm(r):
     assert d._updates == {}
     assert d._deletes == set()
 
-    d_copy = SomeDoc.load(r, d.id)
+    d_copy = SomeDoc.load(rr, d.id)
     assert d == d_copy
     d['zuh'] = 'toot'
     d.save()
@@ -450,7 +450,7 @@ def test_orm(r):
     assert d._updates == {}
     assert d._deletes == set()
 
-    d_copy = SomeDoc.load(r, d.id)
+    d_copy = SomeDoc.load(rr, d.id)
     assert d == d_copy
     d['yuh'] = 'soot'
     d.save()
@@ -458,19 +458,19 @@ def test_orm(r):
     d_copy.refresh()
     assert d == d_copy
 
-def test_orm_pk(r):
+def test_orm_pk(rr):
     class NonstandardPrimaryKey(doublethink.Document):
         @classmethod
         def table_create(cls, rethinker):
             rethinker.table_create(cls.table, primary_key='not_id').run()
 
     with pytest.raises(Exception):
-        NonstandardPrimaryKey.load(r, 'no_such_thing')
+        NonstandardPrimaryKey.load(rr, 'no_such_thing')
 
-    NonstandardPrimaryKey.table_create(r)
+    NonstandardPrimaryKey.table_create(rr)
 
     # new empty doc
-    f = NonstandardPrimaryKey(r, {})
+    f = NonstandardPrimaryKey(rr, {})
     f.save()
     assert f.pk_value
     assert 'not_id' in f
@@ -478,19 +478,19 @@ def test_orm_pk(r):
     assert len(f.keys()) == 1
 
     with pytest.raises(KeyError):
-        NonstandardPrimaryKey.load(r, 'no_such_thing')
+        NonstandardPrimaryKey.load(rr, 'no_such_thing')
 
     # new doc with (only) primary key
-    d = NonstandardPrimaryKey(r, {'not_id': 1})
+    d = NonstandardPrimaryKey(rr, {'not_id': 1})
     assert d.not_id == 1
     assert d.pk_value == 1
     d.save()
 
-    d_copy = NonstandardPrimaryKey.load(r, 1)
+    d_copy = NonstandardPrimaryKey.load(rr, 1)
     assert d == d_copy
 
     # new doc with something in it
-    e = NonstandardPrimaryKey(r, {'some_field': 'something'})
+    e = NonstandardPrimaryKey(rr, {'some_field': 'something'})
     with pytest.raises(KeyError):
         e['not_id']
     assert e.not_id is None
@@ -498,7 +498,7 @@ def test_orm_pk(r):
     e.save()
     assert e.not_id
 
-    e_copy = NonstandardPrimaryKey.load(r, e.not_id)
+    e_copy = NonstandardPrimaryKey.load(rr, e.not_id)
     assert e == e_copy
     e_copy['blah'] = 'toot'
     e_copy.save()
