@@ -175,6 +175,22 @@ class Document(dict, object):
         '''
         rr.table_create(cls.table).run()
 
+    @classmethod
+    def table_ensure(cls, rr):
+        '''
+        Creates the table if it doesn't exist.
+        '''
+        dbs = rr.db_list().run()
+        if not rr.dbname in dbs:
+            logging.info('creating rethinkdb database %s', repr(rr.dbname))
+            rr.db_create(rr.dbname).run()
+        tables = rr.table_list().run()
+        if not cls.table in tables:
+            logging.info(
+                    'creating rethinkdb table %s in database %s',
+                    repr(cls.table), repr(rr.dbname))
+            cls.table_create(rr)
+
     def __init__(self, rr, d={}):
         dict.__setattr__(self, 'rr', rr)
         self._pk = None

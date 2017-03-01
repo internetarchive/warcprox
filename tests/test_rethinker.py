@@ -284,6 +284,7 @@ def test_orm(rr):
         table = 'some_doc'
 
     SomeDoc.table_create(rr)
+    SomeDoc.table_ensure(rr)
     with pytest.raises(Exception):
         SomeDoc.table_create(rr)
 
@@ -467,7 +468,7 @@ def test_orm_pk(rr):
     with pytest.raises(Exception):
         NonstandardPrimaryKey.load(rr, 'no_such_thing')
 
-    NonstandardPrimaryKey.table_create(rr)
+    NonstandardPrimaryKey.table_ensure(rr)
 
     # new empty doc
     f = NonstandardPrimaryKey(rr, {})
