@@ -47,7 +47,7 @@ class WatchedDict(dict, object):
 
     def popitem(self):
         self.callback(self.field)
-        return dict.popitem()
+        return dict.popitem(self)
 
     def setdefault(self, *args):
         self.callback(self.field)
@@ -57,9 +57,8 @@ class WatchedDict(dict, object):
         else:
             return dict.setdefault(self, *args)
 
-    def update(self, *args, **kwargs):
-        # looks a little tricky
-        raise Exception('not implemented')
+    # XXX worth implementing?
+    update = None
 
 class WatchedList(list, object):
     def __init__(self, l, callback, field):
@@ -100,9 +99,8 @@ class WatchedList(list, object):
         self.callback(self.field)
         return list.pop(self, index)
 
-    def clear(self):
-        self.callback(self.field)
-        return list.clear(self)
+    # python 2.7 doesn't have this anyway
+    clear = None
 
     def sort(self, key=None, reverse=False):
         self.callback(self.field)
@@ -157,14 +155,6 @@ class Document(dict, object):
 
     @classproperty
     def table(cls):
-        '''
-        Returns default table name, which is the class name, lowercased.
-
-        Subclasses can override the table name like so:
-
-            class Something(doublethink.Document):
-                table = 'my_table_name'
-        '''
         return cls.__name__.lower()
 
     @classmethod
@@ -214,7 +204,20 @@ class Document(dict, object):
         if key in self._updates:
             del self._updates[key]
 
-    # XXX probably need the other stuff like in WatchedDict
+    def setdefault(self, *args):
+        need_update = False
+        if not args[0] in self:
+            need_update = True
+        result = dict.setdefault(self, *args)
+        if need_update:
+            self._updated(args[0])
+        return result
+
+    # dict methods we don't want to support
+    clear = None
+    pop = None
+    popitem = None
+    update = None
 
     def _updated(self, field):
         # callback for all updates
@@ -277,11 +280,12 @@ class Document(dict, object):
                             'unexpected result %s from rethinkdb query %s' % (
                                 result, query))
             if not should_insert and self._deletes:
-                self._r.table(self.table).replace(
-                        r.row.without(self._deletes)).run()
+                query = self._r.table(self.table).replace(
+                        r.row.without(self._deletes))
+                result = query.run()
                 if result['errors']:   # primary key not found
                     should_insert = True
-                elif not result['replaced'] == 0:
+                elif result['replaced'] != 1:
                     raise Exception(
                             'unexpected result %s from rethinkdb query %s' % (
                                 result, query))
