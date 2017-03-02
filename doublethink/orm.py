@@ -162,9 +162,14 @@ class Document(dict, object):
         '''
         Retrieves a document from the database, by primary key.
         '''
+        if pk is None:
+            return None
         doc = cls(rr)
         doc[doc.pk_field] = pk
-        doc.refresh()
+        try:
+            doc.refresh()
+        except KeyError:
+            return None
         return doc
 
     @classmethod

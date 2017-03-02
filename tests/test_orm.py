@@ -234,8 +234,13 @@ def test_orm_pk(rr):
 
     with pytest.raises(Exception):
         NonstandardPrimaryKey.load(rr, 'no_such_thing')
+    with pytest.raises(Exception):
+        NonstandardPrimaryKey.load(rr, 'no_such_thing')
 
     NonstandardPrimaryKey.table_ensure(rr)
+
+    assert NonstandardPrimaryKey.load(rr, None) is None
+    assert NonstandardPrimaryKey.load(rr, 'no_such_thing') is None
 
     # new empty doc
     f = NonstandardPrimaryKey(rr, {})
@@ -245,8 +250,7 @@ def test_orm_pk(rr):
     assert f.not_id == f.pk_value
     assert len(f.keys()) == 1
 
-    with pytest.raises(KeyError):
-        NonstandardPrimaryKey.load(rr, 'no_such_thing')
+    assert NonstandardPrimaryKey.load(rr, 'no_such_thing') is None
 
     # new doc with (only) primary key
     d = NonstandardPrimaryKey(rr, {'not_id': 1})
