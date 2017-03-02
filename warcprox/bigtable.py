@@ -34,19 +34,20 @@ import os
 import hashlib
 import threading
 import datetime
-import rethinkstuff
+import doublethink
+import rethinkdb as r
 
 class RethinkCaptures:
     """Inserts in batches every 0.5 seconds"""
     logger = logging.getLogger("warcprox.bigtable.RethinkCaptures")
 
     def __init__(
-            self, r, table="captures", shards=None, replicas=None,
+            self, rr, table="captures", shards=None, replicas=None,
             options=warcprox.Options()):
-        self.r = r
+        self.rr = rr
         self.table = table
-        self.shards = shards or len(r.servers)
-        self.replicas = replicas or min(3, len(r.servers))
+        self.shards = shards or len(rr.servers)
+        self.replicas = replicas or min(3, len(rr.servers))
         self.options = options
         self._ensure_db_table()
 
@@ -64,7 +65,7 @@ class RethinkCaptures:
         try:
             with self._batch_lock:
                 if len(self._batch) > 0:
-                    result = self.r.table(self.table).insert(
+                    result = self.rr.table(self.table).insert(
                             self._batch, conflict="replace").run()
                     if (result["inserted"] + result["replaced"]
                             + result["unchanged"] != len(self._batch)):
@@ -99,16 +100,22 @@ class RethinkCaptures:
                 self.logger.info("finished")
 
     def _ensure_db_table(self):
-        dbs = self.r.db_list().run()
-        if not self.r.dbname in dbs:
-            self.logger.info("creating rethinkdb database %s", repr(self.r.dbname))
-            self.r.db_create(self.r.dbname).run()
-        tables = self.r.table_list().run()
+        dbs = self.rr.db_list().run()
+        if not self.rr.dbname in dbs:
+            self.logger.info(
+                    "creating rethinkdb database %s", repr(self.rr.dbname))
+            self.rr.db_create(self.rr.dbname).run()
+        tables = self.rr.table_list().run()
         if not self.table in tables:
-            self.logger.info("creating rethinkdb table %s in database %s", repr(self.table), repr(self.r.dbname))
-            self.r.table_create(self.table, shards=self.shards, replicas=self.replicas).run()
-            self.r.table(self.table).index_create("abbr_canon_surt_timestamp", [self.r.row["abbr_canon_surt"], self.r.row["timestamp"]]).run()
-            self.r.table(self.table).index_create("sha1_warc_type", [self.r.row["sha1base32"], self.r.row["warc_type"], self.r.row["bucket"]]).run()
+            self.logger.info(
+                    "creating rethinkdb table %s in database %s",
+                    repr(self.table), repr(self.rr.dbname))
+            self.rr.table_create(self.table, shards=self.shards, replicas=self.replicas).run()
+            self.rr.table(self.table).index_create(
+                    "abbr_canon_surt_timestamp",
+                    [r.row["abbr_canon_surt"], r.row["timestamp"]]).run()
+            self.rr.table(self.table).index_create("sha1_warc_type", [
+                r.row["sha1base32"], r.row["warc_type"], r.row["bucket"]]).run()
 
     def find_response_by_digest(self, algo, raw_digest, bucket="__unspecified__"):
         if algo != "sha1":
@@ -116,10 +123,10 @@ class RethinkCaptures:
                     "digest type is %s but big captures table is indexed by "
                     "sha1" % algo)
         sha1base32 = base64.b32encode(raw_digest).decode("utf-8")
-        results_iter = self.r.table(self.table).get_all(
+        results_iter = self.rr.table(self.table).get_all(
                 [sha1base32, "response", bucket],
                 index="sha1_warc_type").filter(
-                        self.r.row["dedup_ok"], default=True).run()
+                        r.row["dedup_ok"], default=True).run()
         results = list(results_iter)
         if len(results) > 0:
             if len(results) > 1:
@@ -162,7 +169,7 @@ class RethinkCaptures:
             "abbr_canon_surt": canon_surt[:150],
             "canon_surt": canon_surt,
             "timestamp": recorded_url.timestamp.replace(
-                tzinfo=rethinkstuff.UTC),
+                tzinfo=doublethink.UTC),
             "url": recorded_url.url.decode("utf-8"),
             "offset": records[0].offset,
             "filename": os.path.basename(records[0].warc_filename),

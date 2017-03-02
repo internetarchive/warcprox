@@ -41,7 +41,7 @@ deps = [
     'warctools',
     'kafka-python>=1.0.1',
     'surt>=0.3b4',
-    'rethinkstuff',
+    'doublethink>=0.2.0.dev69',
     'PySocks',
 ]
 try:
@@ -51,7 +51,7 @@ except:
 
 setuptools.setup(
         name='warcprox',
-        version='2.1b1.dev52',
+        version='2.1b1.dev53',
         description='WARC writing MITM HTTP/S proxy',
         url='https://github.com/internetarchive/warcprox',
         author='Noah Levitt',

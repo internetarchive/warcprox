@@ -36,7 +36,7 @@ import requests
 import re
 import json
 import random
-import rethinkstuff
+import doublethink
 from hanzo import warctools
 import warnings
 import pprint
@@ -245,15 +245,15 @@ def captures_db(request, rethinkdb_servers, rethinkdb_big_table):
         servers = rethinkdb_servers.split(",")
         if rethinkdb_big_table:
             db = 'warcprox_test_captures_' + "".join(random.sample("abcdefghijklmnopqrstuvwxyz0123456789_",8))
-            r = rethinkstuff.Rethinker(servers, db)
-            captures_db = warcprox.bigtable.RethinkCaptures(r)
+            rr = doublethink.Rethinker(servers, db)
+            captures_db = warcprox.bigtable.RethinkCaptures(rr)
             captures_db.start()
 
     def fin():
         if captures_db:
             captures_db.close()
             # logging.info('dropping rethinkdb database {}'.format(db))
-            # result = captures_db.r.db_drop(db).run()
+            # result = captures_db.rr.db_drop(db).run()
             # logging.info("result=%s", result)
     request.addfinalizer(fin)
 
@@ -268,15 +268,15 @@ def rethink_dedup_db(request, rethinkdb_servers, captures_db):
         else:
             servers = rethinkdb_servers.split(",")
             db = 'warcprox_test_dedup_' + "".join(random.sample("abcdefghijklmnopqrstuvwxyz0123456789_",8))
-            r = rethinkstuff.Rethinker(servers, db)
-            ddb = warcprox.dedup.RethinkDedupDb(r)
+            rr = doublethink.Rethinker(servers, db)
+            ddb = warcprox.dedup.RethinkDedupDb(rr)
 
     def fin():
         if rethinkdb_servers:
             ddb.close()
             if not captures_db:
                 logging.info('dropping rethinkdb database {}'.format(db))
-                result = ddb.r.db_drop(db).run()
+                result = ddb.rr.db_drop(db).run()
                 logging.info("result=%s", result)
     request.addfinalizer(fin)
 
@@ -305,8 +305,8 @@ def stats_db(request, rethinkdb_servers):
     if rethinkdb_servers:
         servers = rethinkdb_servers.split(",")
         db = 'warcprox_test_stats_' + "".join(random.sample("abcdefghijklmnopqrstuvwxyz0123456789_",8))
-        r = rethinkstuff.Rethinker(servers, db)
-        sdb = warcprox.stats.RethinkStatsDb(r)
+        rr = doublethink.Rethinker(servers, db)
+        sdb = warcprox.stats.RethinkStatsDb(rr)
         sdb.start()
     else:
         f = tempfile.NamedTemporaryFile(prefix='warcprox-test-stats-', suffix='.db', delete=False)
@@ -318,7 +318,7 @@ def stats_db(request, rethinkdb_servers):
         sdb.close()
         if rethinkdb_servers:
             logging.info('dropping rethinkdb database {}'.format(db))
-            result = sdb.r.db_drop(db).run()
+            result = sdb.rr.db_drop(db).run()
             logging.info("result=%s", result)
         else:
             logging.info('deleting file {}'.format(stats_db_file))
@@ -332,15 +332,15 @@ def service_registry(request, rethinkdb_servers):
     if rethinkdb_servers:
         servers = rethinkdb_servers.split(",")
         db = 'warcprox_test_services_' + "".join(random.sample("abcdefghijklmnopqrstuvwxyz0123456789_",8))
-        r = rethinkstuff.Rethinker(servers, db)
+        rr = doublethink.Rethinker(servers, db)
 
         def fin():
             logging.info('dropping rethinkdb database {}'.format(db))
-            result = r.db_drop(db).run()
+            result = rr.db_drop(db).run()
             logging.info("result=%s", result)
         request.addfinalizer(fin)
 
-        return rethinkstuff.ServiceRegistry(r)
+        return doublethink.ServiceRegistry(rr)
     else:
         return None
 
@@ -1265,7 +1265,7 @@ def test_dedup_ok_flag(
 
     # inspect what's in rethinkdb more closely
     rethink_captures = warcprox_.warc_writer_thread.dedup_db.captures_db
-    results_iter = rethink_captures.r.table(rethink_captures.table).get_all(
+    results_iter = rethink_captures.rr.table(rethink_captures.table).get_all(
                 ['FV7RGGA3SCRFNTS6L275N2OJQJXM5EDZ', 'response',
                     'test_dedup_ok_flag'], index='sha1_warc_type').order_by(
                             'timestamp').run()

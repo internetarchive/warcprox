@@ -1,7 +1,7 @@
 '''
 warcprox/stats.py - keeps statistics on what has been archived
 
-Copyright (C) 2013-2016 Internet Archive
+Copyright (C) 2013-2017 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -176,10 +176,10 @@ class RethinkStatsDb(StatsDb):
     logger = logging.getLogger("warcprox.stats.RethinkStatsDb")
 
     def __init__(self, rethinker, table="stats", shards=None, replicas=None, options=warcprox.Options()):
-        self.r = rethinker
+        self.rr = rethinker
         self.table = table
         self.shards = shards or 1  # 1 shard by default because it's probably a small table
-        self.replicas = replicas or min(3, len(self.r.servers))
+        self.replicas = replicas or min(3, len(self.rr.servers))
         self._ensure_db_table()
         self.options = options
 
@@ -194,7 +194,7 @@ class RethinkStatsDb(StatsDb):
         self._update_batch() # starts repeating timer
 
     def _bucket_batch_update_reql(self, bucket):
-        return self.r.table(self.table).get(bucket).replace(
+        return self.rr.table(self.table).get(bucket).replace(
             lambda old: r.branch(
                 old.eq(None), self._batch[bucket], old.merge({
                     "total": {
@@ -239,18 +239,18 @@ class RethinkStatsDb(StatsDb):
             self.logger.info("finished")
 
     def _ensure_db_table(self):
-        dbs = self.r.db_list().run()
-        if not self.r.dbname in dbs:
+        dbs = self.rr.db_list().run()
+        if not self.rr.dbname in dbs:
             self.logger.info(
-                    "creating rethinkdb database %s", repr(self.r.dbname))
-            self.r.db_create(self.r.dbname).run()
-        tables = self.r.table_list().run()
+                    "creating rethinkdb database %s", repr(self.rr.dbname))
+            self.rr.db_create(self.rr.dbname).run()
+        tables = self.rr.table_list().run()
         if not self.table in tables:
             self.logger.info(
                     "creating rethinkdb table %s in database %s shards=%s "
-                    "replicas=%s", repr(self.table), repr(self.r.dbname),
+                    "replicas=%s", repr(self.table), repr(self.rr.dbname),
                     self.shards, self.replicas)
-            self.r.table_create(
+            self.rr.table_create(
                     self.table, primary_key="bucket", shards=self.shards,
                     replicas=self.replicas).run()
 
@@ -267,7 +267,7 @@ class RethinkStatsDb(StatsDb):
         pass
 
     def value(self, bucket0="__all__", bucket1=None, bucket2=None):
-        bucket0_stats = self.r.table(self.table).get(bucket0).run()
+        bucket0_stats = self.rr.table(self.table).get(bucket0).run()
         self.logger.debug(
                 'stats db lookup of bucket=%s returned %s',
                 bucket0, bucket0_stats)

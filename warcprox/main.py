@@ -40,7 +40,7 @@ import threading
 import certauth.certauth
 import warcprox
 import re
-import rethinkstuff
+import doublethink
 import cryptography.hazmat.backends.openssl
 
 def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
@@ -149,13 +149,15 @@ def init_controller(args):
 
     listeners = []
     if args.rethinkdb_servers:
-        r = rethinkstuff.Rethinker(args.rethinkdb_servers.split(","), args.rethinkdb_db)
+        rr = doublethink.Rethinker(
+                args.rethinkdb_servers.split(","), args.rethinkdb_db)
         if args.rethinkdb_big_table:
-            captures_db = warcprox.bigtable.RethinkCaptures(r, options=options)
-            dedup_db = warcprox.bigtable.RethinkCapturesDedup(captures_db, options=options)
+            captures_db = warcprox.bigtable.RethinkCaptures(rr, options=options)
+            dedup_db = warcprox.bigtable.RethinkCapturesDedup(
+                    captures_db, options=options)
             listeners.append(captures_db)
         else:
-            dedup_db = warcprox.dedup.RethinkDedupDb(r, options=options)
+            dedup_db = warcprox.dedup.RethinkDedupDb(rr, options=options)
             listeners.append(dedup_db)
     elif args.dedup_db_file in (None, '', '/dev/null'):
         logging.info('deduplication disabled')
@@ -165,7 +167,7 @@ def init_controller(args):
         listeners.append(dedup_db)
 
     if args.rethinkdb_servers:
-        stats_db = warcprox.stats.RethinkStatsDb(r, options=options)
+        stats_db = warcprox.stats.RethinkStatsDb(rr, options=options)
         listeners.append(stats_db)
     elif args.stats_db_file in (None, '', '/dev/null'):
         logging.info('statistics tracking disabled')
@@ -205,7 +207,7 @@ def init_controller(args):
             dedup_db=dedup_db, listeners=listeners, options=options)
 
     if args.rethinkdb_servers:
-        svcreg = rethinkstuff.ServiceRegistry(r)
+        svcreg = doublethink.ServiceRegistry(rr)
     else:
         svcreg = None
 
@@ -286,17 +288,17 @@ def ensure_rethinkdb_tables():
                 '%(asctime)s %(levelname)s %(name)s.%(funcName)s'
                 '(%(filename)s:%(lineno)d) %(message)s'))
 
-    r = rethinkstuff.Rethinker(
+    rr = doublethink.Rethinker(
             args.rethinkdb_servers.split(','), args.rethinkdb_db)
 
     # services table
-    rethinkstuff.ServiceRegistry(r)
+    doublethink.ServiceRegistry(rr)
 
     # stats table
-    warcprox.stats.RethinkStatsDb(r)
+    warcprox.stats.RethinkStatsDb(rr)
 
     # captures table
-    warcprox.bigtable.RethinkCaptures(r)
+    warcprox.bigtable.RethinkCaptures(rr)
 
 if __name__ == '__main__':
     main()
