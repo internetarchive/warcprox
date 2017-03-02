@@ -98,6 +98,8 @@ def host_matches_ip_or_domain(host, ip_or_domain):
      - ip_or_domain is a domain and host is the same domain
      - ip_or_domain is a domain and host is a subdomain of it
     '''
+    if not host:
+        return False
     _host = normalize_host(host)
     _ip_or_domain = normalize_host(ip_or_domain)
 
