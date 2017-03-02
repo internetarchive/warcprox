@@ -1,5 +1,5 @@
-.. image:: https://travis-ci.org/nlevitt/doublethink.svg?branch=master
-    :target: https://travis-ci.org/nlevitt/doublethink
+.. image:: https://travis-ci.org/internetarchive/doublethink.svg?branch=master
+    :target: https://travis-ci.org/internetarchive/doublethink
 
 doublethink
 ============
