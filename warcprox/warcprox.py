@@ -253,8 +253,13 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
 
     def interrupt(self):
         if self._proxy_sock:
-            self._proxy_sock.shutdown(socket.SHUT_RDWR)
-            self._proxy_sock.close()
+            try:
+                self._proxy_sock.shutdown(socket.SHUT_RDWR)
+            except socket.error, e:
+                self.logger.warning("Socket error interrupting _proxy_sock")
+                self.logger.exception(e)
+            finally:
+                self._proxy_sock.close()
 
 class RecordedUrl(object):
     def __init__(self, url, request_data, response_recorder, remote_ip, warcprox_meta=None):
