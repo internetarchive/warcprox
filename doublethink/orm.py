@@ -273,6 +273,14 @@ class Document(dict, object):
         '''
         return getattr(self, self.pk_field)
 
+    def populate_defaults(self):
+        '''
+        This method is called by `save()` before persisting the document to
+        the database. Subclasses should override it to populate default values
+        if appropriate.
+        '''
+        pass
+
     def save(self):
         '''
         Persist changes to rethinkdb. Updates only the fields that have
@@ -285,6 +293,7 @@ class Document(dict, object):
         touched.
         '''
         should_insert = False
+        self.populate_defaults()
         try:
             self[self.pk_field]  # raises KeyError if missing
             if self._updates:

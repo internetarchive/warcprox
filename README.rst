@@ -51,7 +51,7 @@ Usage Example
     doc1 = MyTable(rr, {'animal': 'elephant', 'size': 'large'})
     doc1.save()
 
-    doc1_copy = MyTable.get(rr, doc1.id)
+    doc1_copy = MyTable.load(rr, doc1.id)
     doc1_copy.food = 'bread'
     doc1_copy.save()
 

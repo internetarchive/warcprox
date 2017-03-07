@@ -279,4 +279,27 @@ def test_orm_pk(rr):
     assert e['blah'] == 'toot'
     assert e == e_copy
 
+def test_default_values(rr):
+    class Person(doublethink.Document):
+        def populate_defaults(self):
+            if not "age" in self:
+                self.age = 0  # born today
+
+    Person.table_ensure(rr)
+    p = Person(rr, {})
+    assert not "age" in p
+    assert p.age is None
+    p.save()
+    assert p.age == 0
+    assert p.id
+
+    p.age = 50
+    p.save()
+
+    q = Person.load(rr, p.id)
+    assert q.age == 50
+    q.save()
+    assert q.age == 50
+    q.refresh()
+    assert q.age == 50
 
