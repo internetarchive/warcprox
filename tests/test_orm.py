@@ -287,14 +287,16 @@ def test_default_values(rr):
 
     Person.table_ensure(rr)
     p = Person(rr, {})
-    assert not "age" in p
-    assert p.age is None
-    p.save()
     assert p.age == 0
+    assert not p.id
+    p.save()
     assert p.id
+    assert p.age == 0
 
     p.age = 50
+    assert p.age == 50
     p.save()
+    assert p.age == 50
 
     q = Person.load(rr, p.id)
     assert q.age == 50

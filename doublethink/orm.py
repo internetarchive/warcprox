@@ -164,12 +164,10 @@ class Document(dict, object):
         '''
         if pk is None:
             return None
-        doc = cls(rr)
-        doc[doc.pk_field] = pk
-        try:
-            doc.refresh()
-        except KeyError:
+        d = rr.table(cls.table).get(pk).run()
+        if d is None:
             return None
+        doc = cls(rr, d)
         return doc
 
     @classmethod
@@ -200,8 +198,9 @@ class Document(dict, object):
         dict.__setattr__(self, 'rr', rr)
         self._pk = None
         self._clear_updates()
-        for k in d:
+        for k in d or {}:
             self[k] = watch(d[k], callback=self._updated, field=k)
+        self.populate_defaults()
 
     def _clear_updates(self):
         self._updates = {}
@@ -293,7 +292,6 @@ class Document(dict, object):
         touched.
         '''
         should_insert = False
-        self.populate_defaults()
         try:
             self[self.pk_field]  # raises KeyError if missing
             if self._updates:
