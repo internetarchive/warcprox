@@ -34,7 +34,7 @@ before_script:
 
 script:
 - py.test -v -s tests
-- py.test -v -s --rethinkdb-servers=localhost tests tests
+- py.test -v -s --rethinkdb-servers=localhost tests
 - py.test -v -s --rethinkdb-servers=localhost --rethinkdb-big-table tests
 
 notifications:

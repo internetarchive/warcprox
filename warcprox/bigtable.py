@@ -159,7 +159,7 @@ class RethinkCaptures:
         else:
             bucket = "__unspecified__"
 
-        canon_surt = urlcanon.semantic(recorded_url.url).decode("utf-8")
+        canon_surt = urlcanon.semantic(recorded_url.url).__bytes__()
 
         entry = {
             # id only specified for rethinkdb partitioning
