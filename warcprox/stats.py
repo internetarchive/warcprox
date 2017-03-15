@@ -30,7 +30,7 @@ import warcprox
 import threading
 import rethinkdb as r
 import datetime
-import surt
+import urlcanon
 
 def _empty_bucket(bucket):
     return {
@@ -136,12 +136,12 @@ class StatsDb:
                         continue
                     buckets.append(bucket['bucket'])
                     if bucket.get('tally-domains'):
-                        url = warcprox.Url(recorded_url.url.decode('utf-8'))
+                        url = urlcanon.semantic(recorded_url.url)
                         for domain in bucket['tally-domains']:
-                            if url.matches_ip_or_domain(domain):
-                                buckets.append('%s:%s' % (
-                                    bucket['bucket'],
-                                    warcprox.normalize_host(domain)))
+                            domain = urlcanon.normalize_host(domain).decode('ascii')
+                            if urlcanon.url_matches_domain(url, domain):
+                                buckets.append(
+                                        '%s:%s' % (bucket['bucket'], domain))
                 else:
                     buckets.append(bucket)
         else:

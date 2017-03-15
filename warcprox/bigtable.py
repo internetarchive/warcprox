@@ -29,7 +29,7 @@ from hanzo import warctools
 import random
 import warcprox
 import base64
-import surt
+import urlcanon
 import os
 import hashlib
 import threading
@@ -159,8 +159,7 @@ class RethinkCaptures:
         else:
             bucket = "__unspecified__"
 
-        canon_surt = surt.surt(recorded_url.url.decode("utf-8"),
-            trailing_comma=True, host_massage=False, with_scheme=True)
+        canon_surt = urlcanon.semantic(recorded_url.url).decode("utf-8")
 
         entry = {
             # id only specified for rethinkdb partitioning

@@ -54,6 +54,7 @@ except ImportError:
     import SocketServer as socketserver
 import resource
 import concurrent.futures
+import urlcanon
 
 class ProxyingRecorder(object):
     """
@@ -204,15 +205,15 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 urllib_parse.ParseResult(
                     scheme='', netloc='', params=u.params, path=u.path or '/',
                     query=u.query, fragment=u.fragment))
-        self.hostname = warcprox.normalize_host(host)
+        self.hostname = urlcanon.normalize_host(host).decode('ascii')
 
     def _connect_to_remote_server(self):
         # Connect to destination
-        if self.onion_tor_socks_proxy_host and self.hostname.lower().endswith('.onion'):
-            self.logger.info("using tor socks proxy at %s:%s to connect to %s",
+        if self.onion_tor_socks_proxy_host and self.hostname.endswith('.onion'):
+            self.logger.info(
+                    "using tor socks proxy at %s:%s to connect to %s",
                     self.onion_tor_socks_proxy_host,
-                    self.onion_tor_socks_proxy_port or 1080,
-                    self.hostname)
+                    self.onion_tor_socks_proxy_port or 1080, self.hostname)
             self._remote_server_sock = socks.socksocket()
             self._remote_server_sock.set_proxy(
                     socks.SOCKS5, addr=self.onion_tor_socks_proxy_host,
@@ -247,8 +248,9 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         return self._remote_server_sock
 
     def _transition_to_ssl(self):
-        self.request = self.connection = ssl.wrap_socket(self.connection,
-                server_side=True, certfile=self.server.ca.cert_for_host(self.hostname))
+        self.request = self.connection = ssl.wrap_socket(
+                self.connection, server_side=True,
+                certfile=self.server.ca.cert_for_host(self.hostname))
 
     def do_CONNECT(self):
         '''

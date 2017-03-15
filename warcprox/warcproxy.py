@@ -44,7 +44,7 @@ from certauth.certauth import CertificateAuthority
 import warcprox
 import datetime
 import ipaddress
-import surt
+import urlcanon
 
 class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
     '''
@@ -62,45 +62,16 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
     # self.server is WarcProxy
     logger = logging.getLogger("warcprox.warcprox.WarcProxyHandler")
 
-    # XXX nearly identical to brozzler.site.Site._scope_rule_applies() but
-    # there's no obvious common dependency where this code should go... TBD
-    def _scope_rule_applies(self, rule):
-        u = warcprox.Url(self.url)
-
-        if "domain" in rule and not u.matches_ip_or_domain(rule["domain"]):
-            return False
-        if "url_match" in rule:
-            if rule["url_match"] == "STRING_MATCH":
-                return u.url.find(rule["value"]) >= 0
-            elif rule["url_match"] == "REGEX_MATCH":
-                try:
-                    return re.fullmatch(rule["value"], u.url)
-                except Exception as e:
-                    self.logger.warn(
-                            "caught exception matching against regex %s: %s",
-                            rule["value"], e)
-                    return False
-            elif rule["url_match"] == "SURT_MATCH":
-                return u.surt.startswith(rule["value"])
-            else:
-                self.logger.warn("invalid rule.url_match=%s", rule.url_match)
-                return False
-        else:
-            if "domain" in rule:
-                # we already know that it matches from earlier check
-                return True
-            else:
-                self.logger.warn("unable to make sense of scope rule %s", rule)
-                return False
-
     def _enforce_blocks(self, warcprox_meta):
         """
         Sends a 403 response and raises warcprox.RequestBlockedByRule if the
         url is blocked by a rule in warcprox_meta.
         """
+        url = urlcanon.semantic(self.url)
         if warcprox_meta and "blocks" in warcprox_meta:
             for rule in warcprox_meta["blocks"]:
-                if self._scope_rule_applies(rule):
+                block_rule = urlcanon.MatchRule(**rule)
+                if block_rule.applies(url):
                     body = ("request rejected by warcprox: blocked by "
                             "rule found in Warcprox-Meta header: %s"
                             % rule).encode("utf-8")
@@ -130,12 +101,10 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         # to apply this rule if the requested url is within domain
         bucket0_fields = bucket0.split(':')
         if len(bucket0_fields) == 2:
-            if not warcprox.host_matches_ip_or_domain(
-                    self.hostname, bucket0_fields[1]):
+            domain = urlcanon.normalize_host(bucket0_fields[1])
+            if not urlcanon.host_matches_domain(self.hostname, domain):
                 return # else host matches, go ahead and enforce the limit
-            bucket0 = '%s:%s' % (
-                    bucket0_fields[0],
-                    warcprox.normalize_host(bucket0_fields[1]))
+            bucket0 = '%s:%s' % (bucket0_fields[0], domain.decode('ascii'))
             _limit_key = '%s/%s/%s' % (bucket0, bucket1, bucket2)
 
         value = self.server.stats_db.value(bucket0, bucket1, bucket2)

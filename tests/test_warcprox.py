@@ -837,7 +837,6 @@ def test_block_rules(http_daemon, https_daemon, warcprox_, archiving_proxies):
 
     # blocked by SURT_MATCH
     url = 'http://localhost:{}/fuh/guh'.format(http_daemon.server_port)
-    # logging.info("%s => %s", repr(url), repr(warcprox.warcproxy.Url(url).surt))
     response = requests.get(
             url, proxies=archiving_proxies, headers=headers, stream=True)
     assert response.status_code == 403
