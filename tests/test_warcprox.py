@@ -1284,7 +1284,7 @@ def test_status_api(warcprox_):
     response = requests.get(url)
     assert response.status_code == 200
     response_dict = json.loads(response.content.decode('ascii'))
-    assert response_dict.keys() == {
+    assert set(response_dict.keys()) == {
             'role', 'version', 'host', 'address', 'port', 'pid', 'load',
             'queue_size'}
     assert response_dict['role'] == 'warcprox'
