@@ -45,6 +45,7 @@ import warcprox
 import datetime
 import ipaddress
 import urlcanon
+import os
 
 class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
     '''
@@ -197,6 +198,29 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         self.server.recorded_url_q.put(recorded_url)
 
         return recorded_url
+
+    def do_GET(self):
+        if self.path == '/status' and self.command == 'GET':
+            status_info = {
+                'role': 'warcprox',
+                'version': warcprox.__version__,
+                'host': socket.gethostname(),
+                'address': self.connection.getsockname()[0],
+                'port': self.connection.getsockname()[1],
+                'load': 1.0 * self.server.recorded_url_q.qsize() / (
+                    self.server.recorded_url_q.maxsize or 100),
+                'queue_size': self.server.recorded_url_q.qsize(),
+                'pid': os.getpid(),
+            }
+            payload = json.dumps(
+                    status_info, indent=2).encode('utf-8') + b'\n'
+            self.send_response(200, 'OK')
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Content-Length', len(payload))
+            self.end_headers()
+            self.wfile.write(payload)
+        else:
+            self.do_COMMAND()
 
     # deprecated
     def do_PUTMETA(self):

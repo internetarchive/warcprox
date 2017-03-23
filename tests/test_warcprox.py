@@ -1279,6 +1279,18 @@ def test_dedup_ok_flag(
     assert results[0]['filename'] == results[1]['filename']
     assert results[0]['offset'] < results[1]['offset']
 
+def test_status_api(warcprox_):
+    url = 'http://localhost:%s/status' % warcprox_.proxy.server_port
+    response = requests.get(url)
+    assert response.status_code == 200
+    response_dict = json.loads(response.content.decode('ascii'))
+    assert response_dict.keys() == {
+            'role', 'version', 'host', 'address', 'port', 'pid', 'load',
+            'queue_size'}
+    assert response_dict['role'] == 'warcprox'
+    assert response_dict['version'] == warcprox.__version__
+    assert response_dict['port'] == warcprox_.proxy.server_port
+
 if __name__ == '__main__':
     pytest.main()
 
