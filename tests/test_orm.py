@@ -253,7 +253,8 @@ def test_orm_pk(rr):
     assert NonstandardPrimaryKey.load(rr, 'no_such_thing') is None
 
     # new doc with (only) primary key
-    d = NonstandardPrimaryKey(rr, {'not_id': 1})
+    d = NonstandardPrimaryKey(rr)
+    d.not_id = 1
     assert d.not_id == 1
     assert d.pk_value == 1
     d.save()

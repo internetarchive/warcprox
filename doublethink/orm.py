@@ -195,11 +195,30 @@ class Document(dict, object):
             cls.table_create(rr)
 
     def __init__(self, rr, d={}):
+        '''
+        Sets initial values from `d`, then calls `self.populate_defaults()`.
+
+        Args:
+            rr (doublethink.Rethinker): rethinker
+            d (dict): initial value
+
+        If you want to create a new document, and set the primary key yourself,
+        do not call `doc = MyDocument(rr, d={'id': 'my_id', ...})`. The
+        assumption is that if the primary key is set in the constructor, the
+        document already exists in the database. Thus a call to `doc.save()`
+        may not save anything. Do this instead:
+
+            doc = MyDocument(rr, d={'id': 'my_id', ...})
+            doc.id = 'my_id'
+            # ...whatever else...
+            doc.save()
+        '''
         dict.__setattr__(self, 'rr', rr)
         self._pk = None
         self._clear_updates()
         for k in d or {}:
-            self[k] = watch(d[k], callback=self._updated, field=k)
+            dict.__setitem__(
+                    self, k, watch(d[k], callback=self._updated, field=k))
         self.populate_defaults()
 
     def _clear_updates(self):
