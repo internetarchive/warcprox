@@ -252,8 +252,12 @@ def main(argv=sys.argv):
     else:
         loglevel = logging.INFO
 
-    logging.basicConfig(stream=sys.stdout, level=loglevel,
-            format='%(asctime)s %(process)d %(levelname)s %(threadName)s %(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s')
+    logging.basicConfig(
+            stream=sys.stdout, level=loglevel,
+            format=(
+                '%(asctime)s %(process)d %(levelname)s %(threadName)s '
+                '%(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s'))
+    logging.getLogger('kafka').setLevel(loglevel + 5)
 
     real_main(args)
 
