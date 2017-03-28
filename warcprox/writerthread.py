@@ -39,6 +39,7 @@ import hanzo.httptools
 from hanzo import warctools
 import warcprox
 import cProfile
+import sys
 
 class WarcWriterThread(threading.Thread):
     logger = logging.getLogger("warcprox.warcproxwriter.WarcWriterThread")
@@ -102,8 +103,18 @@ class WarcWriterThread(threading.Thread):
 
                 self.logger.info('WarcWriterThread shutting down')
                 self.writer_pool.close_writers()
-            except:
-                self.logger.critical("WarcWriterThread will try to continue after unexpected error", exc_info=True)
+            except BaseException as e:
+                if isinstance(e, OSError) and e.errno == 28:
+                    # OSError: [Errno 28] No space left on device
+                    self.logger.critical(
+                            'shutting down due to fatal problem: %s: %s',
+                            e.__class__.__name__, e)
+                    self.writer_pool.close_writers()
+                    sys.exit(1)
+
+                self.logger.critical(
+                    'WarcWriterThread will try to continue after unexpected '
+                    'error', exc_info=True)
                 time.sleep(0.5)
 
     # closest thing we have to heritrix crawl log at the moment
