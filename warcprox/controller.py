@@ -149,6 +149,7 @@ class WarcproxController(object):
         status_info['queued_urls'] = self.proxy.recorded_url_q.qsize()
         status_info['queue_max_size'] = self.proxy.recorded_url_q.maxsize
         status_info['seconds_behind'] = self.proxy.recorded_url_q.seconds_behind()
+        status_info['threads'] = self.proxy.pool._max_workers
 
         self.status_info = self.service_registry.heartbeat(status_info)
         self.logger.log(

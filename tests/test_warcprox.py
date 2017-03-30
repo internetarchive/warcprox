@@ -1285,32 +1285,35 @@ def test_status_api(warcprox_):
     url = 'http://localhost:%s/status' % warcprox_.proxy.server_port
     response = requests.get(url)
     assert response.status_code == 200
-    response_dict = json.loads(response.content.decode('ascii'))
-    assert set(response_dict.keys()) == {
+    status = json.loads(response.content.decode('ascii'))
+    assert set(status.keys()) == {
             'role', 'version', 'host', 'address', 'port', 'pid', 'load',
-            'queued_urls', 'queue_max_size', 'seconds_behind'}
-    assert response_dict['role'] == 'warcprox'
-    assert response_dict['version'] == warcprox.__version__
-    assert response_dict['port'] == warcprox_.proxy.server_port
-    assert response_dict['pid'] == os.getpid()
+            'queued_urls', 'queue_max_size', 'seconds_behind', 'threads'}
+    assert status['role'] == 'warcprox'
+    assert status['version'] == warcprox.__version__
+    assert status['port'] == warcprox_.proxy.server_port
+    assert status['pid'] == os.getpid()
+    assert status['threads'] == warcprox_.proxy.pool._max_workers
 
 def test_svcreg_status(warcprox_, service_registry):
     if service_registry:
         start = time.time()
         while time.time() - start < 15:
-            svc = service_registry.available_service('warcprox')
-            if svc:
+            status = service_registry.available_service('warcprox')
+            if status:
                 break
             time.sleep(0.5)
-        assert svc
-        assert set(svc.keys()) == {
+        assert status
+        assert set(status.keys()) == {
                 'id', 'role', 'version', 'host', 'port', 'pid', 'load',
                 'queued_urls', 'queue_max_size', 'seconds_behind',
-                'first_heartbeat', 'heartbeat_interval', 'last_heartbeat'}
-        assert svc['role'] == 'warcprox'
-        assert svc['version'] == warcprox.__version__
-        assert svc['port'] == warcprox_.proxy.server_port
-        assert svc['pid'] == os.getpid()
+                'first_heartbeat', 'heartbeat_interval', 'last_heartbeat',
+                'threads'}
+        assert status['role'] == 'warcprox'
+        assert status['version'] == warcprox.__version__
+        assert status['port'] == warcprox_.proxy.server_port
+        assert status['pid'] == os.getpid()
+        assert status['threads'] == warcprox_.proxy.pool._max_workers
 
 def test_timestamped_queue():
     # see also test_queue.py

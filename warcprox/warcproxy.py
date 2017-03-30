@@ -213,6 +213,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 'queue_max_size': self.server.recorded_url_q.maxsize,
                 'seconds_behind': self.server.recorded_url_q.seconds_behind(),
                 'pid': os.getpid(),
+                'threads': self.server.pool._max_workers,
             }
             payload = json.dumps(
                     status_info, indent=2).encode('utf-8') + b'\n'
