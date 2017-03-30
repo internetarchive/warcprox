@@ -33,9 +33,9 @@ before_script:
 - pip install . pytest requests
 
 script:
-- py.test -v -s tests
-- py.test -v -s --rethinkdb-servers=localhost tests
-- py.test -v -s --rethinkdb-servers=localhost --rethinkdb-big-table tests
+- py.test -vv tests
+- py.test -vv --rethinkdb-servers=localhost tests
+- py.test -vv --rethinkdb-servers=localhost --rethinkdb-big-table tests
 
 notifications:
   slack:

@@ -7,7 +7,7 @@
 #
 # tests/conftest.py - command line options for warcprox tests
 #
-# Copyright (C) 2015-2016 Internet Archive
+# Copyright (C) 2015-2017 Internet Archive
 #
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
@@ -37,12 +37,12 @@ for python in python2.7 python3
 do
     docker run --rm --volume="$script_dir/..:/warcprox" internetarchive/warcprox-tests /sbin/my_init -- \
         bash -x -c "cd /tmp && git clone /warcprox && cd /tmp/warcprox \
-            && (cd /warcprox && git diff) | patch -p1 \
+            && (cd /warcprox && git diff HEAD) | patch -p1 \
             && virtualenv -p $python /tmp/venv \
             && source /tmp/venv/bin/activate \
             && pip --log-file /tmp/pip.log install . pytest requests \
-            && py.test -s tests \
-            && py.test -s --rethinkdb-servers=localhost tests \
-            && py.test -s --rethinkdb-servers=localhost --rethinkdb-big-table tests"
+            && py.test -vv tests \
+            && py.test -vv --rethinkdb-servers=localhost tests \
+            && py.test -vv --rethinkdb-servers=localhost --rethinkdb-big-table tests"
 done
 

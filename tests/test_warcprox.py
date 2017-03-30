@@ -44,6 +44,7 @@ import traceback
 import signal
 from collections import Counter
 import socket
+import datetime
 
 try:
     import http.server as http_server
@@ -352,7 +353,7 @@ def warcprox_(request, captures_db, dedup_db, stats_db, service_registry):
     ca_dir = tempfile.mkdtemp(prefix='warcprox-test-', suffix='-ca')
     ca = certauth.certauth.CertificateAuthority(ca_file, ca_dir, 'warcprox-test')
 
-    recorded_url_q = queue.Queue()
+    recorded_url_q = warcprox.TimestampedQueue()
 
     options = warcprox.Options(port=0, playback_port=0,
             onion_tor_socks_proxy='localhost:9050')
@@ -1287,10 +1288,42 @@ def test_status_api(warcprox_):
     response_dict = json.loads(response.content.decode('ascii'))
     assert set(response_dict.keys()) == {
             'role', 'version', 'host', 'address', 'port', 'pid', 'load',
-            'queue_size'}
+            'queued_urls', 'queue_max_size', 'seconds_behind'}
     assert response_dict['role'] == 'warcprox'
     assert response_dict['version'] == warcprox.__version__
     assert response_dict['port'] == warcprox_.proxy.server_port
+    assert response_dict['pid'] == os.getpid()
+
+def test_svcreg_status(warcprox_, service_registry):
+    if service_registry:
+        start = time.time()
+        while time.time() - start < 15:
+            svc = service_registry.available_service('warcprox')
+            if svc:
+                break
+            time.sleep(0.5)
+        assert svc
+        assert set(svc.keys()) == {
+                'id', 'role', 'version', 'host', 'port', 'pid', 'load',
+                'queued_urls', 'queue_max_size', 'seconds_behind',
+                'first_heartbeat', 'heartbeat_interval', 'last_heartbeat'}
+        assert svc['role'] == 'warcprox'
+        assert svc['version'] == warcprox.__version__
+        assert svc['port'] == warcprox_.proxy.server_port
+        assert svc['pid'] == os.getpid()
+
+def test_timestamped_queue():
+    # see also test_queue.py
+    q = warcprox.TimestampedQueue()
+    q.put('monkey')
+    q.put('flonkey')
+    timestamp_item = q.get_with_timestamp()
+    assert isinstance(timestamp_item, tuple)
+    assert isinstance(timestamp_item[0], datetime.datetime)
+    assert timestamp_item[1] == 'monkey'
+    assert timestamp_item[0] < q.oldest_timestamp()
+    time.sleep(1)
+    assert q.seconds_behind() > 1
 
 if __name__ == '__main__':
     pytest.main()

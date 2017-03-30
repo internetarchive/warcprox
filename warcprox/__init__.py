@@ -1,7 +1,7 @@
 """
 warcprox/__init__.py - warcprox package main file, contains some utility code
 
-Copyright (C) 2013-2016 Internet Archive
+Copyright (C) 2013-2017 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -22,6 +22,11 @@ USA.
 from argparse import Namespace as _Namespace
 from pkg_resources import get_distribution as _get_distribution
 __version__ = _get_distribution('warcprox').version
+try:
+    import queue
+except ImportError:
+    import Queue as queue
+import datetime
 
 def digest_str(hash_obj, base32):
     import base64
@@ -35,6 +40,36 @@ class Options(_Namespace):
             return super(Options, self).__getattr__(self, name)
         except AttributeError:
             return None
+
+class TimestampedQueue(queue.Queue):
+    """
+    A queue.Queue that exposes the time enqueued of the oldest item in the
+    queue.
+    """
+    def put(self, item, block=True, timeout=None):
+        return queue.Queue.put(
+                self, (datetime.datetime.utcnow(), item), block, timeout)
+
+    def get(self, block=True, timeout=None):
+        timestamp, item = self.get_with_timestamp(block, timeout)
+        return item
+
+    get_with_timestamp = queue.Queue.get
+
+    def oldest_timestamp(self):
+        with self.mutex:
+            if self.queue:
+                timestamp, item = self.queue[0]
+            else:
+                return None
+        return timestamp
+
+    def seconds_behind(self):
+        timestamp = self.oldest_timestamp()
+        if timestamp:
+            return (datetime.datetime.utcnow() - timestamp).total_seconds()
+        else:
+            return 0.0
 
 # XXX linux-specific
 def gettid():

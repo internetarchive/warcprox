@@ -4,7 +4,7 @@ starting up and shutting down the various components of warcprox, and for
 sending heartbeats to the service registry if configured to do so; also has
 some memory profiling capabilities
 
-Copyright (C) 2013-2016 Internet Archive
+Copyright (C) 2013-2017 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -140,11 +140,15 @@ class WarcproxController(object):
         else:
             status_info = {
                 'role': 'warcprox',
+                'version': warcprox.__version__,
                 'heartbeat_interval': self.HEARTBEAT_INTERVAL,
                 'port': self.options.port,
             }
-        status_info['load'] = 1.0 * self.proxy.recorded_url_q.qsize() / (self.proxy.recorded_url_q.maxsize or 100)
-        status_info['queue_size'] = self.proxy.recorded_url_q.qsize()
+        status_info['load'] = 1.0 * self.proxy.recorded_url_q.qsize() / (
+                self.proxy.recorded_url_q.maxsize or 100)
+        status_info['queued_urls'] = self.proxy.recorded_url_q.qsize()
+        status_info['queue_max_size'] = self.proxy.recorded_url_q.maxsize
+        status_info['seconds_behind'] = self.proxy.recorded_url_q.seconds_behind()
 
         self.status_info = self.service_registry.heartbeat(status_info)
         self.logger.log(

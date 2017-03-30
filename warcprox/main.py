@@ -3,7 +3,7 @@
 warcprox/main.py - entrypoint for warcprox executable, parses command line
 arguments, initializes components, starts controller, handles signals
 
-Copyright (C) 2013-2016 Internet Archive
+Copyright (C) 2013-2017 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -181,7 +181,7 @@ def init_controller(args):
                 args.kafka_broker_list, args.kafka_capture_feed_topic)
         listeners.append(kafka_capture_feed)
 
-    recorded_url_q = queue.Queue(maxsize=args.queue_size)
+    recorded_url_q = warcprox.TimestampedQueue(maxsize=args.queue_size)
 
     ca_name = 'Warcprox CA on {}'.format(socket.gethostname())[:64]
     ca = certauth.certauth.CertificateAuthority(args.cacert, args.certs_dir,

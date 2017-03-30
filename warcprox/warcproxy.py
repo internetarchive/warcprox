@@ -209,7 +209,9 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 'port': self.connection.getsockname()[1],
                 'load': 1.0 * self.server.recorded_url_q.qsize() / (
                     self.server.recorded_url_q.maxsize or 100),
-                'queue_size': self.server.recorded_url_q.qsize(),
+                'queued_urls': self.server.recorded_url_q.qsize(),
+                'queue_max_size': self.server.recorded_url_q.maxsize,
+                'seconds_behind': self.server.recorded_url_q.seconds_behind(),
                 'pid': os.getpid(),
             }
             payload = json.dumps(
@@ -374,7 +376,8 @@ class SingleThreadedWarcProxy(http_server.HTTPServer, object):
         if recorded_url_q is not None:
             self.recorded_url_q = recorded_url_q
         else:
-            self.recorded_url_q = queue.Queue(maxsize=options.queue_size or 1000)
+            self.recorded_url_q = warcprox.TimestampedQueue(
+                    maxsize=options.queue_size or 1000)
 
         self.stats_db = stats_db
 
