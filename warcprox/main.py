@@ -100,9 +100,9 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
             default=None, help='kafka broker list for capture feed')
     arg_parser.add_argument('--kafka-capture-feed-topic', dest='kafka_capture_feed_topic',
             default=None, help='kafka capture feed topic')
-    arg_parser.add_argument('--queue-size', dest='queue_size', default=500,
-            help=argparse.SUPPRESS)
-    arg_parser.add_argument('--max-threads', dest='max_threads',
+    arg_parser.add_argument('--queue-size', dest='queue_size', type=int,
+            default=500, help=argparse.SUPPRESS)
+    arg_parser.add_argument('--max-threads', dest='max_threads', type=int,
             help=argparse.SUPPRESS)
     arg_parser.add_argument('--profile', action='store_true', default=False,
             help=argparse.SUPPRESS)
