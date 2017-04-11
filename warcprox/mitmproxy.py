@@ -55,6 +55,7 @@ except ImportError:
 import resource
 import concurrent.futures
 import urlcanon
+import time
 
 class ProxyingRecorder(object):
     """
@@ -429,6 +430,20 @@ class PooledMixIn(socketserver.ThreadingMixIn):
 
     def process_request(self, request, client_address):
         self.pool.submit(self.process_request_thread, request, client_address)
+
+    def get_request(self):
+        '''
+        Waits until no other requests are waiting for a thread in the pool to
+        become available, then calls `socket.accept`.
+
+        This override is necessary for the size of the thread pool to act as a
+        cap on the number of open file handles.
+        '''
+        # neither threading.Condition Queue.not_empty nor Queue.not_full do
+        # what we need here, right?
+        while self.pool._work_queue.qsize() > 0:
+            time.sleep(0.5)
+        return self.socket.accept()
 
 class MitmProxy(http_server.HTTPServer):
     def finish_request(self, request, client_address):
