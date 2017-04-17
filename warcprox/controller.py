@@ -143,7 +143,7 @@ class WarcproxController(object):
                 'role': 'warcprox',
                 'version': warcprox.__version__,
                 'heartbeat_interval': self.HEARTBEAT_INTERVAL,
-                'port': self.options.port,
+                'port': self.proxy.server_port,
             }
         status_info['load'] = 1.0 * self.proxy.recorded_url_q.qsize() / (
                 self.proxy.recorded_url_q.maxsize or 100)

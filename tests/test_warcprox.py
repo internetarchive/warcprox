@@ -1356,6 +1356,36 @@ def test_controller_with_defaults():
     assert not controller.warc_writer_thread.writer_pool.default_warc_writer.record_builder.base32
     assert controller.warc_writer_thread.writer_pool.default_warc_writer.record_builder.digest_algorithm == 'sha1'
 
+def test_choose_a_port_for_me(service_registry):
+    options = warcprox.Options()
+    options.port = 0
+    controller = warcprox.controller.WarcproxController(
+            service_registry=service_registry, options=options)
+    assert controller.proxy.server_port != 0
+    assert controller.proxy.server_port != 8000
+    assert controller.proxy.server_address == (
+            '127.0.0.1', controller.proxy.server_port)
+
+    th = threading.Thread(target=controller.run_until_shutdown)
+    th.start()
+
+    # check that service registry entry lists the correct port
+    start = time.time()
+    ports = []
+    while time.time() - start < 30:
+        svcs = service_registry.available_services('warcprox')
+        ports = [svc['port'] for svc in svcs]
+        if controller.proxy.server_port in ports:
+            break
+    assert controller.proxy.server_port in ports
+
+    # check that the status api lists the correct port
+    url = 'http://localhost:%s/status' % controller.proxy.server_port
+    response = requests.get(url)
+    assert response.status_code == 200
+    status = json.loads(response.content.decode('ascii'))
+    assert status['port'] == controller.proxy.server_port
+
 if __name__ == '__main__':
     pytest.main()
 
