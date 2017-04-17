@@ -438,6 +438,9 @@ class PooledMixIn(socketserver.ThreadingMixIn):
 
         This override is necessary for the size of the thread pool to act as a
         cap on the number of open file handles.
+
+        N.b. this method blocks if necessary, even though it's called from
+        `_handle_request_noblock`.
         '''
         # neither threading.Condition Queue.not_empty nor Queue.not_full do
         # what we need here, right?

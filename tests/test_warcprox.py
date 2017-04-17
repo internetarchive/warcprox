@@ -1328,6 +1328,34 @@ def test_timestamped_queue():
     time.sleep(1)
     assert q.seconds_behind() > 1
 
+def test_controller_with_defaults():
+    # tests some initialization code that we rarely touch otherwise
+    controller = warcprox.controller.WarcproxController()
+    assert controller.proxy
+    assert not controller.proxy_thread
+    assert not controller.playback_proxy
+    assert not controller.playback_proxy_thread
+    assert controller.warc_writer_thread
+    assert controller.proxy.RequestHandlerClass == warcprox.warcproxy.WarcProxyHandler
+    assert controller.proxy.ca
+    assert controller.proxy.digest_algorithm == 'sha1'
+    assert controller.proxy.pool
+    assert controller.proxy.recorded_url_q
+    assert controller.proxy.server_address == ('127.0.0.1', 8000)
+    assert controller.proxy.server_port == 8000
+    assert controller.warc_writer_thread.recorded_url_q
+    assert controller.warc_writer_thread.recorded_url_q is controller.proxy.recorded_url_q
+    assert controller.warc_writer_thread.writer_pool
+    assert controller.warc_writer_thread.writer_pool.default_warc_writer
+    assert controller.warc_writer_thread.writer_pool.default_warc_writer.directory == './warcs'
+    assert controller.warc_writer_thread.writer_pool.default_warc_writer.rollover_idle_time is None
+    assert controller.warc_writer_thread.writer_pool.default_warc_writer.rollover_size == 1000000000
+    assert controller.warc_writer_thread.writer_pool.default_warc_writer.prefix == 'warcprox'
+    assert controller.warc_writer_thread.writer_pool.default_warc_writer.gzip is False
+    assert controller.warc_writer_thread.writer_pool.default_warc_writer.record_builder
+    assert not controller.warc_writer_thread.writer_pool.default_warc_writer.record_builder.base32
+    assert controller.warc_writer_thread.writer_pool.default_warc_writer.record_builder.digest_algorithm == 'sha1'
+
 if __name__ == '__main__':
     pytest.main()
 

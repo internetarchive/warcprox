@@ -53,12 +53,13 @@ class WarcproxController(object):
         if proxy is not None:
             self.proxy = proxy
         else:
-            self.proxy = warcprox.warcprox.WarcProxy()
+            self.proxy = warcprox.warcproxy.WarcProxy(options=options)
 
         if warc_writer_thread is not None:
             self.warc_writer_thread = warc_writer_thread
         else:
-            self.warc_writer_thread = warcprox.warcwriter.WarcWriterThread(recorded_url_q=self.proxy.recorded_url_q)
+            self.warc_writer_thread = warcprox.writerthread.WarcWriterThread(
+                    recorded_url_q=self.proxy.recorded_url_q)
 
         self.proxy_thread = None
         self.playback_proxy_thread = None

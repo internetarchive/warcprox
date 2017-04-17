@@ -2,7 +2,7 @@
 warcprox/writerthread.py - warc writer thread, reads from the recorded url
 queue, writes warc records, runs final tasks after warc records are written
 
-Copyright (C) 2013-2016 Internet Archive
+Copyright (C) 2013-2017 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -44,7 +44,9 @@ import sys
 class WarcWriterThread(threading.Thread):
     logger = logging.getLogger("warcprox.warcproxwriter.WarcWriterThread")
 
-    def __init__(self, recorded_url_q=None, writer_pool=None, dedup_db=None, listeners=None, options=warcprox.Options()):
+    def __init__(
+            self, recorded_url_q=None, writer_pool=None, dedup_db=None,
+            listeners=None, options=warcprox.Options()):
         """recorded_url_q is a queue.Queue of warcprox.warcprox.RecordedUrl."""
         threading.Thread.__init__(self, name='WarcWriterThread')
         self.recorded_url_q = recorded_url_q
@@ -52,7 +54,7 @@ class WarcWriterThread(threading.Thread):
         if writer_pool:
             self.writer_pool = writer_pool
         else:
-            self.writer_pool = WarcWriterPool()
+            self.writer_pool = warcprox.writer.WarcWriterPool()
         self.dedup_db = dedup_db
         self.listeners = listeners
         self.options = options
