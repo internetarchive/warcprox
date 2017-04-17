@@ -1368,23 +1368,27 @@ def test_choose_a_port_for_me(service_registry):
 
     th = threading.Thread(target=controller.run_until_shutdown)
     th.start()
+    try:
 
-    # check that service registry entry lists the correct port
-    start = time.time()
-    ports = []
-    while time.time() - start < 30:
-        svcs = service_registry.available_services('warcprox')
-        ports = [svc['port'] for svc in svcs]
-        if controller.proxy.server_port in ports:
-            break
-    assert controller.proxy.server_port in ports
+        # check that service registry entry lists the correct port
+        start = time.time()
+        ports = []
+        while time.time() - start < 30:
+            svcs = service_registry.available_services('warcprox')
+            ports = [svc['port'] for svc in svcs]
+            if controller.proxy.server_port in ports:
+                break
+        assert controller.proxy.server_port in ports
 
-    # check that the status api lists the correct port
-    url = 'http://localhost:%s/status' % controller.proxy.server_port
-    response = requests.get(url)
-    assert response.status_code == 200
-    status = json.loads(response.content.decode('ascii'))
-    assert status['port'] == controller.proxy.server_port
+        # check that the status api lists the correct port
+        url = 'http://localhost:%s/status' % controller.proxy.server_port
+        response = requests.get(url)
+        assert response.status_code == 200
+        status = json.loads(response.content.decode('ascii'))
+        assert status['port'] == controller.proxy.server_port
+    finally:
+        controller.stop.set()
+        th.join()
 
 if __name__ == '__main__':
     pytest.main()
