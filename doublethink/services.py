@@ -81,6 +81,26 @@ class ServiceRegistry(object):
         if result != {'deleted':1,'errors':0,'inserted':0,'replaced':0,'skipped':0,'unchanged':0}:
             self.logger.warn('unexpected result attempting to delete id=%s from rethinkdb services table: %s', id, result)
 
+    def leader(self, role_name, default=None):
+        '''
+        Perform leader election for a role.
+
+        If only 'role_name' is provided, simply looks up a leader for 'role_name', returning None on failure.
+
+        If 'default' is provided, it is considered to be a leader candidate. The supplied leader candidate
+        will become leader in the case that: 
+          a) there is no registered leader 
+            OR
+          b) the current leader has missed 3 or more heartbeat intervals.
+        '''
+        if default is not None:
+            default['id'] = role_name
+            default['last_heartbeat'] = r.now()
+            if not 'heartbeat_interval' in default:
+                raise Exception('Default service must contain a key called "heartbeat_interval"')
+            self.rr.table('services', read_mode='majority').get(role_name).replace(lambda row: r.branch(r.branch(row, row['last_heartbeat'] > r.now() - row['heartbeat_interval'] * 3, False), row, default)).run()
+        return self.rr.table('services', read_mode='majority').get(role_name).run()
+
     def available_service(self, role):
         try:
             result = self.rr.table('services').filter({"role":role}).filter(
