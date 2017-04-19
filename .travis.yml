@@ -1,20 +1,20 @@
 language: python
 python:
-        - 3.6
-        - 3.5
-        - 3.4
-        - 2.7
-        - 3.7-dev
-        - nightly
-        - pypy
-        - pypy3
+- 3.6
+- 3.5
+- 3.4
+- 2.7
+- 3.7-dev
+- nightly
+- pypy
+- pypy3
 services:
-        - docker
+- docker
 before_install:
-        - sudo service docker restart ; sleep 10  # https://github.com/travis-ci/travis-ci/issues/4778
-        - docker run -d --publish=28015:28015 rethinkdb
+- sudo service docker restart ; sleep 10  # https://github.com/travis-ci/travis-ci/issues/4778
+- docker run -d --publish=28015:28015 rethinkdb
 install:
-        - pip install . pytest
+- pip install . pytest
 script:
-        - py.test -v -s tests
+- py.test -v tests
 
