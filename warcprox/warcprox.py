@@ -49,7 +49,8 @@ class ProxyingRecorder(object):
 
     logger = logging.getLogger("warcprox.warcprox.ProxyingRecorder")
 
-    def __init__(self, fp, proxy_dest, digest_algorithm='sha1'):
+    def __init__(self, fp, proxy_dest, digest_algorithm='sha1',
+                 interrupt_on_terminate=False, stop=None):
         self.fp = fp
         # "The file has no name, and will cease to exist when it is closed."
         self.tempfile = tempfile.SpooledTemporaryFile(max_size=512*1024)
@@ -61,6 +62,8 @@ class ProxyingRecorder(object):
         self._proxy_dest_conn_open = True
         self._prev_hunk_last_two_bytes = b''
         self.len = 0
+        self.interrupt_on_terminate = interrupt_on_terminate
+        self.stop = stop
 
     def _update_payload_digest(self, hunk):
         if self.payload_digest is None:
@@ -110,6 +113,9 @@ class ProxyingRecorder(object):
         self.len += len(hunk)
 
     def read(self, size=-1):
+        if self.interrupt_on_terminate and self.stop.is_set():
+            self.logger.debug("Interrupting proxying record since stop is set")
+            raise StopException()
         hunk = self.fp.read(size)
         self._update(hunk)
         return hunk
@@ -141,12 +147,13 @@ class ProxyingRecorder(object):
 
 class ProxyingRecordingHTTPResponse(http_client.HTTPResponse):
 
-    def __init__(self, sock, debuglevel=0, method=None, proxy_dest=None, digest_algorithm='sha1'):
+    def __init__(self, sock, debuglevel=0, method=None, proxy_dest=None, digest_algorithm='sha1',
+                 interrupt_on_terminate=False, stop=None):
         http_client.HTTPResponse.__init__(self, sock, debuglevel=debuglevel, method=method)
 
         # Keep around extra reference to self.fp because HTTPResponse sets
         # self.fp=None after it finishes reading, but we still need it
-        self.recorder = ProxyingRecorder(self.fp, proxy_dest, digest_algorithm)
+        self.recorder = ProxyingRecorder(self.fp, proxy_dest, digest_algorithm, interrupt_on_terminate, stop)
         self.fp = self.recorder
 
 
@@ -198,7 +205,9 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         # Proxy and record the response
         h = ProxyingRecordingHTTPResponse(self._proxy_sock,
                 proxy_dest=self.connection,
-                digest_algorithm=self.server.digest_algorithm)
+                digest_algorithm=self.server.digest_algorithm,
+                interrupt_on_terminate=self.server.interrupt_on_terminate,
+                stop=self.server.stop)
         h.begin()
 
         remote_ip = self._proxy_sock.getpeername()[0]
@@ -216,6 +225,8 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 self.logger.debug("Incomplete read due to interrupt in order to stop")
             else:
                 raise e
+        except StopException, e:
+            self.logger.debug("Caught StopException so stopping read")
 
         self.log_request(h.status, h.recorder.len)
 
@@ -290,8 +301,6 @@ class WarcProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
     def __init__(self, server_address=('localhost', 8000),
             req_handler_class=WarcProxyHandler, bind_and_activate=True,
             ca=None, recorded_url_q=None, digest_algorithm='sha1', interrupt_on_terminate=False):
-        http_server.HTTPServer.__init__(self, server_address, req_handler_class, bind_and_activate)
-
         # This will be used to tell the WarcProxyHandler to interrupt.
         self.stop = threading.Event()
 
@@ -314,6 +323,8 @@ class WarcProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
         else:
             self.recorded_url_q = queue.Queue()
 
+        http_server.HTTPServer.__init__(self, server_address, req_handler_class, bind_and_activate)
+
     def server_activate(self):
         http_server.HTTPServer.server_activate(self)
         self.logger.info('WarcProxy listening on {0}:{1}'.format(self.server_address[0], self.server_address[1]))
@@ -332,3 +343,6 @@ class WarcProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
                 handler.done.wait(15)
 
         self.logger.debug("Done waiting for handlers")
+
+class StopException(Exception):
+    pass
