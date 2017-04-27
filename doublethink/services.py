@@ -59,6 +59,13 @@ class ServiceRegistry(object):
         Returns updated status info on success, un-updated status info on
         failure.
         '''
+        for field in 'role', 'heartbeat_interval', 'load':
+            if not field in status_info:
+                raise Exception(
+                        'status_info is missing required field %s', field)
+        val = status_info['heartbeat_interval']
+        if not (isinstance(val, float) or isinstance(val, int)) or val <= 0:
+            raise Exception('heartbeat_interval must be a number > 0')
         updated_status_info = dict(status_info)
         updated_status_info['last_heartbeat'] = r.now()
         if not 'first_heartbeat' in updated_status_info:

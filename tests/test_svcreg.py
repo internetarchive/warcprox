@@ -80,6 +80,30 @@ def test_leader_election(rr):
 
 def test_service_registry(rr):
     svcreg = doublethink.ServiceRegistry(rr)
+    # missing required fields
+    with pytest.raises(Exception) as excinfo:
+        svcreg.heartbeat({})
+    with pytest.raises(Exception) as excinfo:
+        svcreg.heartbeat({"role":"foo","load":1})
+    with pytest.raises(Exception) as excinfo:
+        svcreg.heartbeat({"role":"foo","heartbeat_interval":1.0})
+    with pytest.raises(Exception) as excinfo:
+        svcreg.heartbeat({"heartbeat_interval":1.0,"load":1})
+
+    # invalid heartbeat interval (we accept anything for load and role)
+    with pytest.raises(Exception) as excinfo:
+        svcreg.heartbeat({"heartbeat_interval":-1,"role":"foo","load":1})
+    with pytest.raises(Exception) as excinfo:
+        svcreg.heartbeat({"heartbeat_interval":"strang","role":"foo","load":1})
+    with pytest.raises(Exception) as excinfo:
+        svcreg.heartbeat({"heartbeat_interval":[],"role":"foo","load":1})
+    with pytest.raises(Exception) as excinfo:
+        svcreg.heartbeat({"heartbeat_interval":[1],"role":"foo","load":1})
+    with pytest.raises(Exception) as excinfo:
+        svcreg.heartbeat({"heartbeat_interval":{},"role":"foo","load":1})
+    with pytest.raises(Exception) as excinfo:
+        svcreg.heartbeat({"heartbeat_interval":{1:2},"role":"foo","load":1})
+
     assert svcreg.available_service("yes-such-role") == None
     assert svcreg.available_services("yes-such-role") == []
     assert svcreg.available_services() == []
