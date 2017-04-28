@@ -80,7 +80,7 @@ def _send(self, data):
         logging.info('sending data from %s', repr(data))
     orig_send(self, data)
 ### uncomment this to block see raw requests going over the wire
-http_client.HTTPConnection.send = _send
+# http_client.HTTPConnection.send = _send
 
 logging.basicConfig(
         stream=sys.stdout, level=logging.INFO, # level=warcprox.TRACE,
