@@ -163,9 +163,9 @@ class ProxyingRecordingHTTPResponse(http_client.HTTPResponse):
 
         status_and_headers = 'HTTP/1.1 {} {}\r\n'.format(
                 self.status, self.reason)
-        self.headers['Via'] = via_header_value(
-                self.headers.get('Via'), '%0.1f' % (self.version / 10))
-        for k,v in self.headers.items():
+        self.msg['Via'] = via_header_value(
+                self.msg.get('Via'), '%0.1f' % (self.version / 10.0))
+        for k,v in self.msg.items():
             if k.lower() not in (
                     'connection', 'proxy-connection', 'keep-alive',
                     'proxy-authenticate', 'proxy-authorization', 'upgrade',
