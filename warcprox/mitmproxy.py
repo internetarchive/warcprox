@@ -163,7 +163,9 @@ class ProxyingRecordingHTTPResponse(http_client.HTTPResponse):
 
         status_and_headers = 'HTTP/1.1 {} {}\r\n'.format(
                 self.status, self.reason)
-        for k,v in self.msg.items():
+        self.headers['Via'] = via_header_value(
+                self.headers.get('Via'), '%0.1f' % (self.version / 10))
+        for k,v in self.headers.items():
             if k.lower() not in (
                     'connection', 'proxy-connection', 'keep-alive',
                     'proxy-authenticate', 'proxy-authorization', 'upgrade',
@@ -173,6 +175,15 @@ class ProxyingRecordingHTTPResponse(http_client.HTTPResponse):
         self.proxy_client.sendall(status_and_headers.encode('latin1'))
 
         self.recorder.payload_starts_now()
+
+def via_header_value(orig, request_version):
+    via = orig
+    if via:
+        via += ', '
+    else:
+        via = ''
+    via = via + '%s %s' % (request_version, 'warcprox')
+    return via
 
 class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
     '''
@@ -355,6 +366,10 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 'Connection', 'Proxy-Connection', 'Keep-Alive',
                 'Proxy-Authenticate', 'Proxy-Authorization', 'Upgrade'):
             del self.headers[key]
+
+        self.headers['Via'] = via_header_value(
+                self.headers.get('Via'),
+                self.request_version.replace('HTTP/', ''))
 
         # Add headers to the request
         # XXX in at least python3.3 str(self.headers) uses \n not \r\n :(

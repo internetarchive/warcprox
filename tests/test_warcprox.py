@@ -45,6 +45,7 @@ import signal
 from collections import Counter
 import socket
 import datetime
+import warcio.archiveiterator
 
 try:
     import http.server as http_server
@@ -79,7 +80,7 @@ def _send(self, data):
         logging.info('sending data from %s', repr(data))
     orig_send(self, data)
 ### uncomment this to block see raw requests going over the wire
-# http_client.HTTPConnection.send = _send
+http_client.HTTPConnection.send = _send
 
 logging.basicConfig(
         stream=sys.stdout, level=logging.INFO, # level=warcprox.TRACE,
@@ -1390,6 +1391,25 @@ def test_choose_a_port_for_me(service_registry):
     finally:
         controller.stop.set()
         th.join()
+
+def test_via_response_header(warcprox_, http_daemon, archiving_proxies, playback_proxies):
+    url = 'http://localhost:%s/a/z' % http_daemon.server_port
+    response = requests.get(url, proxies=archiving_proxies)
+    assert response.headers['via'] == '1.1 warcprox'
+
+    playback_response = _poll_playback_until(
+            playback_proxies, url, status=200, timeout_sec=10)
+    assert response.status_code == 200
+    assert not 'via' in playback_response
+
+    warc = warcprox_.warc_writer_thread.writer_pool.default_warc_writer._fpath
+    with open(warc, 'rb') as f:
+        for record in warcio.archiveiterator.ArchiveIterator(f):
+            if record.rec_headers.get_header('warc-target-uri') == url:
+                if record.rec_type == 'response':
+                    assert not record.http_headers.get_header('via')
+                elif record.rec_type == 'request':
+                    assert record.http_headers.get_header('via') == '1.1 warcprox'
 
 if __name__ == '__main__':
     pytest.main()

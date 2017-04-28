@@ -40,9 +40,9 @@ do
             && (cd /warcprox && git diff HEAD) | patch -p1 \
             && virtualenv -p $python /tmp/venv \
             && source /tmp/venv/bin/activate \
-            && pip --log-file /tmp/pip.log install . pytest requests \
-            && py.test -vv tests \
-            && py.test -vv --rethinkdb-servers=localhost tests \
-            && py.test -vv --rethinkdb-servers=localhost --rethinkdb-big-table tests"
+            && pip --log-file /tmp/pip.log install . pytest requests warcio \
+            && py.test -v tests \
+            && py.test -v --rethinkdb-servers=localhost tests \
+            && py.test -v --rethinkdb-servers=localhost --rethinkdb-big-table tests"
 done
 
