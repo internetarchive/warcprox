@@ -245,8 +245,7 @@ class ServiceRegistry(object):
                                     row,
                                     row['last_heartbeat'] > r.now() - row['heartbeat_interval'] * 3,
                                     False),
-                                row.merge({'last_heartbeat': r.now()}),
-                                candidate),
+                                row, candidate),
                             return_changes='always').run()
             new_val = result['changes'][0]['new_val']
             if all([new_val[k] == candidate[k] for k in candidate
@@ -262,7 +261,6 @@ class ServiceRegistry(object):
             return results[0]
         else:
             return None
-
 
     def healthy_service(self, role):
         '''
