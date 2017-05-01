@@ -52,12 +52,12 @@ def rr():
     assert result["dbs_created"] == 1
     return RethinkerForTesting(db="doublethink_test_db")
 
-def test_leader_election(rr):
+def test_unique_service(rr):
     svcreg = doublethink.ServiceRegistry(rr)
-    assert svcreg.leader('example-role') == None
+    assert svcreg.unique_service('example-role') == None
     # this raises an exception: no heartbeat_interval.
     with pytest.raises(Exception) as excinfo:
-        svcreg.leader('example-role', default={})
+        svcreg.unique_service('example-role', candidate={})
     svc01 = {
         "role": "example-role",
         "load": 0.0,
@@ -71,10 +71,10 @@ def test_leader_election(rr):
         "node": "test02.example.com"
     }
     # register svc01. output should be svc01.
-    output = svcreg.leader('example-role', default=svc01)
+    output = svcreg.unique_service('example-role', candidate=svc01)
     assert output['node'] == svc01['node']
     # try to register svc02. Output should still be svc01.
-    output = svcreg.leader('example-role', default=svc02)
+    output = svcreg.unique_service('example-role', candidate=svc02)
     assert output['node'] == svc01['node']
     svcreg.unregister('example-role')
 
