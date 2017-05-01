@@ -60,13 +60,11 @@ def test_unique_service(rr):
         svcreg.unique_service('example-role', candidate={})
     svc01 = {
         "role": "example-role",
-        "load": 0.0,
         "heartbeat_interval": 0.4,
         "node": "test01.example.com"
     }
     svc02 = {
         "role": "example-role",
-        "load": 0.0,
         "heartbeat_interval": 0.4,
         "node": "test02.example.com"
     }
@@ -76,7 +74,16 @@ def test_unique_service(rr):
     # try to register svc02. Output should still be svc01.
     output = svcreg.unique_service('example-role', candidate=svc02)
     assert output['node'] == svc01['node']
+    time.sleep(0.2)
+    output1 = svcreg.unique_service('example-role', candidate=svc01)
+    assert output1['last_heartbeat'] > output1['first_heartbeat']
+    output2 = svcreg.unique_service('example-role', candidate=svc02)
+    assert output1['last_heartbeat'] == output2['last_heartbeat']
+    time.sleep(0.2)
+    output3 = svcreg.unique_service('example-role', candidate=svc01)
+    assert output3['last_heartbeat'] > output1['last_heartbeat']
     svcreg.unregister('example-role')
+
 
 def test_service_registry(rr):
     svcreg = doublethink.ServiceRegistry(rr)
