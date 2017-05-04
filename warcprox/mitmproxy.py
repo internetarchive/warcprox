@@ -397,7 +397,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             prox_rec_res = ProxyingRecordingHTTPResponse(
                     self._remote_server_sock, proxy_client=self.connection,
                     digest_algorithm=self.server.digest_algorithm,
-                    url=self.url)
+                    url=self.url, method=self.command)
             prox_rec_res.begin()
 
             buf = prox_rec_res.read(8192)
@@ -405,9 +405,6 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 buf = prox_rec_res.read(8192)
 
             self.log_request(prox_rec_res.status, prox_rec_res.recorder.len)
-        except socket.timeout as e:
-            self.logger.warn(
-                    "%s proxying %s %s", repr(e), self.command, self.url)
         except Exception as e:
             self.logger.error(
                     "%s proxying %s %s", repr(e), self.command, self.url,
