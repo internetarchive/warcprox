@@ -6,7 +6,7 @@ calling ssl.wrap_socket() on the client connection; connects to remote
 configured
 
 Copyright (C) 2012 Cygnos Corporation
-Copyright (C) 2013-2016 Internet Archive
+Copyright (C) 2013-2017 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -279,6 +279,9 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         server. Then it calls self.handle_one_request() again to handle the
         request intended for the remote server.
         '''
+        self.logger.trace(
+                'request from %s:%s: %s', self.client_address[0],
+                self.client_address[1], self.requestline)
         self.is_connect = True
         try:
             self._determine_host_port()
@@ -322,6 +325,9 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         return result
 
     def do_COMMAND(self):
+        self.logger.trace(
+                'request from %s:%s: %s', self.client_address[0],
+                self.client_address[1], self.requestline)
         if self.is_connect:
             self.url = self._construct_tunneled_url()
         else:
@@ -402,7 +408,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         except socket.timeout as e:
             self.logger.warn(
                     "%s proxying %s %s", repr(e), self.command, self.url)
-        except BaseException as e:
+        except Exception as e:
             self.logger.error(
                     "%s proxying %s %s", repr(e), self.command, self.url,
                     exc_info=True)

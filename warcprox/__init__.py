@@ -92,8 +92,17 @@ class RequestBlockedByRule(Exception):
     def __str__(self):
         return "%s: %s" % (self.__class__.__name__, self.msg)
 
-# logging level more fine-grained than logging.DEBUG==10
+# monkey-patch log level TRACE
 TRACE = 5
+import logging
+def _logging_trace(msg, *args, **kwargs):
+    logging.root.trace(msg, *args, **kwargs)
+def _logger_trace(self, msg, *args, **kwargs):
+    if self.isEnabledFor(TRACE):
+        self._log(TRACE, msg, args, **kwargs)
+logging.trace = _logging_trace
+logging.Logger.trace = _logger_trace
+logging.addLevelName(TRACE, 'TRACE')
 
 import warcprox.controller as controller
 import warcprox.playback as playback
