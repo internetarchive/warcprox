@@ -462,9 +462,13 @@ class PooledMixIn(socketserver.ThreadingMixIn):
         '''
         # neither threading.Condition Queue.not_empty nor Queue.not_full do
         # what we need here, right?
+        self.logger.trace(
+                'someone is connecting qsize=%s', self.pool._work_queue.qsize())
         while self.pool._work_queue.qsize() > 0:
             time.sleep(0.5)
-        return self.socket.accept()
+        res = self.socket.accept()
+        self.logger.trace('accepted socket=%s', res)
+        return res
 
 class MitmProxy(http_server.HTTPServer):
     def finish_request(self, request, client_address):
@@ -492,6 +496,16 @@ class MitmProxy(http_server.HTTPServer):
         self.shutdown_request(request)
 
 class PooledMitmProxy(PooledMixIn, MitmProxy):
+    # This value is passed as the "backlog" argument to listen(2). The default
+    # value from socketserver.TCPServer is 5. Increasing this value is part of
+    # the solution to client connections being closed suddenly and this message
+    # appearing in kernel log on linux: "TCP: request_sock_TCP: # Possible SYN
+    # flooding on port 8000. Sending cookies.  Check SNMP # counters." I think
+    # this comes into play because we don't always accept(2) immediately (see
+    # PooledMixIn.get_request()).
+    # See also https://blog.dubbelboer.com/2012/04/09/syn-cookies.html
+    request_queue_size = 4096
+
     def process_request_thread(self, request, client_address):
         '''
         This an almost verbatim copy/paste of
