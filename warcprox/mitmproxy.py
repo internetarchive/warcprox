@@ -292,7 +292,8 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             self._transition_to_ssl()
         except Exception as e:
             try:
-                self.logger.error("problem handling {}: {}".format(repr(self.requestline), e))
+                self.logger.error(
+                        "problem handling %s: %s", repr(self.requestline), e)
                 if type(e) is socket.timeout:
                     self.send_error(504, str(e))
                 else:
@@ -328,13 +329,13 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         self.logger.trace(
                 'request from %s:%s: %s', self.client_address[0],
                 self.client_address[1], self.requestline)
-        if self.is_connect:
-            self.url = self._construct_tunneled_url()
-        else:
-            self._determine_host_port()
-            assert self.url
-
         try:
+            if self.is_connect:
+                self.url = self._construct_tunneled_url()
+            else:
+                self._determine_host_port()
+                assert self.url
+
             # Connect to destination
             self._connect_to_remote_server()
         except warcprox.RequestBlockedByRule as e:
@@ -342,7 +343,9 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             self.logger.info("%s: %s", repr(self.requestline), e)
             return
         except Exception as e:
-            self.logger.error("problem processing request {}: {}".format(repr(self.requestline), e), exc_info=True)
+            self.logger.error(
+                    "problem processing request %s: %s",
+                    repr(self.requestline), e, exc_info=True)
             self.send_error(500, str(e))
             return
 
