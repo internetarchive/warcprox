@@ -104,7 +104,8 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
             default=500, help=argparse.SUPPRESS)
     arg_parser.add_argument('--max-threads', dest='max_threads', type=int,
             help=argparse.SUPPRESS)
-    arg_parser.add_argument('--profile', action='store_true', default=False,
+    arg_parser.add_argument(
+            '--profile', dest='profile', action='store_true', default=False,
             help=argparse.SUPPRESS)
     arg_parser.add_argument('--onion-tor-socks-proxy', dest='onion_tor_socks_proxy',
             default=None, help='host:port of tor socks proxy, used only to connect to .onion sites')

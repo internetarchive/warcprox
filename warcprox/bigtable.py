@@ -4,7 +4,7 @@ the table is "big" in the sense that it is designed to be usable as an index
 for playback software outside of warcprox, and contains information not
 needed merely for deduplication
 
-Copyright (C) 2015-2016 Internet Archive
+Copyright (C) 2015-2017 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -64,26 +64,30 @@ class RethinkCaptures:
     def _insert_batch(self):
         try:
             with self._batch_lock:
-                if len(self._batch) > 0:
-                    result = self.rr.table(self.table).insert(
-                            self._batch, conflict="replace").run()
-                    if (result["inserted"] + result["replaced"]
-                            + result["unchanged"] != len(self._batch)):
-                        raise Exception(
-                                "unexpected result saving batch of %s: %s "
-                                "entries" % (len(self._batch), result))
-                    if result["replaced"] > 0 or result["unchanged"] > 0:
-                        self.logger.warn(
-                                "inserted=%s replaced=%s unchanged=%s in big "
-                                "captures table (normally replaced=0 and "
-                                "unchanged=0)", result["inserted"],
-                                result["replaced"], result["unchanged"])
-                    else:
-                        self.logger.debug(
-                                "inserted %s entries to big captures table",
-                                len(self._batch))
-                    self._batch = []
-        except BaseException as e:
+                batch = self._batch
+                self._batch = []
+
+            if batch:
+                result = self.rr.table(self.table).insert(
+                        batch, conflict="replace").run()
+                if (result["inserted"] + result["replaced"]
+                        + result["unchanged"] != len(batch)):
+                    raise Exception(
+                            "unexpected result saving batch of %s: %s "
+                            "entries" % (len(batch), result))
+                if result["replaced"] > 0 or result["unchanged"] > 0:
+                    self.logger.warn(
+                            "inserted=%s replaced=%s unchanged=%s in big "
+                            "captures table (normally replaced=0 and "
+                            "unchanged=0)", result["inserted"],
+                            result["replaced"], result["unchanged"])
+                else:
+                    self.logger.debug(
+                            "inserted %s entries to big captures table",
+                            len(batch))
+        except Exception as e:
+            with self._batch_lock:
+                self._batch.extend(batch)
             self.logger.error(
                     "caught exception trying to save %s entries, they will "
                     "be included in the next batch", len(self._batch),

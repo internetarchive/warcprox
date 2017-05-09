@@ -89,8 +89,9 @@ class WarcWriterThread(threading.Thread):
                         self.idle = None
                         if self._filter_accepts(recorded_url):
                             if self.dedup_db:
-                                warcprox.dedup.decorate_with_dedup_info(self.dedup_db,
-                                        recorded_url, base32=self.options.base32)
+                                warcprox.dedup.decorate_with_dedup_info(
+                                        self.dedup_db, recorded_url,
+                                        base32=self.options.base32)
                             records = self.writer_pool.write_records(recorded_url)
                             self._final_tasks(recorded_url, records)
 

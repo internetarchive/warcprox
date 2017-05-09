@@ -238,11 +238,11 @@ class WarcproxController(object):
                         ).total_seconds() > self.HEARTBEAT_INTERVAL):
                     self._service_heartbeat()
 
-                if self.options.profile and (
-                            datetime.datetime.utcnow() - last_mem_dbg
-                        ).total_seconds() > 60:
-                    self.debug_mem()
-                    last_mem_dbg = datetime.datetime.utcnow()
+                # if self.options.profile and (
+                #             datetime.datetime.utcnow() - last_mem_dbg
+                #         ).total_seconds() > 60:
+                #     self.debug_mem()
+                #     last_mem_dbg = datetime.datetime.utcnow()
 
                 time.sleep(0.5)
         except:

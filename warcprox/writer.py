@@ -110,7 +110,9 @@ class WarcWriter:
             record.offset = offset
             record.length = writer.tell() - offset
             record.warc_filename = self._f_finalname
-            self.logger.debug('wrote warc record: warc_type=%s content_length=%s url=%s warc=%s offset=%d',
+            self.logger.debug(
+                    'wrote warc record: warc_type=%s content_length=%s url=%s '
+                    'warc=%s offset=%d',
                     record.get_header(warctools.WarcRecord.TYPE),
                     record.get_header(warctools.WarcRecord.CONTENT_LENGTH),
                     record.get_header(warctools.WarcRecord.URL),
