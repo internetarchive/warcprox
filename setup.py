@@ -37,7 +37,7 @@ class PyTest(setuptools.command.test.test):
         sys.exit(errno)
 
 deps = [
-    'certauth>=1.1.0',
+    'certauth>=1.1.6',
     'warctools',
     'kafka-python>=1.0.1',
     'urlcanon>=0.1.dev16',
@@ -51,7 +51,7 @@ except:
 
 setuptools.setup(
         name='warcprox',
-        version='2.1b1.dev78',
+        version='2.1b1.dev79',
         description='WARC writing MITM HTTP/S proxy',
         url='https://github.com/internetarchive/warcprox',
         author='Noah Levitt',

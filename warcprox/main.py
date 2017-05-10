@@ -43,10 +43,27 @@ import re
 import doublethink
 import cryptography.hazmat.backends.openssl
 
+class BetterArgumentDefaultsHelpFormatter(
+                argparse.ArgumentDefaultsHelpFormatter,
+                argparse.RawDescriptionHelpFormatter):
+    '''
+    HelpFormatter with these properties:
+
+    - formats option help like argparse.ArgumentDefaultsHelpFormatter except
+      that it - omits the default value for arguments with action='store_const'
+    - like argparse.RawDescriptionHelpFormatter, does not reformat description
+      string
+    '''
+    def _get_help_string(self, action):
+        if isinstance(action, argparse._StoreConstAction):
+            return action.help
+        else:
+            return super()._get_help_string(action)
+
 def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
     arg_parser = argparse.ArgumentParser(prog=prog,
             description='warcprox - WARC writing MITM HTTP/S proxy',
-            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+            formatter_class=BetterArgumentDefaultsHelpFormatter)
     arg_parser.add_argument('-p', '--port', dest='port', default='8000',
             type=int, help='port to listen on')
     arg_parser.add_argument('-b', '--address', dest='address',
@@ -272,7 +289,7 @@ def ensure_rethinkdb_tables():
     '''
     arg_parser = argparse.ArgumentParser(
             prog=os.path.basename(sys.argv[0]),
-            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+            formatter_class=BetterArgumentDefaultsHelpFormatter)
     arg_parser.add_argument(
             '--rethinkdb-servers', dest='rethinkdb_servers', default='localhost',
             help='rethinkdb servers e.g. db0.foo.org,db0.foo.org:38015,db1.foo.org')
