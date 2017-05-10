@@ -47,7 +47,15 @@ async def do_get(request):
                 'Content-Type': 'text/plain', 'Content-Length': str(n)})
     await response.prepare(request)
     for i in range(n // 80):
-        response.write(b'x' * 79 + b'\n')
+        # some random bytes at the beginning to avoid deduplication
+        # XXX doesn't work for n < 80
+        if i == 0:
+            rando = bytes([random.choice(
+                b'abcdefghijlkmopqrstuvwxyz') for i in range(30)])
+            bs = rando + b'x' * 49 + b'\n'
+        else:
+            bs = b'x' * 79 + b'\n'
+        response.write(bs)
         await response.drain()
     if n % 80 > 0:
         response.write(b'x' * (n % 80 - 1) + b'\n')
@@ -113,33 +121,28 @@ async def fetch(session, url, proxy=None):
         # logging.info('finished receiving response from %s', url)
     return n_bytes
 
-async def benchmarking_client(base_url, duration, proxy=None):
+async def benchmarking_client(
+        base_url, requests=200, payload_size=100000, proxy=None):
     start = time.time()
     connector = aiohttp.TCPConnector(verify_ssl=False)
-    n = 1000
     n_urls = 0
     n_bytes = 0
+    url = '%s/%s' % (base_url, payload_size)
     outstanding_requests = set()
     async with aiohttp.ClientSession(connector=connector) as session:
+        for i in range(requests):
+            future = asyncio.ensure_future(fetch(session, url, proxy))
+            outstanding_requests.add(future)
+            # logging.info('scheduled future fetch of %s', url)
         while True:
-            if (time.time() - start < duration
-                    and len(outstanding_requests) < 100):
-                url = '%s/%s' % (base_url, n)
-                n += 1000
-                # task = asyncio.get_event_loop().create_task(fetch(session, url))
-                future = asyncio.ensure_future(fetch(session, url, proxy))
-                outstanding_requests.add(future)
-                # logging.info('scheduled future fetch of %s', url)
-            else:
-                done, pending = await asyncio.wait(
-                        outstanding_requests,
-                        return_when=asyncio.FIRST_COMPLETED)
-                for future in done:
-                    outstanding_requests.remove(future)
-                    n_urls += 1
-                    n_bytes += future.result()
-                if time.time() - start >= duration and not pending:
-                    return n_urls, n_bytes, time.time() - start
+            done, pending = await asyncio.wait(
+                    outstanding_requests, return_when=asyncio.FIRST_COMPLETED)
+            for future in done:
+                outstanding_requests.remove(future)
+                n_urls += 1
+                n_bytes += future.result()
+            if not pending:
+                return n_urls, n_bytes, time.time() - start
 
 def build_arg_parser(tmpdir, prog=os.path.basename(sys.argv[0])):
     desc = '''
@@ -150,9 +153,6 @@ benchmark warcprox. Runs 4 benchmarks:
     2. baseline https (no warcprox)
     3. http with warcprox
     4. https with warcprox
-
-Each of these runs for a predetermined amount of time, which is 1/4 of the time
-specified by the --time option.
 
 Uses a temporary directory for warcs and other files. Otherwise, most warcprox
 options can be specified on the command line. Useful for comparing performance
@@ -242,9 +242,11 @@ Benchmarking code uses asyncio/aiohttp and requires python 3.5 or later.
             '--profile', dest='profile', action='store_true', default=False,
             help='profile the warc writer thread')
     arg_parser.add_argument(
-            '--time', dest='time', type=float, default=20.0, help=(
-                'time to spend running benchmarks; total allotment will be '
-                'divided among the 4 benchmark cases'))
+            '--requests', dest='requests', type=int, default=200,
+            help='number of urls to fetch')
+    arg_parser.add_argument(
+            '--payload-size', dest='payload_size', type=int, default=100000,
+            help='size of each response payload, in bytes')
     arg_parser.add_argument(
             '--skip-baseline', dest='skip_baseline', action='store_true',
             help='skip the baseline bechmarks')
@@ -297,25 +299,22 @@ if __name__ == '__main__':
         if not args.skip_baseline:
             n_urls, n_bytes, elapsed = loop.run_until_complete(
                     benchmarking_client(
-                        'http://127.0.0.1:4080', args.time / 4.0))
+                        'http://127.0.0.1:4080', args.requests,
+                        args.payload_size))
             logging.info(
                     'http baseline (no proxy): n_urls=%s n_bytes=%s in %.1f '
                     'sec', n_urls, n_bytes, elapsed)
 
             n_urls, n_bytes, elapsed = loop.run_until_complete(
                     benchmarking_client(
-                        'https://127.0.0.1:4443', args.time / 4.0))
+                        'https://127.0.0.1:4443', args.requests,
+                        args.payload_size))
             logging.info(
                     'https baseline (no proxy): n_urls=%s n_bytes=%s in %.1f '
                     'sec', n_urls, n_bytes, elapsed)
         else:
             logging.info('SKIPPED')
         logging.info('===== baseline benchmark finished =====')
-
-        if args.skip_baseline:
-            t = args.time / 2.0
-        else:
-            t = args.time / 4.0
 
         warcprox_controller = warcprox.main.init_controller(args)
         warcprox_controller_thread = threading.Thread(
@@ -327,13 +326,17 @@ if __name__ == '__main__':
                 warcprox_controller.proxy.server_address[1])
         logging.info('===== warcprox benchmark starting =====')
         n_urls, n_bytes, elapsed = loop.run_until_complete(
-                benchmarking_client('http://127.0.0.1:4080', t, proxy))
+                benchmarking_client(
+                    'http://127.0.0.1:4080', args.requests, args.payload_size,
+                    proxy))
         logging.info(
                 'http: n_urls=%s n_bytes=%s in %.1f sec',
                 n_urls, n_bytes, elapsed)
 
         n_urls, n_bytes, elapsed = loop.run_until_complete(
-                benchmarking_client('https://127.0.0.1:4443', t, proxy))
+                benchmarking_client(
+                    'https://127.0.0.1:4443', args.requests, args.payload_size,
+                    proxy))
         logging.info(
                 'https: n_urls=%s n_bytes=%s in %.1f sec',
                 n_urls, n_bytes, elapsed)
