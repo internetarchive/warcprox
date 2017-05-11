@@ -52,7 +52,6 @@ class CaptureFeed:
         return self.__producer
 
     def notify(self, recorded_url, records):
-        import pdb; pdb.set_trace()
         if records[0].type not in (b'revisit', b'response'):
             return
 
