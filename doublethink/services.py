@@ -222,6 +222,8 @@ class ServiceRegistry(object):
         '''
         if candidate is not None:
             candidate['id'] = role
+            # use the same concept of 'now' for both queries 
+            now = rr.now().run()
 
             if not 'heartbeat_interval' in candidate:
                 raise Exception(
@@ -231,8 +233,8 @@ class ServiceRegistry(object):
             if not (isinstance(val, float) or isinstance(val, int)) or val <= 0:
                 raise Exception('heartbeat_interval must be a number > 0')
 
-            candidate['first_heartbeat'] = r.now()
-            candidate['last_heartbeat'] = r.now()
+            candidate['first_heartbeat'] = now
+            candidate['last_heartbeat'] = now
             if not 'host' in candidate:
                 candidate['host'] = socket.gethostname()
             if not 'pid' in candidate:
@@ -243,7 +245,7 @@ class ServiceRegistry(object):
                             lambda row: r.branch(
                                 r.branch(
                                     row,
-                                    row['last_heartbeat'] > r.now() - row['heartbeat_interval'] * 3,
+                                    row['last_heartbeat'] > now - row['heartbeat_interval'] * 3,
                                     False),
                                 row, candidate),
                             return_changes='always').run()
@@ -256,7 +258,7 @@ class ServiceRegistry(object):
 
         results = list(self.rr.table(
             'services', read_mode='majority').get_all(role).filter(
-                lambda row: row['last_heartbeat'] > r.now() - row['heartbeat_interval'] * 3).run())
+                lambda row: row['last_heartbeat'] > now - row['heartbeat_interval'] * 3).run())
         if results:
             return results[0]
         else:
