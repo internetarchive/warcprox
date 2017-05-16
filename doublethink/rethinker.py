@@ -21,6 +21,7 @@ import logging
 import random
 import time
 import types
+import re
 
 class RethinkerWrapper(object):
     logger = logging.getLogger('doublethink.RethinkerWrapper')
@@ -66,6 +67,16 @@ class RethinkerWrapper(object):
                     return result
             except r.ReqlTimeoutError as e:
                 time.sleep(0.5)
+            except r.ReqlOpFailedError as e:
+                if e.args and re.match(
+                        '^Cannot perform.*primary replica.*',
+                        e.args[0]):
+                    self.logger.error(
+                            'will keep trying after potentially recoverable '
+                            'error: %s', e)
+                    time.sleep(0.5)
+                else:
+                    raise
             finally:
                 if not is_iter:
                     conn.close(noreply_wait=False)

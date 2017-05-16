@@ -8,6 +8,10 @@ python:
 - nightly
 - pypy
 - pypy3
+matrix:
+  allow_failures:
+  - python: nightly
+  - python: 3.7-dev
 services:
 - docker
 before_install:
