@@ -222,7 +222,7 @@ class ServiceRegistry(object):
         '''
         if candidate is not None:
             candidate['id'] = role
-            # use the same concept of 'now' for both queries 
+            # use the same concept of 'now' for all queries 
             now = rr.now().run()
 
             if not 'heartbeat_interval' in candidate:
