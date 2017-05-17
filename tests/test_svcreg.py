@@ -55,17 +55,17 @@ def rr():
 def test_unique_service(rr):
     svcreg = doublethink.ServiceRegistry(rr)
     assert svcreg.unique_service('example-role') == None
-    # this raises an exception: no heartbeat_interval.
+    # this raises an exception: no ttl.
     with pytest.raises(Exception) as excinfo:
         svcreg.unique_service('example-role', candidate={})
     svc01 = {
         "role": "example-role",
-        "heartbeat_interval": 0.4,
+        "ttl": 1.2,
         "node": "test01.example.com"
     }
     svc02 = {
         "role": "example-role",
-        "heartbeat_interval": 0.4,
+        "ttl": 1.2,
         "node": "test02.example.com"
     }
     # register svc01. output should be svc01.
@@ -93,23 +93,23 @@ def test_service_registry(rr):
     with pytest.raises(Exception) as excinfo:
         svcreg.heartbeat({"role":"foo","load":1})
     with pytest.raises(Exception) as excinfo:
-        svcreg.heartbeat({"role":"foo","heartbeat_interval":1.0})
+        svcreg.heartbeat({"role":"foo","ttl":1.0})
     with pytest.raises(Exception) as excinfo:
-        svcreg.heartbeat({"heartbeat_interval":1.0,"load":1})
+        svcreg.heartbeat({"ttl":1.0,"load":1})
 
-    # invalid heartbeat interval (we accept anything for load and role)
+    # invalid ttl (we accept anything for load and role)
     with pytest.raises(Exception) as excinfo:
-        svcreg.heartbeat({"heartbeat_interval":-1,"role":"foo","load":1})
+        svcreg.heartbeat({"ttl":-1,"role":"foo","load":1})
     with pytest.raises(Exception) as excinfo:
-        svcreg.heartbeat({"heartbeat_interval":"strang","role":"foo","load":1})
+        svcreg.heartbeat({"ttl":"strang","role":"foo","load":1})
     with pytest.raises(Exception) as excinfo:
-        svcreg.heartbeat({"heartbeat_interval":[],"role":"foo","load":1})
+        svcreg.heartbeat({"ttl":[],"role":"foo","load":1})
     with pytest.raises(Exception) as excinfo:
-        svcreg.heartbeat({"heartbeat_interval":[1],"role":"foo","load":1})
+        svcreg.heartbeat({"ttl":[1],"role":"foo","load":1})
     with pytest.raises(Exception) as excinfo:
-        svcreg.heartbeat({"heartbeat_interval":{},"role":"foo","load":1})
+        svcreg.heartbeat({"ttl":{},"role":"foo","load":1})
     with pytest.raises(Exception) as excinfo:
-        svcreg.heartbeat({"heartbeat_interval":{1:2},"role":"foo","load":1})
+        svcreg.heartbeat({"ttl":{1:2},"role":"foo","load":1})
 
     assert svcreg.available_service("yes-such-role") == None
     assert svcreg.available_services("yes-such-role") == []
@@ -117,12 +117,12 @@ def test_service_registry(rr):
     svc0 = {
         "role": "yes-such-role",
         "load": 100.0,
-        "heartbeat_interval": 0.4,
+        "ttl": 1.2,
     }
     svc1 = {
         "role": "yes-such-role",
         "load": 200.0,
-        "heartbeat_interval": 0.4,
+        "ttl": 1.2,
     }
     svc0 = svcreg.heartbeat(svc0)
     svc1 = svcreg.heartbeat(svc1)
@@ -188,12 +188,12 @@ def test_service_registry(rr):
     svc0 = {
         "role": "yes-such-role",
         "load": 100.0,
-        "heartbeat_interval": 0.4,
+        "ttl": 1.2,
     }
     svc1 = {
         "role": "yes-such-role",
         "load": 200.0,
-        "heartbeat_interval": 0.4,
+        "ttl": 1.2,
     }
     svc0 = svcreg.heartbeat(svc0)
     svc1 = svcreg.heartbeat(svc1)
@@ -205,22 +205,22 @@ def test_service_registry(rr):
     svc0 = {
         "role": "yes-such-role",
         "load": 100.0,
-        "heartbeat_interval": 0.4,
+        "ttl": 1.2,
     }
     svc1 = {
         "role": "yes-such-role",
         "load": 200.0,
-        "heartbeat_interval": 0.4,
+        "ttl": 1.2,
     }
     svc2 = {
         "role": "another-such-role",
         "load": 200.0,
-        "heartbeat_interval": 0.4,
+        "ttl": 1.2,
     }
     svc3 = {
         "role": "yet-another-such-role",
         "load": 200.0,
-        "heartbeat_interval": 0.4,
+        "ttl": 1.2,
     }
     svc0 = svcreg.heartbeat(svc0)
     svc1 = svcreg.heartbeat(svc1)
@@ -245,7 +245,7 @@ def test_svcreg_heartbeat_server_down(rr):
     svc0 = {
         "role": "role-foo",
         "load": 100.0,
-        "heartbeat_interval": 0.4,
+        "ttl": 1.2,
     }
     # no exception thrown
     svc0 = svcreg.heartbeat(svc0)
