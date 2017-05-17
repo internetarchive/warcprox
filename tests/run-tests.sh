@@ -15,5 +15,5 @@ do
                 && virtualenv -p $python /tmp/venv \
                 && source /tmp/venv/bin/activate \
                 && pip install pytest . \
-                && py.test -v -s tests"
+                && py.test -v tests"
 done
