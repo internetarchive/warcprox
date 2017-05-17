@@ -20,6 +20,7 @@ import rethinkdb as r
 import logging
 import socket
 import os
+import doublethink
 
 class ServiceRegistry(object):
     '''
@@ -219,6 +220,8 @@ class ServiceRegistry(object):
             the unique service, if there is one and it is healthy, otherwise
             None
         '''
+        # use the same concept of 'now' for all queries 
+        now = doublethink.utcnow()
         if candidate is not None:
             candidate['id'] = role
 
@@ -230,8 +233,8 @@ class ServiceRegistry(object):
             if not (isinstance(val, float) or isinstance(val, int)) or val <= 0:
                 raise Exception('"ttl" must be a number > 0')
 
-            candidate['first_heartbeat'] = r.now()
-            candidate['last_heartbeat'] = r.now()
+            candidate['first_heartbeat'] = now
+            candidate['last_heartbeat'] = now
             if not 'host' in candidate:
                 candidate['host'] = socket.gethostname()
             if not 'pid' in candidate:
@@ -242,7 +245,7 @@ class ServiceRegistry(object):
                             lambda row: r.branch(
                                 r.branch(
                                     row,
-                                    row['last_heartbeat'] > r.now() - row['ttl'],
+                                    row['last_heartbeat'] > now - row['ttl'],
                                     False),
                                 row, candidate),
                             return_changes='always').run()
@@ -255,7 +258,7 @@ class ServiceRegistry(object):
 
         results = list(self.rr.table(
             'services', read_mode='majority').get_all(role).filter(
-                lambda row: row['last_heartbeat'] > r.now() - row['ttl']).run())
+                lambda row: row['last_heartbeat'] > now - row['ttl']).run())
         if results:
             return results[0]
         else:
