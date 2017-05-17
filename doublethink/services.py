@@ -20,6 +20,7 @@ import rethinkdb as r
 import logging
 import socket
 import os
+import doublethink
 
 class ServiceRegistry(object):
     '''
@@ -221,7 +222,7 @@ class ServiceRegistry(object):
             None
         '''
         # use the same concept of 'now' for all queries 
-        now = self.rr.now().run()
+        now = doublethink.utcnow()
         if candidate is not None:
             candidate['id'] = role
 
