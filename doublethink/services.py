@@ -220,10 +220,10 @@ class ServiceRegistry(object):
             the unique service, if there is one and it is healthy, otherwise
             None
         '''
+        # use the same concept of 'now' for all queries 
+        now = self.rr.now().run()
         if candidate is not None:
             candidate['id'] = role
-            # use the same concept of 'now' for all queries 
-            now = rr.now().run()
 
             if not 'heartbeat_interval' in candidate:
                 raise Exception(
