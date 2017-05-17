@@ -60,12 +60,12 @@ def test_unique_service(rr):
         svcreg.unique_service('example-role', candidate={})
     svc01 = {
         "role": "example-role",
-        "ttl": 0.4,
+        "ttl": 1.2,
         "node": "test01.example.com"
     }
     svc02 = {
         "role": "example-role",
-        "ttl": 0.4,
+        "ttl": 1.2,
         "node": "test02.example.com"
     }
     # register svc01. output should be svc01.
@@ -117,12 +117,12 @@ def test_service_registry(rr):
     svc0 = {
         "role": "yes-such-role",
         "load": 100.0,
-        "ttl": 0.4,
+        "ttl": 1.2,
     }
     svc1 = {
         "role": "yes-such-role",
         "load": 200.0,
-        "ttl": 0.4,
+        "ttl": 1.2,
     }
     svc0 = svcreg.heartbeat(svc0)
     svc1 = svcreg.heartbeat(svc1)
@@ -188,12 +188,12 @@ def test_service_registry(rr):
     svc0 = {
         "role": "yes-such-role",
         "load": 100.0,
-        "ttl": 0.4,
+        "ttl": 1.2,
     }
     svc1 = {
         "role": "yes-such-role",
         "load": 200.0,
-        "ttl": 0.4,
+        "ttl": 1.2,
     }
     svc0 = svcreg.heartbeat(svc0)
     svc1 = svcreg.heartbeat(svc1)
@@ -205,22 +205,22 @@ def test_service_registry(rr):
     svc0 = {
         "role": "yes-such-role",
         "load": 100.0,
-        "ttl": 0.4,
+        "ttl": 1.2,
     }
     svc1 = {
         "role": "yes-such-role",
         "load": 200.0,
-        "ttl": 0.4,
+        "ttl": 1.2,
     }
     svc2 = {
         "role": "another-such-role",
         "load": 200.0,
-        "ttl": 0.4,
+        "ttl": 1.2,
     }
     svc3 = {
         "role": "yet-another-such-role",
         "load": 200.0,
-        "ttl": 0.4,
+        "ttl": 1.2,
     }
     svc0 = svcreg.heartbeat(svc0)
     svc1 = svcreg.heartbeat(svc1)
@@ -245,7 +245,7 @@ def test_svcreg_heartbeat_server_down(rr):
     svc0 = {
         "role": "role-foo",
         "load": 100.0,
-        "ttl": 0.4,
+        "ttl": 1.2,
     }
     # no exception thrown
     svc0 = svcreg.heartbeat(svc0)
