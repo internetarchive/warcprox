@@ -45,10 +45,11 @@ class WarcWriterThread(threading.Thread):
     logger = logging.getLogger("warcprox.warcproxwriter.WarcWriterThread")
 
     def __init__(
-            self, recorded_url_q=None, writer_pool=None, dedup_db=None,
-            listeners=None, options=warcprox.Options()):
+            self, name='WarcWriterThread', recorded_url_q=None,
+            writer_pool=None, dedup_db=None, listeners=None,
+            options=warcprox.Options()):
         """recorded_url_q is a queue.Queue of warcprox.warcprox.RecordedUrl."""
-        threading.Thread.__init__(self, name='WarcWriterThread')
+        threading.Thread.__init__(self, name=name)
         self.recorded_url_q = recorded_url_q
         self.stop = threading.Event()
         if writer_pool:
@@ -75,9 +76,9 @@ class WarcWriterThread(threading.Thread):
         return meth in self._ALWAYS_ACCEPT or meth in self.method_filter
 
     def _run(self):
+        self.name = '%s(tid=%s)'% (self.name, warcprox.gettid())
         while not self.stop.is_set():
             try:
-                self.name = 'WarcWriterThread(tid={})'.format(warcprox.gettid())
                 while True:
                     try:
                         if self.stop.is_set():
@@ -105,7 +106,7 @@ class WarcWriterThread(threading.Thread):
 
                 self.logger.info('WarcWriterThread shutting down')
                 self.writer_pool.close_writers()
-            except BaseException as e:
+            except Exception as e:
                 if isinstance(e, OSError) and e.errno == 28:
                     # OSError: [Errno 28] No space left on device
                     self.logger.critical(

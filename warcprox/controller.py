@@ -37,15 +37,15 @@ class WarcproxController(object):
 
     HEARTBEAT_INTERVAL = 20.0
 
-    def __init__(self, proxy=None, warc_writer_thread=None,
-        playback_proxy=None, service_registry=None,
-        options=warcprox.Options()):
+    def __init__(
+            self, proxy=None, warc_writer_threads=None, playback_proxy=None,
+            service_registry=None, options=warcprox.Options()):
         """
         Create warcprox controller.
 
-        If supplied, proxy should be an instance of WarcProxy, and
-        warc_writer_thread should be an instance of WarcWriterThread. If not
-        supplied, they are created with default values.
+        If supplied, `proxy` should be an instance of WarcProxy, and
+        `warc_writer_threads` should be an list of WarcWriterThread instances.
+        If not supplied, they are created with default values.
 
         If supplied, playback_proxy should be an instance of PlaybackProxy. If
         not supplied, no playback proxy will run.
@@ -55,11 +55,15 @@ class WarcproxController(object):
         else:
             self.proxy = warcprox.warcproxy.WarcProxy(options=options)
 
-        if warc_writer_thread is not None:
-            self.warc_writer_thread = warc_writer_thread
+        if warc_writer_threads is not None:
+            self.warc_writer_threads = warc_writer_threads
         else:
-            self.warc_writer_thread = warcprox.writerthread.WarcWriterThread(
-                    recorded_url_q=self.proxy.recorded_url_q)
+            self.warc_writer_threads = [
+                    warcprox.writerthread.WarcWriterThread(
+                        name='WarcWriterThread%03d' % i,
+                        recorded_url_q=self.proxy.recorded_url_q,
+                        options=options)
+                    for i in range(int(self.proxy.max_threads ** 0.5))]
 
         self.proxy_thread = None
         self.playback_proxy_thread = None
@@ -169,9 +173,14 @@ class WarcproxController(object):
                     target=self.proxy.serve_forever, name='ProxyThread')
             self.proxy_thread.start()
 
-            if self.warc_writer_thread.dedup_db:
-                self.warc_writer_thread.dedup_db.start()
-            self.warc_writer_thread.start()
+            assert(all(
+                wwt.dedup_db is self.warc_writer_threads[0].dedup_db
+                for wwt in self.warc_writer_threads))
+            if self.warc_writer_threads[0].dedup_db:
+                self.warc_writer_threads[0].dedup_db.start()
+
+            for wwt in self.warc_writer_threads:
+                wwt.start()
 
             if self.playback_proxy is not None:
                 self.playback_proxy_thread = threading.Thread(
@@ -185,7 +194,8 @@ class WarcproxController(object):
                 self.logger.info('warcprox is not running')
                 return
 
-            self.warc_writer_thread.stop.set()
+            for wwt in self.warc_writer_threads:
+                wwt.stop.set()
             self.proxy.shutdown()
             self.proxy.server_close()
 
@@ -196,12 +206,13 @@ class WarcproxController(object):
                     self.playback_proxy.playback_index_db.close()
 
             # wait for threads to finish
-            self.warc_writer_thread.join()
+            for wwt in self.warc_writer_threads:
+                wwt.join()
 
             if self.proxy.stats_db:
                 self.proxy.stats_db.stop()
-            if self.warc_writer_thread.dedup_db:
-                self.warc_writer_thread.dedup_db.close()
+            if self.warc_writer_threads[0].dedup_db:
+                self.warc_writer_threads[0].dedup_db.close()
 
             self.proxy_thread.join()
             if self.playback_proxy is not None:

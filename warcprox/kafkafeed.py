@@ -25,6 +25,7 @@ import datetime
 import json
 import logging
 from hanzo import warctools
+import threading
 
 class CaptureFeed:
     logger = logging.getLogger('warcprox.kafkafeed.CaptureFeed')
@@ -34,20 +35,22 @@ class CaptureFeed:
         self.topic = topic
         self.__producer = None
         self._connection_exception = None
+        self._lock = threading.RLock()
 
     def _producer(self):
-        if not self.__producer:
-            try:
-                # acks=0 to avoid ever blocking
-                self.__producer = kafka.KafkaProducer(
-                        bootstrap_servers=self.broker_list, acks=0)
-                if self._connection_exception:
-                    logging.info('connected to kafka successfully!')
-                    self._connection_exception = None
-            except Exception as e:
-                if not self._connection_exception:
-                    self._connection_exception = e
-                    logging.error('problem connecting to kafka', exc_info=True)
+        with self._lock:
+            if not self.__producer:
+                try:
+                    # acks=0 to avoid ever blocking
+                    self.__producer = kafka.KafkaProducer(
+                            bootstrap_servers=self.broker_list, acks=0)
+                    if self._connection_exception:
+                        logging.info('connected to kafka successfully!')
+                        self._connection_exception = None
+                except Exception as e:
+                    if not self._connection_exception:
+                        self._connection_exception = e
+                        logging.error('problem connecting to kafka', exc_info=1)
 
         return self.__producer
 

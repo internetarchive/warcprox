@@ -50,7 +50,7 @@ class BetterArgumentDefaultsHelpFormatter(
     HelpFormatter with these properties:
 
     - formats option help like argparse.ArgumentDefaultsHelpFormatter except
-      that it - omits the default value for arguments with action='store_const'
+      that it omits the default value for arguments with action='store_const'
     - like argparse.RawDescriptionHelpFormatter, does not reformat description
       string
     '''
@@ -219,18 +219,24 @@ def init_controller(args):
         playback_proxy = None
 
     writer_pool = warcprox.writer.WarcWriterPool(options=options)
-    warc_writer_thread = warcprox.writerthread.WarcWriterThread(
-            recorded_url_q=recorded_url_q, writer_pool=writer_pool,
-            dedup_db=dedup_db, listeners=listeners, options=options)
+    # number of warc writer threads = sqrt(proxy.max_threads)
+    # I came up with this out of thin air because it strikes me as reasonable
+    # 1=>1 2=>1 5=>2 10=>3 50=>7 100=>10 200=>14 500=>22 1000=>32 2000=>45
+    warc_writer_threads = [
+            warcprox.writerthread.WarcWriterThread(
+                name='WarcWriterThread%03d' % i, recorded_url_q=recorded_url_q,
+                writer_pool=writer_pool, dedup_db=dedup_db,
+                listeners=listeners, options=options)
+            for i in range(int(proxy.max_threads ** 0.5))]
 
     if args.rethinkdb_servers:
         svcreg = doublethink.ServiceRegistry(rr)
     else:
         svcreg = None
 
-    controller = warcprox.controller.WarcproxController(proxy,
-        warc_writer_thread, playback_proxy, service_registry=svcreg,
-        options=options)
+    controller = warcprox.controller.WarcproxController(
+            proxy, warc_writer_threads, playback_proxy,
+            service_registry=svcreg, options=options)
 
     return controller
 
