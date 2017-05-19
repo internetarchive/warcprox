@@ -738,6 +738,12 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
     assert response.headers['warcprox-test-header'] == 'k!'
     assert response.content == b'I am the warcprox test payload! llllllllll!\n'
 
+    # wait for writer thread to process
+    time.sleep(0.5)
+    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
+        time.sleep(0.5)
+    time.sleep(0.5)
+
     # archive url1 bucket_b
     headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"test_dedup_buckets","captures-bucket":"bucket_b"})}
     response = requests.get(url1, proxies=archiving_proxies, verify=False, headers=headers)
