@@ -18,6 +18,8 @@ Three main purposes:
 
 Not currently a connection pool, because it doesn’t keep any connections open.
 Should be possible to implement connection pooling without changing the API.
+However, testing suggests there would be no appreciable performance gain from
+connection pooling.
 
 Usage Example
 ~~~~~~~~~~~~~
