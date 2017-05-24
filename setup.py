@@ -24,7 +24,6 @@ import sys
 import setuptools
 import setuptools.command.test
 
-# special class needs to be added to support the pytest written dump-anydbm tests
 class PyTest(setuptools.command.test.test):
     def finalize_options(self):
         setuptools.command.test.test.finalize_options(self)
@@ -68,7 +67,6 @@ setuptools.setup(
                 'warcprox=warcprox.main:main',
                 ('warcprox-ensure-rethinkdb-tables='
                     'warcprox.main:ensure_rethinkdb_tables'),
-                'dump-anydbm=warcprox.dump_anydbm:main',
             ],
         },
         zip_safe=False,

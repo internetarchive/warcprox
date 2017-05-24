@@ -18,8 +18,6 @@ matrix:
 addons:
   apt:
     packages:
-    - python-gdbm
-    - python3-gdbm
     - tor
 
 services:

@@ -31,6 +31,7 @@ import threading
 import rethinkdb as r
 import datetime
 import urlcanon
+import sqlite3
 
 def _empty_bucket(bucket):
     return {
@@ -52,53 +53,52 @@ def _empty_bucket(bucket):
 class StatsDb:
     logger = logging.getLogger("warcprox.stats.StatsDb")
 
-    def __init__(self, dbm_file='./warcprox-stats.db', options=warcprox.Options()):
-        try:
-            import dbm.gnu as dbm_gnu
-        except ImportError:
-            try:
-                import gdbm as dbm_gnu
-            except ImportError:
-                import anydbm as dbm_gnu
-
-        if os.path.exists(dbm_file):
-            self.logger.info('opening existing stats database {}'.format(dbm_file))
-        else:
-            self.logger.info('creating new stats database {}'.format(dbm_file))
-
-        self.db = dbm_gnu.open(dbm_file, 'c')
+    def __init__(self, file='./warcprox.sqlite', options=warcprox.Options()):
+        self.file = file
         self.options = options
 
     def start(self):
-        # method only exists to match RethinkStatsDb
-        pass
+        if os.path.exists(self.file):
+            self.logger.info(
+                    'opening existing stats database %s', self.file)
+        else:
+            self.logger.info(
+                    'creating new stats database %s', self.file)
+
+        conn = sqlite3.connect(self.file)
+        conn.execute(
+                'create table if not exists buckets_of_stats ('
+                '  bucket varchar(300) primary key,'
+                '  stats varchar(4000)'
+                ');')
+        conn.commit()
+        conn.close()
+
+        self.logger.info('created table buckets_of_stats in %s', self.file)
 
     def stop(self):
-        self.close()
+        pass
 
     def close(self):
-        self.db.close()
+        pass
 
     def sync(self):
-        try:
-            self.db.sync()
-        except:
-            pass
+        pass
 
     def value(self, bucket0="__all__", bucket1=None, bucket2=None):
-        # Gdbm wants str/bytes keys in python2, str/unicode keys in python3.
-        # This ugliness deals with keys that arrive as unicode in py2.
-        b0 = bucket0.encode("utf-8") if bucket0 and not isinstance(bucket0, str) else bucket0
-        b1 = bucket1.encode("utf-8") if bucket1 and not isinstance(bucket1, str) else bucket1
-        b2 = bucket2.encode("utf-8") if bucket2 and not isinstance(bucket2, str) else bucket2
-
-        if b0 in self.db:
-            bucket0_stats = json.loads(self.db[b0].decode("utf-8"))
-            if b1:
-                if b2:
-                    return bucket0_stats[b1][b2]
+        conn = sqlite3.connect(self.file)
+        cursor = conn.execute(
+                'select stats from buckets_of_stats where bucket = ?',
+                (bucket0,))
+        result_tuple = cursor.fetchone()
+        conn.close()
+        if result_tuple:
+            bucket0_stats = json.loads(result_tuple[0])
+            if bucket1:
+                if bucket2:
+                    return bucket0_stats[bucket1][bucket2]
                 else:
-                    return bucket0_stats[b1]
+                    return bucket0_stats[bucket1]
             else:
                 return bucket0_stats
         else:
@@ -115,7 +115,7 @@ class StatsDb:
         with key 'bucket' whose value is the name of the bucket. The other
         currently recognized item is 'tally-domains', which if supplied should
         be a list of domains. This instructs warcprox to additionally tally
-        substats of the given bucket by domain.  Host stats are stored in the
+        substats of the given bucket by domain. Host stats are stored in the
         stats table under the key '{parent-bucket}:{domain(normalized)}'.
 
         Example Warcprox-Meta header (a real one will likely have other
@@ -150,14 +150,27 @@ class StatsDb:
         return buckets
 
     def tally(self, recorded_url, records):
+        conn = sqlite3.connect(self.file)
+
+        i = 0
         for bucket in self.buckets(recorded_url):
-            # Gdbm wants str/bytes keys in python2, str/unicode keys in python3.
-            # This ugliness deals with keys that arrive as unicode in py2.
-            b = bucket.encode("utf-8") if bucket and not isinstance(bucket, str) else bucket
-            if b in self.db:
-                bucket_stats = json.loads(self.db[b].decode("utf-8"))
+            try:
+                cursor = conn.execute(
+                        'select stats from buckets_of_stats where bucket=?',
+                        (bucket,))
+            except:
+                logging.info(
+                        'i=%s bucket=%s self.file=%s', i, repr(bucket),
+                        repr(self.file), exc_info=1)
+                raise
+            i += 1
+
+            result_tuple = cursor.fetchone()
+            cursor.close()
+            if result_tuple:
+                bucket_stats = json.loads(result_tuple[0])
             else:
-                bucket_stats = _empty_bucket(b)
+                bucket_stats = _empty_bucket(bucket)
 
             bucket_stats["total"]["urls"] += 1
             bucket_stats["total"]["wire_bytes"] += recorded_url.size
@@ -169,7 +182,13 @@ class StatsDb:
                 bucket_stats["new"]["urls"] += 1
                 bucket_stats["new"]["wire_bytes"] += recorded_url.size
 
-            self.db[b] = json.dumps(bucket_stats, separators=(',',':')).encode("utf-8")
+            json_value = json.dumps(bucket_stats, separators=(',',':'))
+            conn.execute(
+                    'insert or replace into buckets_of_stats(bucket, stats) '
+                    'values (?, ?)', (bucket, json_value))
+            conn.commit()
+
+        conn.close()
 
 class RethinkStatsDb(StatsDb):
     """Updates database in batch every 2.0 seconds"""

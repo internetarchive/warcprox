@@ -15,7 +15,7 @@ To install latest release run:
 
 ::
 
-    # apt-get install libffi-dev libssl-dev python3-gdbm
+    # apt-get install libffi-dev libssl-dev
     pip install warcprox
 
 You can also install the latest bleeding edge code:

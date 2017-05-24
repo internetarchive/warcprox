@@ -97,7 +97,7 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
     arg_parser.add_argument('--method-filter', metavar='HTTP_METHOD',
                             action='append', help='only record requests with the given http method(s) (can be used more than once)')
     arg_parser.add_argument('--stats-db-file', dest='stats_db_file',
-            default='./warcprox-stats.db', help='persistent statistics database file; empty string or /dev/null disables statistics tracking')
+            default='./warcprox.sqlite', help='persistent statistics database file; empty string or /dev/null disables statistics tracking')
     arg_parser.add_argument('-P', '--playback-port', dest='playback_port',
             type=int, default=None, help='port to listen on for instant playback')
     arg_parser.add_argument('--playback-index-db-file', dest='playback_index_db_file',
@@ -105,7 +105,7 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
             help='playback index database file (only used if --playback-port is specified)')
     group = arg_parser.add_mutually_exclusive_group()
     group.add_argument('-j', '--dedup-db-file', dest='dedup_db_file',
-            default='./warcprox-dedup.db', help='persistent deduplication database file; empty string or /dev/null disables deduplication')
+            default='./warcprox.sqlite', help='persistent deduplication database file; empty string or /dev/null disables deduplication')
     group.add_argument('--rethinkdb-servers', dest='rethinkdb_servers',
             help='rethinkdb servers, used for dedup and stats if specified; e.g. db0.foo.org,db0.foo.org:38015,db1.foo.org')
     arg_parser.add_argument('--rethinkdb-db', dest='rethinkdb_db', default='warcprox',

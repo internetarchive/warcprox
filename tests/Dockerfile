@@ -39,9 +39,8 @@ RUN mkdir -vp /etc/service/rethinkdb \
     && chmod a+x /etc/service/rethinkdb/run
 
 RUN apt-get -y install git
-RUN apt-get -y install python-gdbm python3-gdbm libpython2.7-dev \
-               libpython3-dev libffi-dev libssl-dev python-setuptools \
-               python3-setuptools
+RUN apt-get -y install libpython2.7-dev libpython3-dev libffi-dev libssl-dev \
+               python-setuptools python3-setuptools
 RUN apt-get -y install gcc
 
 RUN echo '57ff41e99cb01b6a1c2b0999161589b726f0ec8b  /tmp/pip-9.0.1.tar.gz' > /tmp/sha1sums.txt
