@@ -2,7 +2,7 @@
 warcprox/playback.py - rudimentary support for playback of urls archived by
 warcprox (not much used or maintained)
 
-Copyright (C) 2013-2016 Internet Archive
+Copyright (C) 2013-2017 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -40,6 +40,7 @@ import traceback
 import re
 from warcprox.mitmproxy import MitmProxyHandler
 import warcprox
+import sqlite3
 
 class PlaybackProxyHandler(MitmProxyHandler):
     logger = logging.getLogger("warcprox.playback.PlaybackProxyHandler")
@@ -49,10 +50,9 @@ class PlaybackProxyHandler(MitmProxyHandler):
         # don't connect to any remote server!
         pass
 
-
     # @Override
     def _proxy_request(self):
-        date, location = self.server.playback_index_db.lookup_latest(self.url.encode('utf-8'))
+        date, location = self.server.playback_index_db.lookup_latest(self.url)
         self.logger.debug('lookup_latest returned {}:{}'.format(date, location))
 
         status = None
@@ -82,7 +82,8 @@ class PlaybackProxyHandler(MitmProxyHandler):
             sz = len(headers) + len(payload)
 
         self.log_message('"%s" %s %s %s',
-                         self.requestline, str(status), str(sz), repr(location) if location else '-')
+                         self.requestline, str(status), str(sz),
+                         repr(location) if location else '-')
 
 
     def _open_warc_at_offset(self, warcfilename, offset):
@@ -98,7 +99,6 @@ class PlaybackProxyHandler(MitmProxyHandler):
             raise Exception('{} not found'.format(warcfilename))
 
         return warctools.warc.WarcRecord.open_archive(filename=warcpath, mode='rb', offset=offset)
-
 
     def _send_response(self, headers, payload_fh):
         status = '-'
@@ -118,8 +118,10 @@ class PlaybackProxyHandler(MitmProxyHandler):
         return status, sz
 
 
-    def _send_headers_and_refd_payload(self, headers, refers_to, refers_to_target_uri, refers_to_date):
-        location = self.server.playback_index_db.lookup_exact(refers_to_target_uri, refers_to_date, record_id=refers_to)
+    def _send_headers_and_refd_payload(
+            self, headers, refers_to, refers_to_target_uri, refers_to_date):
+        location = self.server.playback_index_db.lookup_exact(
+                refers_to_target_uri, refers_to_date, record_id=refers_to)
         self.logger.debug('loading http payload from {}'.format(location))
 
         fh = self._open_warc_at_offset(location['f'], location['o'])
@@ -174,12 +176,20 @@ class PlaybackProxyHandler(MitmProxyHandler):
                 if warc_profile != warctools.WarcRecord.PROFILE_IDENTICAL_PAYLOAD_DIGEST:
                     raise Exception('unknown revisit record profile {}'.format(warc_profile))
 
-                refers_to = record.get_header(warctools.WarcRecord.REFERS_TO)
-                refers_to_target_uri = record.get_header(warctools.WarcRecord.REFERS_TO_TARGET_URI)
-                refers_to_date = record.get_header(warctools.WarcRecord.REFERS_TO_DATE)
+                refers_to = record.get_header(
+                        warctools.WarcRecord.REFERS_TO).decode('latin1')
+                refers_to_target_uri = record.get_header(
+                        warctools.WarcRecord.REFERS_TO_TARGET_URI).decode(
+                                'latin1')
+                refers_to_date = record.get_header(
+                        warctools.WarcRecord.REFERS_TO_DATE).decode('latin1')
 
-                self.logger.debug('revisit record references {}:{} capture of {}'.format(refers_to_date, refers_to, refers_to_target_uri))
-                return self._send_headers_and_refd_payload(record.content[1], refers_to, refers_to_target_uri, refers_to_date)
+                self.logger.debug(
+                        'revisit record references %s:%s capture of %s',
+                        refers_to_date, refers_to, refers_to_target_uri)
+                return self._send_headers_and_refd_payload(
+                        record.content[1], refers_to, refers_to_target_uri,
+                        refers_to_date)
 
             else:
                 # send it back raw, whatever it is
@@ -220,30 +230,30 @@ class PlaybackProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
 class PlaybackIndexDb(object):
     logger = logging.getLogger("warcprox.playback.PlaybackIndexDb")
 
-    def __init__(self, dbm_file='./warcprox-playback-index.db'):
-        try:
-            import dbm.gnu as dbm_gnu
-        except ImportError:
-            try:
-                import gdbm as dbm_gnu
-            except ImportError:
-                import anydbm as dbm_gnu
+    def __init__(self, file='./warcprox.sqlite'):
+        self.file = file
 
-        if os.path.exists(dbm_file):
-            self.logger.info('opening existing playback index database {}'.format(dbm_file))
+        if os.path.exists(self.file):
+            self.logger.info(
+                    'opening existing playback index database %s', self.file)
         else:
-            self.logger.info('creating new playback index database {}'.format(dbm_file))
+            self.logger.info(
+                    'creating new playback index database %s', self.file)
 
-        self.db = dbm_gnu.open(dbm_file, 'c')
+        conn = sqlite3.connect(self.file)
+        conn.execute(
+                'create table if not exists playback ('
+                '  url varchar(4000) primary key,'
+                '  value varchar(4000)'
+                ');')
+        conn.commit()
+        conn.close()
 
     def close(self):
-        self.db.close()
+        pass
 
     def sync(self):
-        try:
-            self.db.sync()
-        except:
-            pass
+        pass
 
     def notify(self, recorded_url, records):
         self.save(records[0].warc_filename, records, records[0].offset)
@@ -251,7 +261,7 @@ class PlaybackIndexDb(object):
     def save(self, warcfile, recordset, offset):
         response_record = recordset[0]
         # XXX canonicalize url?
-        url = response_record.get_header(warctools.WarcRecord.URL)
+        url = response_record.get_header(warctools.WarcRecord.URL).decode('latin1')
         date_str = response_record.get_header(warctools.WarcRecord.DATE).decode('latin1')
         record_id_str = response_record.get_header(warctools.WarcRecord.ID).decode('latin1')
 
@@ -259,9 +269,13 @@ class PlaybackIndexDb(object):
         # prescribed as YYYY-MM-DDThh:mm:ssZ, so we have to handle it :-\
 
         # url:{date1:[record1={'f':warcfile,'o':response_offset,'q':request_offset,'i':record_id},record2,...],date2:[{...}],...}
-        if url in self.db:
-            existing_json_value = self.db[url].decode('utf-8')
-            py_value = json.loads(existing_json_value)
+
+        conn = sqlite3.connect(self.file)
+        cursor = conn.execute(
+                'select value from playback where url = ?', (url,))
+        result_tuple = cursor.fetchone()
+        if result_tuple:
+            py_value = json.loads(result_tuple[0])
         else:
             py_value = {}
 
@@ -272,16 +286,25 @@ class PlaybackIndexDb(object):
 
         json_value = json.dumps(py_value, separators=(',',':'))
 
-        self.db[url] = json_value.encode('utf-8')
+        conn.execute(
+                'insert or replace into playback (url, value) values (?, ?)',
+                (url, json_value))
+        conn.commit()
+        conn.close()
 
         self.logger.debug('playback index saved: {}:{}'.format(url, json_value))
 
-
     def lookup_latest(self, url):
-        if url not in self.db:
+        conn = sqlite3.connect(self.file)
+        cursor = conn.execute(
+                'select value from playback where url = ?', (url,))
+        result_tuple = cursor.fetchone()
+        conn.close()
+
+        if not result_tuple:
             return None, None
 
-        json_value = self.db[url].decode('utf-8')
+        json_value = result_tuple[0]
         self.logger.debug("{}:{}".format(repr(url), repr(json_value)))
         py_value = json.loads(json_value)
 
@@ -290,26 +313,33 @@ class PlaybackIndexDb(object):
         result['i'] = result['i'].encode('ascii')
         return latest_date, result
 
-
     # in python3 params are bytes
     def lookup_exact(self, url, warc_date, record_id):
-        if url not in self.db:
+        conn = sqlite3.connect(self.file)
+        cursor = conn.execute(
+                'select value from playback where url = ?', (url,))
+        result_tuple = cursor.fetchone()
+        conn.close()
+
+        if not result_tuple:
             return None
 
-        json_value = self.db[url].decode('utf-8')
-        self.logger.debug("{}:{}".format(repr(url), repr(json_value)))
+        json_value = result_tuple[0]
+        self.logger.debug("%s:%s", repr(url), repr(json_value))
         py_value = json.loads(json_value)
 
-        warc_date_str = warc_date.decode('ascii')
-
-        if warc_date_str in py_value:
-            for record in py_value[warc_date_str]:
-                if record['i'].encode('ascii') == record_id:
-                    self.logger.debug("found exact match for ({},{},{})".format(repr(warc_date), repr(record_id), repr(url)))
-                    record['i'] = record['i'].encode('ascii')
+        if warc_date in py_value:
+            for record in py_value[warc_date]:
+                if record['i'] == record_id:
+                    self.logger.debug(
+                            "found exact match for (%s,%s,%s)",
+                            repr(warc_date), repr(record_id), repr(url))
+                    record['i'] = record['i']
                     return record
         else:
-            self.logger.info("match not found for ({},{},{})".format(repr(warc_date), repr(record_id), repr(url)))
+            self.logger.info(
+                    "match not found for (%s,%s,%s)", repr(warc_date),
+                    repr(record_id), repr(url))
             return None
 
 

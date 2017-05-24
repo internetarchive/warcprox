@@ -83,7 +83,7 @@ def _send(self, data):
 # http_client.HTTPConnection.send = _send
 
 logging.basicConfig(
-        stream=sys.stdout, level=logging.INFO, # level=warcprox.TRACE,
+        stream=sys.stdout, level=logging.DEBUG, # level=warcprox.TRACE,
         format='%(asctime)s %(process)d %(levelname)s %(threadName)s '
         '%(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s')
 logging.getLogger("requests.packages.urllib3").setLevel(logging.WARN)
@@ -322,9 +322,9 @@ def stats_db(request, rethinkdb_servers):
             logging.info('dropping rethinkdb database {}'.format(db))
             result = sdb.rr.db_drop(db).run()
             logging.info("result=%s", result)
-        else:
-            logging.info('deleting file {}'.format(stats_db_file))
-            os.unlink(stats_db_file)
+        # else:
+        #     logging.info('deleting file {}'.format(stats_db_file))
+        #     os.unlink(stats_db_file)
     request.addfinalizer(fin)
 
     return sdb

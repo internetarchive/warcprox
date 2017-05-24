@@ -1,5 +1,5 @@
 '''
-warcprox/dedup.py - identical payload digest deduplication
+warcprox/dedup.py - identical payload digest deduplication using sqlite db
 
 Copyright (C) 2013-2017 Internet Archive
 
@@ -27,61 +27,71 @@ import json
 from hanzo import warctools
 import warcprox
 import random
+import sqlite3
+import threading
 
 class DedupDb(object):
     logger = logging.getLogger("warcprox.dedup.DedupDb")
 
-    def __init__(self, dbm_file='./warcprox-dedup.db', options=warcprox.Options()):
-        try:
-            import dbm.gnu as dbm_gnu
-        except ImportError:
-            try:
-                import gdbm as dbm_gnu
-            except ImportError:
-                import anydbm as dbm_gnu
-
-        if os.path.exists(dbm_file):
-            self.logger.info('opening existing deduplication database {}'.format(dbm_file))
-        else:
-            self.logger.info('creating new deduplication database {}'.format(dbm_file))
-
-        self.db = dbm_gnu.open(dbm_file, 'c')
+    def __init__(
+            self, file='./warcprox.sqlite', options=warcprox.Options()):
+        self.file = file
         self.options = options
 
     def start(self):
-        pass
+        if os.path.exists(self.file):
+            self.logger.info(
+                    'opening existing deduplication database %s',
+                    self.file)
+        else:
+            self.logger.info(
+                    'creating new deduplication database %s', self.file)
+
+        conn = sqlite3.connect(self.file)
+        conn.execute(
+                'create table if not exists dedup ('
+                '  key varchar(300) primary key,'
+                '  value varchar(4000)'
+                ');')
+        conn.commit()
+        conn.close()
 
     def stop(self):
-        self.close()
+        pass
 
     def close(self):
-        self.db.close()
+        pass
 
     def sync(self):
-        try:
-            self.db.sync()
-        except:
-            pass
+        pass
 
     def save(self, digest_key, response_record, bucket=""):
         record_id = response_record.get_header(warctools.WarcRecord.ID).decode('latin1')
         url = response_record.get_header(warctools.WarcRecord.URL).decode('latin1')
         date = response_record.get_header(warctools.WarcRecord.DATE).decode('latin1')
 
-        key = digest_key + b"|" + bucket.encode("utf-8")
+        key = digest_key.decode('utf-8') + "|" + bucket
 
         py_value = {'id':record_id, 'url':url, 'date':date}
         json_value = json.dumps(py_value, separators=(',',':'))
 
-        self.db[key] = json_value.encode('utf-8')
+        conn = sqlite3.connect(self.file)
+        conn.execute(
+                'insert into dedup (key, value) values (?, ?);',
+                (key, json_value))
+        conn.commit()
+        conn.close()
         self.logger.debug('dedup db saved %s:%s', key, json_value)
 
     def lookup(self, digest_key, bucket=""):
         result = None
-        key = digest_key + b"|" + bucket.encode("utf-8")
-        if key in self.db:
-            json_result = self.db[key]
-            result = json.loads(json_result.decode('utf-8'))
+        key = digest_key.decode('utf-8') + '|' + bucket
+        conn = sqlite3.connect(self.file)
+        cursor = conn.execute('select value from dedup where key = ?', (key,))
+        result_tuple = cursor.fetchone()
+        conn.close()
+        if result_tuple:
+            result = json.loads(result_tuple[0])
             result['id'] = result['id'].encode('latin1')
             result['url'] = result['url'].encode('latin1')
             result['date'] = result['date'].encode('latin1')
@@ -91,10 +101,13 @@ class DedupDb(object):
     def notify(self, recorded_url, records):
         if (records[0].get_header(warctools.WarcRecord.TYPE) == warctools.WarcRecord.RESPONSE
                 and recorded_url.response_recorder.payload_size() > 0):
-            digest_key = warcprox.digest_str(recorded_url.response_recorder.payload_digest,
-                self.options.base32)
+            digest_key = warcprox.digest_str(
+                    recorded_url.response_recorder.payload_digest,
+                    self.options.base32)
             if recorded_url.warcprox_meta and "captures-bucket" in recorded_url.warcprox_meta:
-                self.save(digest_key, records[0], bucket=recorded_url.warcprox_meta["captures-bucket"])
+                self.save(
+                        digest_key, records[0],
+                        bucket=recorded_url.warcprox_meta["captures-bucket"])
             else:
                 self.save(digest_key, records[0])
 
