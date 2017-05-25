@@ -28,7 +28,6 @@ from hanzo import warctools
 import warcprox
 import random
 import sqlite3
-import threading
 
 class DedupDb(object):
     logger = logging.getLogger("warcprox.dedup.DedupDb")
@@ -77,7 +76,7 @@ class DedupDb(object):
 
         conn = sqlite3.connect(self.file)
         conn.execute(
-                'insert into dedup (key, value) values (?, ?);',
+                'insert or replace into dedup (key, value) values (?, ?)',
                 (key, json_value))
         conn.commit()
         conn.close()

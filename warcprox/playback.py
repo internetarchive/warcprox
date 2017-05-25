@@ -41,6 +41,7 @@ import re
 from warcprox.mitmproxy import MitmProxyHandler
 import warcprox
 import sqlite3
+import threading
 
 class PlaybackProxyHandler(MitmProxyHandler):
     logger = logging.getLogger("warcprox.playback.PlaybackProxyHandler")
@@ -232,6 +233,7 @@ class PlaybackIndexDb(object):
 
     def __init__(self, file='./warcprox.sqlite'):
         self.file = file
+        self._lock = threading.RLock()
 
         if os.path.exists(self.file):
             self.logger.info(
@@ -270,27 +272,30 @@ class PlaybackIndexDb(object):
 
         # url:{date1:[record1={'f':warcfile,'o':response_offset,'q':request_offset,'i':record_id},record2,...],date2:[{...}],...}
 
-        conn = sqlite3.connect(self.file)
-        cursor = conn.execute(
-                'select value from playback where url = ?', (url,))
-        result_tuple = cursor.fetchone()
-        if result_tuple:
-            py_value = json.loads(result_tuple[0])
-        else:
-            py_value = {}
+        with self._lock:
+            conn = sqlite3.connect(self.file)
+            cursor = conn.execute(
+                    'select value from playback where url = ?', (url,))
+            result_tuple = cursor.fetchone()
+            if result_tuple:
+                py_value = json.loads(result_tuple[0])
+            else:
+                py_value = {}
 
-        if date_str in py_value:
-            py_value[date_str].append({'f':warcfile, 'o':offset, 'i':record_id_str})
-        else:
-            py_value[date_str] = [{'f':warcfile, 'o':offset, 'i':record_id_str}]
+            if date_str in py_value:
+                py_value[date_str].append(
+                        {'f':warcfile, 'o':offset, 'i':record_id_str})
+            else:
+                py_value[date_str] = [
+                        {'f':warcfile, 'o':offset, 'i':record_id_str}]
 
-        json_value = json.dumps(py_value, separators=(',',':'))
+            json_value = json.dumps(py_value, separators=(',',':'))
 
-        conn.execute(
-                'insert or replace into playback (url, value) values (?, ?)',
-                (url, json_value))
-        conn.commit()
-        conn.close()
+            conn.execute(
+                    'insert or replace into playback (url, value) '
+                    'values (?, ?)', (url, json_value))
+            conn.commit()
+            conn.close()
 
         self.logger.debug('playback index saved: {}:{}'.format(url, json_value))
 

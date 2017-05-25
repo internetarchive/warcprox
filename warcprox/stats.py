@@ -56,23 +56,25 @@ class StatsDb:
     def __init__(self, file='./warcprox.sqlite', options=warcprox.Options()):
         self.file = file
         self.options = options
+        self._lock = threading.RLock()
 
     def start(self):
-        if os.path.exists(self.file):
-            self.logger.info(
-                    'opening existing stats database %s', self.file)
-        else:
-            self.logger.info(
-                    'creating new stats database %s', self.file)
+        with self._lock:
+            if os.path.exists(self.file):
+                self.logger.info(
+                        'opening existing stats database %s', self.file)
+            else:
+                self.logger.info(
+                        'creating new stats database %s', self.file)
 
-        conn = sqlite3.connect(self.file)
-        conn.execute(
-                'create table if not exists buckets_of_stats ('
-                '  bucket varchar(300) primary key,'
-                '  stats varchar(4000)'
-                ');')
-        conn.commit()
-        conn.close()
+            conn = sqlite3.connect(self.file)
+            conn.execute(
+                    'create table if not exists buckets_of_stats ('
+                    '  bucket varchar(300) primary key,'
+                    '  stats varchar(4000)'
+                    ');')
+            conn.commit()
+            conn.close()
 
         self.logger.info('created table buckets_of_stats in %s', self.file)
 
@@ -150,45 +152,38 @@ class StatsDb:
         return buckets
 
     def tally(self, recorded_url, records):
-        conn = sqlite3.connect(self.file)
+        with self._lock:
+            conn = sqlite3.connect(self.file)
 
-        i = 0
-        for bucket in self.buckets(recorded_url):
-            try:
+            for bucket in self.buckets(recorded_url):
                 cursor = conn.execute(
                         'select stats from buckets_of_stats where bucket=?',
                         (bucket,))
-            except:
-                logging.info(
-                        'i=%s bucket=%s self.file=%s', i, repr(bucket),
-                        repr(self.file), exc_info=1)
-                raise
-            i += 1
 
-            result_tuple = cursor.fetchone()
-            cursor.close()
-            if result_tuple:
-                bucket_stats = json.loads(result_tuple[0])
-            else:
-                bucket_stats = _empty_bucket(bucket)
+                result_tuple = cursor.fetchone()
+                cursor.close()
+                if result_tuple:
+                    bucket_stats = json.loads(result_tuple[0])
+                else:
+                    bucket_stats = _empty_bucket(bucket)
 
-            bucket_stats["total"]["urls"] += 1
-            bucket_stats["total"]["wire_bytes"] += recorded_url.size
+                bucket_stats["total"]["urls"] += 1
+                bucket_stats["total"]["wire_bytes"] += recorded_url.size
 
-            if records[0].get_header(warctools.WarcRecord.TYPE) == warctools.WarcRecord.REVISIT:
-                bucket_stats["revisit"]["urls"] += 1
-                bucket_stats["revisit"]["wire_bytes"] += recorded_url.size
-            else:
-                bucket_stats["new"]["urls"] += 1
-                bucket_stats["new"]["wire_bytes"] += recorded_url.size
+                if records[0].get_header(warctools.WarcRecord.TYPE) == warctools.WarcRecord.REVISIT:
+                    bucket_stats["revisit"]["urls"] += 1
+                    bucket_stats["revisit"]["wire_bytes"] += recorded_url.size
+                else:
+                    bucket_stats["new"]["urls"] += 1
+                    bucket_stats["new"]["wire_bytes"] += recorded_url.size
 
-            json_value = json.dumps(bucket_stats, separators=(',',':'))
-            conn.execute(
-                    'insert or replace into buckets_of_stats(bucket, stats) '
-                    'values (?, ?)', (bucket, json_value))
-            conn.commit()
+                json_value = json.dumps(bucket_stats, separators=(',',':'))
+                conn.execute(
+                        'insert or replace into buckets_of_stats '
+                        '(bucket, stats) values (?, ?)', (bucket, json_value))
+                conn.commit()
 
-        conn.close()
+            conn.close()
 
 class RethinkStatsDb(StatsDb):
     """Updates database in batch every 2.0 seconds"""
