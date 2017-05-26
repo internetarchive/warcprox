@@ -246,7 +246,7 @@ class ServiceRegistry(object):
                                 row, candidate),
                             return_changes='always').run()
             new_val = result['changes'][0]['new_val']
-            if all([new_val[k] == candidate[k] for k in candidate
+            if all([new_val.get(k) == candidate[k] for k in candidate
                     if k not in ('first_heartbeat', 'last_heartbeat')]):
                 # candidate is the unique_service, send a heartbeat
                 del candidate['first_heartbeat'] # don't touch first_heartbeat
