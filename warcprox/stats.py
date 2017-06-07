@@ -256,14 +256,14 @@ class RethinkStatsDb(StatsDb):
         dbs = self.rr.db_list().run()
         if not self.rr.dbname in dbs:
             self.logger.info(
-                    "creating rethinkdb database %s", repr(self.rr.dbname))
+                    "creating rethinkdb database %r", self.rr.dbname)
             self.rr.db_create(self.rr.dbname).run()
         tables = self.rr.table_list().run()
         if not self.table in tables:
             self.logger.info(
-                    "creating rethinkdb table %s in database %s shards=%s "
-                    "replicas=%s", repr(self.table), repr(self.rr.dbname),
-                    self.shards, self.replicas)
+                    "creating rethinkdb table %r in database %r shards=%r "
+                    "replicas=%r", self.table, self.rr.dbname, self.shards,
+                    self.replicas)
             self.rr.table_create(
                     self.table, primary_key="bucket", shards=self.shards,
                     replicas=self.replicas).run()

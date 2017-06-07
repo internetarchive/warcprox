@@ -77,7 +77,7 @@ def _send(self, data):
         logging.root.handlers[0].stream.write(data)
         logging.root.handlers[0].stream.write('\n')
     else:
-        logging.info('sending data from %s', repr(data))
+        logging.info('sending data from %r', data)
     orig_send(self, data)
 ### uncomment this to block see raw requests going over the wire
 # http_client.HTTPConnection.send = _send

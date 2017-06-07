@@ -82,7 +82,7 @@ class PlaybackProxyHandler(MitmProxyHandler):
             self.connection.sendall(payload)
             sz = len(headers) + len(payload)
 
-        self.log_message('"%s" %s %s %s',
+        self.log_message('%r %s %s %s',
                          self.requestline, str(status), str(sz),
                          repr(location) if location else '-')
 
@@ -310,7 +310,7 @@ class PlaybackIndexDb(object):
             return None, None
 
         json_value = result_tuple[0]
-        self.logger.debug("{}:{}".format(repr(url), repr(json_value)))
+        self.logger.debug('%r:%r', url, json_value)
         py_value = json.loads(json_value)
 
         latest_date = max(py_value)
@@ -330,21 +330,19 @@ class PlaybackIndexDb(object):
             return None
 
         json_value = result_tuple[0]
-        self.logger.debug("%s:%s", repr(url), repr(json_value))
+        self.logger.debug('%r:%r', url, json_value)
         py_value = json.loads(json_value)
 
         if warc_date in py_value:
             for record in py_value[warc_date]:
                 if record['i'] == record_id:
                     self.logger.debug(
-                            "found exact match for (%s,%s,%s)",
-                            repr(warc_date), repr(record_id), repr(url))
+                            "found exact match for (%r,%r,%r)",
+                            warc_date, record_id, url)
                     record['i'] = record['i']
                     return record
         else:
             self.logger.info(
-                    "match not found for (%s,%s,%s)", repr(warc_date),
-                    repr(record_id), repr(url))
+                    "match not found for (%r,%r,%r)", warc_date, record_id, url)
             return None
-
 

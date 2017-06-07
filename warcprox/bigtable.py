@@ -102,14 +102,13 @@ class RethinkCaptures:
     def _ensure_db_table(self):
         dbs = self.rr.db_list().run()
         if not self.rr.dbname in dbs:
-            self.logger.info(
-                    "creating rethinkdb database %s", repr(self.rr.dbname))
+            self.logger.info("creating rethinkdb database %r", self.rr.dbname)
             self.rr.db_create(self.rr.dbname).run()
         tables = self.rr.table_list().run()
         if not self.table in tables:
             self.logger.info(
-                    "creating rethinkdb table %s in database %s",
-                    repr(self.table), repr(self.rr.dbname))
+                    "creating rethinkdb table %r in database %r",
+                    self.table, self.rr.dbname)
             self.rr.table_create(self.table, shards=self.shards, replicas=self.replicas).run()
             self.rr.table(self.table).index_create(
                     "abbr_canon_surt_timestamp",
@@ -120,7 +119,7 @@ class RethinkCaptures:
     def find_response_by_digest(self, algo, raw_digest, bucket="__unspecified__"):
         if algo != "sha1":
             raise Exception(
-                    "digest type is %s but big captures table is indexed by "
+                    "digest type is %r but big captures table is indexed by "
                     "sha1" % algo)
         sha1base32 = base64.b32encode(raw_digest).decode("utf-8")
         results_iter = self.rr.table(self.table).get_all(
@@ -130,11 +129,14 @@ class RethinkCaptures:
         results = list(results_iter)
         if len(results) > 0:
             if len(results) > 1:
-                self.logger.debug("expected 0 or 1 but found %s results for sha1base32=%s bucket=%s (will use first result)", len(results), sha1base32, bucket)
+                self.logger.debug(
+                        "expected 0 or 1 but found %r results for "
+                        "sha1base32=%r bucket=%r (will use first result)",
+                        len(results), sha1base32, bucket)
             result = results[0]
         else:
             result = None
-        self.logger.debug("returning %s for sha1base32=%s bucket=%s",
+        self.logger.debug("returning %r for sha1base32=%r bucket=%r",
                           result, sha1base32, bucket)
         return result
 
@@ -146,7 +148,7 @@ class RethinkCaptures:
                         ).decode("utf-8")
             else:
                 self.logger.warn(
-                        "digest type is %s but big captures table is indexed "
+                        "digest type is %r but big captures table is indexed "
                         "by sha1",
                         recorded_url.response_recorder.payload_digest.name)
         else:

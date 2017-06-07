@@ -209,8 +209,8 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             u = urllib_parse.urlparse(self.url)
             if u.scheme != 'http':
                 raise Exception(
-                        'unable to parse request %s as a proxy request' % (
-                            repr(self.requestline)))
+                        'unable to parse request %r as a proxy request' % (
+                            self.requestline))
             host = u.hostname
             self.port = u.port or 80
             self.path = urllib_parse.urlunparse(
@@ -294,7 +294,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         except Exception as e:
             try:
                 self.logger.error(
-                        "problem handling %s: %s", repr(self.requestline), e)
+                        "problem handling %r: %r", self.requestline, e)
                 if type(e) is socket.timeout:
                     self.send_error(504, str(e))
                 else:
@@ -328,7 +328,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
 
     def do_COMMAND(self):
         self.logger.trace(
-                'request from %s:%s: %s', self.client_address[0],
+                'request from %s:%s: %r', self.client_address[0],
                 self.client_address[1], self.requestline)
         try:
             if self.is_connect:
@@ -341,12 +341,12 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             self._connect_to_remote_server()
         except warcprox.RequestBlockedByRule as e:
             # limit enforcers have already sent the appropriate response
-            self.logger.info("%s: %s", repr(self.requestline), e)
+            self.logger.info("%r: %r", self.requestline, e)
             return
         except Exception as e:
             self.logger.error(
-                    "problem processing request %s: %s",
-                    repr(self.requestline), e, exc_info=True)
+                    "problem processing request %r: %r",
+                    self.requestline, e, exc_info=True)
             self.send_error(500, str(e))
             return
 
@@ -393,7 +393,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             req += self.rfile.read(int(self.headers['Content-Length']))
 
         try:
-            self.logger.debug('sending to remote server req=%s', repr(req))
+            self.logger.debug('sending to remote server req=%r', req)
 
             # Send it down the pipe!
             self._remote_server_sock.sendall(req)
@@ -411,7 +411,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             self.log_request(prox_rec_res.status, prox_rec_res.recorder.len)
         except Exception as e:
             self.logger.error(
-                    "%s proxying %s %s", repr(e), self.command, self.url,
+                    "%r proxying %s %s", e, self.command, self.url,
                     exc_info=True)
         finally:
             # Let's close off the remote end

@@ -97,7 +97,7 @@ class CaptureFeed:
                 d[k] = v
 
         msg = json.dumps(d, separators=(',', ':')).encode('utf-8')
-        self.logger.debug('feeding kafka topic=%s msg=%s', repr(topic), msg)
+        self.logger.debug('feeding kafka topic=%r msg=%r', topic, msg)
         p = self._producer()
         if p:
             p.send(topic, msg)
