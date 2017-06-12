@@ -142,10 +142,10 @@ def dump_state(signum=None, frame=None):
     for th in threading.enumerate():
         try:
             state_strs.append(str(th))
-        except AssertionError:
-            state_strs.append('<n/a:AssertionError>')
-        stack = traceback.format_stack(sys._current_frames()[th.ident])
-        state_strs.append(''.join(stack))
+            stack = traceback.format_stack(sys._current_frames()[th.ident])
+            state_strs.append(''.join(stack))
+        except Exception as e:
+            state_strs.append('<n/a:%r>' % e)
 
     logging.warn(
             'dumping state (caught signal %s)\n%s',
