@@ -232,25 +232,28 @@ class RethinkStatsDb(StatsDb):
                 })))
 
     def _update_batch(self):
-        with self._batch_lock:
-            if len(self._batch) > 0:
-                # XXX can all the buckets be done in one query?
-                for bucket in self._batch:
-                    result = self._bucket_batch_update_reql(bucket).run()
-                    if (not result["inserted"] and not result["replaced"]
-                            or sorted(result.values()) != [0,0,0,0,0,1]):
-                        raise Exception(
-                                "unexpected result %s updating stats %s" % (
-                                    result, self._batch[bucket]))
-                self._batch = {}
-
-        if not self._stop.is_set():
-            self._timer = threading.Timer(2.0, self._update_batch)
-            self._timer.name = "RethinkStats-batch-update-timer-%s" % (
-                    datetime.datetime.utcnow().isoformat())
-            self._timer.start()
-        else:
-            self.logger.info("finished")
+        try:
+            with self._batch_lock:
+                if len(self._batch) > 0:
+                    # XXX can all the buckets be done in one query?
+                    for bucket in self._batch:
+                        result = self._bucket_batch_update_reql(bucket).run()
+                        if (not result["inserted"] and not result["replaced"]
+                                or sorted(result.values()) != [0,0,0,0,0,1]):
+                            raise Exception(
+                                    "unexpected result %s updating stats %s" % (
+                                        result, self._batch[bucket]))
+                    self._batch = {}
+        except Exception as e:
+            self.logger.error("problem updating stats", exc_info=True)
+        finally:
+           if not self._stop.is_set():
+               self._timer = threading.Timer(2.0, self._update_batch)
+               self._timer.name = "RethinkStats-batch-update-timer-%s" % (
+                       datetime.datetime.utcnow().isoformat())
+               self._timer.start()
+           else:
+               self.logger.info("finished")
 
     def _ensure_db_table(self):
         dbs = self.rr.db_list().run()
