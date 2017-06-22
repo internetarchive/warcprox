@@ -1429,45 +1429,6 @@ def test_via_response_header(warcprox_, http_daemon, archiving_proxies, playback
                 elif record.rec_type == 'request':
                     assert record.http_headers.get_header('via') == '1.1 warcprox'
 
-def test_summy_merge():
-    d1 = {
-        'a': {
-            'metadata': 'some value',
-            'a1': 5,
-            'a2': 6,
-        },
-        'b': {
-            'b1': 9,
-        }
-    }
-
-    d2 = {
-        'a': {
-            'a1': 7,
-            'a3': 8,
-        },
-        'c': {
-            'c1': 10,
-        }
-    }
-
-    merged = {
-        'a': {
-            'metadata': 'some value',
-            'a1': 12,
-            'a2': 6,
-            'a3': 8,
-        },
-        'b': {
-            'b1': 9,
-        },
-        'c': {
-            'c1': 10,
-        },
-    }
-
-    assert warcprox.stats.summy_merge(d1, d2) == merged
-
 if __name__ == '__main__':
     pytest.main()
 
