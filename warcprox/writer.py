@@ -152,9 +152,9 @@ class WarcWriterPool:
     def __init__(self, options=warcprox.Options()):
         self.default_warc_writer = WarcWriter(options=options)
         self.warc_writers = {}  # {prefix:WarcWriter}
-        self._last_sync = time.time()
         self.options = options
         self._lock = threading.RLock()
+        self._last_maybe = time.time()
 
     # chooses writer for filename specified by warcprox_meta["warc-prefix"] if set
     def _writer(self, recorded_url):
@@ -177,9 +177,11 @@ class WarcWriterPool:
         return self._writer(recorded_url).write_records(recorded_url)
 
     def maybe_idle_rollover(self):
-        self.default_warc_writer.maybe_idle_rollover()
-        for w in self.warc_writers.values():
-            w.maybe_idle_rollover()
+        if time.time() - self._last_maybe > 20:
+            self.default_warc_writer.maybe_idle_rollover()
+            for w in self.warc_writers.values():
+                w.maybe_idle_rollover()
+            self._last_maybe = time.time()
 
     def close_writers(self):
         self.default_warc_writer.close_writer()
