@@ -69,8 +69,7 @@ class RethinkerWrapper(object):
                 time.sleep(0.5)
             except r.ReqlOpFailedError as e:
                 if e.args and re.match(
-                        '^Cannot perform.*primary replica.*',
-                        e.args[0]):
+                        '^Cannot perform.*replica.*', e.args[0]):
                     self.logger.error(
                             'will keep trying after potentially recoverable '
                             'error: %s', e)
