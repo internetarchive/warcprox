@@ -42,6 +42,7 @@ import warcprox
 import re
 import doublethink
 import cryptography.hazmat.backends.openssl
+import importlib
 
 class BetterArgumentDefaultsHelpFormatter(
                 argparse.ArgumentDefaultsHelpFormatter,
@@ -125,8 +126,21 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
             help=argparse.SUPPRESS)
     arg_parser.add_argument('--profile', action='store_true', default=False,
             help=argparse.SUPPRESS)
-    arg_parser.add_argument('--onion-tor-socks-proxy', dest='onion_tor_socks_proxy',
-            default=None, help='host:port of tor socks proxy, used only to connect to .onion sites')
+    arg_parser.add_argument(
+            '--onion-tor-socks-proxy', dest='onion_tor_socks_proxy',
+            default=None, help=(
+                'host:port of tor socks proxy, used only to connect to '
+                '.onion sites'))
+    arg_parser.add_argument(
+            '--plugin', metavar='PLUGIN_CLASS', dest='plugins',
+            action='append', help=(
+                'Qualified name of plugin class, e.g. "mypkg.mymod.MyClass". '
+                'May be used multiple times to register multiple plugins. '
+                'Plugin classes are loaded from the regular python module '
+                'search path. They will be instantiated with no arguments and '
+                'must have a method `notify(self, recorded_url, records)` '
+                'which will be called for each url, after warc records have '
+                'been written.'))
     arg_parser.add_argument('--version', action='version',
             version="warcprox {}".format(warcprox.__version__))
     arg_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true')
@@ -210,7 +224,8 @@ def init_controller(args):
             stats_db=stats_db, options=options)
 
     if args.playback_port is not None:
-        playback_index_db = warcprox.playback.PlaybackIndexDb(args.playback_index_db_file, options=options)
+        playback_index_db = warcprox.playback.PlaybackIndexDb(
+                args.playback_index_db_file, options=options)
         playback_proxy = warcprox.playback.PlaybackProxy(
                 server_address=(args.address, args.playback_port), ca=ca,
                 playback_index_db=playback_index_db, warcs_dir=args.directory,
@@ -219,6 +234,18 @@ def init_controller(args):
     else:
         playback_index_db = None
         playback_proxy = None
+
+    for qualname in args.plugins or []:
+        try:
+            (module_name, class_name) = qualname.rsplit('.', 1)
+            module_ = importlib.import_module(module_name)
+            class_ = getattr(module_, class_name)
+            listener = class_()
+            listener.notify  # make sure it has this method
+            listeners += listener
+        except Exception as e:
+            logging.fatal('problem with plugin class %r: %s', qualname, e)
+            sys.exit(1)
 
     writer_pool = warcprox.writer.WarcWriterPool(options=options)
     # number of warc writer threads = sqrt(proxy.max_threads)
