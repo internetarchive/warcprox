@@ -216,12 +216,6 @@ Benchmarking code uses asyncio/aiohttp and requires python 3.5 or later.
                 'index for playback (ignored unless --rethinkdb-servers is '
                 'specified)'))
     arg_parser.add_argument(
-            '--kafka-broker-list', dest='kafka_broker_list', default=None,
-            help='kafka broker list for capture feed')
-    arg_parser.add_argument(
-            '--kafka-capture-feed-topic', dest='kafka_capture_feed_topic',
-            default=None, help='kafka capture feed topic')
-    arg_parser.add_argument(
             '--queue-size', dest='queue_size', type=int, default=1, help=(
             'max size of the queue of urls waiting to be processed by '
             'the warc writer thread'))
