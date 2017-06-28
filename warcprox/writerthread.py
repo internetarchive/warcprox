@@ -106,20 +106,30 @@ class WarcWriterThread(threading.Thread):
                         self.idle = time.time()
 
                 self.logger.info('WarcWriterThread shutting down')
-                self.writer_pool.close_writers()
+                self._shutdown()
             except Exception as e:
                 if isinstance(e, OSError) and e.errno == 28:
                     # OSError: [Errno 28] No space left on device
                     self.logger.critical(
                             'shutting down due to fatal problem: %s: %s',
                             e.__class__.__name__, e)
-                    self.writer_pool.close_writers()
+                    self._shutdown()
                     sys.exit(1)
 
                 self.logger.critical(
                     'WarcWriterThread will try to continue after unexpected '
                     'error', exc_info=True)
                 time.sleep(0.5)
+
+    def _shutdown(self):
+        self.writer_pool.close_writers()
+        for listener in self.listeners:
+            if hasattr(listener, 'stop'):
+                try:
+                    listener.stop()
+                except:
+                    self.logger.error(
+                            '%s raised exception', listener.stop, exc_info=True)
 
     # closest thing we have to heritrix crawl log at the moment
     def _log(self, recorded_url, records):
