@@ -231,7 +231,7 @@ def init_controller(args):
             class_ = getattr(module_, class_name)
             listener = class_()
             listener.notify  # make sure it has this method
-            listeners += listener
+            listeners.append(listener)
         except Exception as e:
             logging.fatal('problem with plugin class %r: %s', qualname, e)
             sys.exit(1)
