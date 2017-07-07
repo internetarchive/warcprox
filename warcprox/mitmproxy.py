@@ -52,7 +52,6 @@ try:
     import socketserver
 except ImportError:
     import SocketServer as socketserver
-import resource
 import concurrent.futures
 import urlcanon
 import time
@@ -440,15 +439,23 @@ class PooledMixIn(socketserver.ThreadingMixIn):
             # man getrlimit: "RLIMIT_NPROC The maximum number of processes (or,
             # more precisely on Linux, threads) that can be created for the
             # real user ID of the calling process."
-            rlimit_nproc = resource.getrlimit(resource.RLIMIT_NPROC)[0]
-            rlimit_nofile = resource.getrlimit(resource.RLIMIT_NOFILE)[0]
-            max_threads = min(rlimit_nofile // 10, rlimit_nproc // 2)
-            # resource.RLIM_INFINITY == -1 which can result in max_threads == 0
-            if max_threads <= 0 or max_threads > 5000:
-                max_threads = 5000
-            self.logger.info(
-                    "max_threads=%s (rlimit_nproc=%s, rlimit_nofile=%s)",
-                    max_threads, rlimit_nproc, rlimit_nofile)
+            try:
+                import resource
+                rlimit_nproc = resource.getrlimit(resource.RLIMIT_NPROC)[0]
+                rlimit_nofile = resource.getrlimit(resource.RLIMIT_NOFILE)[0]
+                max_threads = min(rlimit_nofile // 10, rlimit_nproc // 2)
+                # resource.RLIM_INFINITY == -1 which can result in max_threads == 0
+                if max_threads <= 0 or max_threads > 5000:
+                    max_threads = 5000
+                self.logger.info(
+                        "max_threads=%s (rlimit_nproc=%s, rlimit_nofile=%s)",
+                        max_threads, rlimit_nproc, rlimit_nofile)
+            except Exception as e:
+                self.logger.warn(
+                        "unable to calculate optimal number of threads based "
+                        "on resource limits due to %s", e)
+                max_threads = 100
+                self.logger.info("max_threads=%s", max_threads)
         self.max_threads = max_threads
         self.pool = concurrent.futures.ThreadPoolExecutor(max_threads)
 
