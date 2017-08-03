@@ -262,18 +262,6 @@ def init_controller(args):
 
     return controller
 
-def real_main(args):
-    # see https://github.com/pyca/cryptography/issues/2911
-    cryptography.hazmat.backends.openssl.backend.activate_builtin_random()
-
-    controller = init_controller(args)
-
-    signal.signal(signal.SIGTERM, lambda a,b: controller.stop.set())
-    signal.signal(signal.SIGINT, lambda a,b: controller.stop.set())
-    signal.signal(signal.SIGQUIT, dump_state)
-
-    controller.run_until_shutdown()
-
 def parse_args(argv=sys.argv):
     '''
     Parses command line arguments with argparse.
@@ -303,7 +291,16 @@ def main(argv=sys.argv):
                 '%(asctime)s %(process)d %(levelname)s %(threadName)s '
                 '%(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s'))
 
-    real_main(args)
+    # see https://github.com/pyca/cryptography/issues/2911
+    cryptography.hazmat.backends.openssl.backend.activate_builtin_random()
+
+    controller = init_controller(args)
+
+    signal.signal(signal.SIGTERM, lambda a,b: controller.stop.set())
+    signal.signal(signal.SIGINT, lambda a,b: controller.stop.set())
+    signal.signal(signal.SIGQUIT, dump_state)
+
+    controller.run_until_shutdown()
 
 def ensure_rethinkdb_tables():
     '''
