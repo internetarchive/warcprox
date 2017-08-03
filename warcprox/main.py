@@ -114,6 +114,9 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
     arg_parser.add_argument('--rethinkdb-big-table',
             dest='rethinkdb_big_table', action='store_true', default=False,
             help='use a big rethinkdb table called "captures", instead of a small table called "dedup"; table is suitable for use as index for playback (ignored unless --rethinkdb-servers is specified)')
+    arg_parser.add_argument(
+            '--rethinkdb-big-table-name', dest='rethinkdb_big_table_name',
+            default='captures', help=argparse.SUPPRESS)
     arg_parser.add_argument('--queue-size', dest='queue_size', type=int,
             default=500, help=argparse.SUPPRESS)
     arg_parser.add_argument('--max-threads', dest='max_threads', type=int,
@@ -179,7 +182,8 @@ def init_controller(args):
         rr = doublethink.Rethinker(
                 args.rethinkdb_servers.split(","), args.rethinkdb_db)
         if args.rethinkdb_big_table:
-            captures_db = warcprox.bigtable.RethinkCaptures(rr, options=options)
+            captures_db = warcprox.bigtable.RethinkCaptures(
+                    rr, table=args.rethinkdb_big_table_name, options=options)
             dedup_db = warcprox.bigtable.RethinkCapturesDedup(
                     captures_db, options=options)
             listeners.append(captures_db)
