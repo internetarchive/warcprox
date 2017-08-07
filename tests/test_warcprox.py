@@ -1465,18 +1465,10 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     response = requests.get(url, proxies=archiving_proxies, headers=headers)
     assert response.status_code == 200
 
-    # should be deduplicated
-    url = 'http://localhost:%s/b/d' % http_daemon.server_port
-    headers = {"Warcprox-Meta": json.dumps({
-        "warc-prefix": "test_crawl_log_2",
-        "metadata": {"seed": "http://example.com/seed"}})}
-    response = requests.get(url, proxies=archiving_proxies, headers=headers)
-    assert response.status_code == 200
-
     start = time.time()
     while time.time() - start < 10:
         if os.path.exists(os.path.join(
-            warcprox_.options.crawl_log_dir, 'test_crawl_log_2.log')):
+            warcprox_.options.crawl_log_dir, 'test_crawl_log_1.log')):
             break
         time.sleep(0.5)
 
@@ -1484,9 +1476,6 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
         warcprox_.options.crawl_log_dir, 'crawl.log'), 'rb').read()
     crawl_log_1 = open(os.path.join(
         warcprox_.options.crawl_log_dir, 'test_crawl_log_1.log'), 'rb').read()
-    crawl_log_2 = open(os.path.join(
-        warcprox_.options.crawl_log_dir, 'test_crawl_log_2.log'), 'rb').read()
-
     # tests will fail in year 3000 :)
     assert re.match(b'\A2[^\n]+\n\Z', crawl_log)
     assert crawl_log[24:31] == b'   200 '
@@ -1524,6 +1513,24 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     assert extra_info.keys() == {'contentSize','warcFilename','warcFileOffset'}
     assert extra_info['contentSize'] == 135
 
+    # should be deduplicated
+    url = 'http://localhost:%s/b/d' % http_daemon.server_port
+    headers = {"Warcprox-Meta": json.dumps({
+        "warc-prefix": "test_crawl_log_2",
+        "metadata": {"seed": "http://example.com/seed"}})}
+    response = requests.get(url, proxies=archiving_proxies, headers=headers)
+    assert response.status_code == 200
+
+    start = time.time()
+    while time.time() - start < 10:
+        if os.path.exists(os.path.join(
+            warcprox_.options.crawl_log_dir, 'test_crawl_log_2.log')):
+            break
+        time.sleep(0.5)
+
+    crawl_log_2 = open(os.path.join(
+        warcprox_.options.crawl_log_dir, 'test_crawl_log_2.log'), 'rb').read()
+
     assert re.match(b'\A2[^\n]+\n\Z', crawl_log_2)
     assert crawl_log_2[24:31] == b'   200 '
     assert crawl_log_2[31:42] == b'        44 '
@@ -1537,7 +1544,7 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     assert re.match(br'^\d{17}[+]\d{3}', fields[8])
     assert fields[9] == b'sha1:NKW7OKGZHXIMRKILQGOB2EB22U2MXJLM'
     assert fields[10] == b'http://example.com/seed'
-    assert fields[11] == b'-'
+    assert fields[11] == b'duplicate:digest'
     extra_info = json.loads(fields[12].decode('utf-8'))
     assert extra_info.keys() == {'contentSize','warcFilename','warcFileOffset'}
     assert extra_info['contentSize'] == 135
