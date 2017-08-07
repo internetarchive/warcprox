@@ -374,13 +374,17 @@ def warcprox_(request, captures_db, dedup_db, stats_db, service_registry):
 
     options.method_filter = ['GET','POST']
 
+    options.crawl_log_dir = tempfile.mkdtemp(
+            prefix='warcprox-test-', suffix='-crawl-log')
+    crawl_logger = warcprox.crawl_log.CrawlLogger(options.crawl_log_dir)
+
     writer_pool = warcprox.writer.WarcWriterPool(options)
     warc_writer_threads = [
             warcprox.writerthread.WarcWriterThread(
                 recorded_url_q=recorded_url_q, writer_pool=writer_pool,
                 dedup_db=dedup_db, listeners=[
-                    captures_db or dedup_db, playback_index_db, stats_db],
-                options=options)
+                    captures_db or dedup_db, playback_index_db, stats_db,
+                    crawl_logger], options=options)
             for i in range(int(proxy.max_threads ** 0.5))]
 
     warcprox_ = warcprox.controller.WarcproxController(
@@ -396,7 +400,8 @@ def warcprox_(request, captures_db, dedup_db, stats_db, service_registry):
         logging.info('stopping warcprox')
         warcprox_.stop.set()
         warcprox_thread.join()
-        for f in (ca_file, ca_dir, options.directory, playback_index_db_file):
+        for f in (ca_file, ca_dir, options.directory, playback_index_db_file,
+                  options.crawl_log_dir):
             if os.path.isdir(f):
                 logging.info('deleting directory {}'.format(f))
                 shutil.rmtree(f)
@@ -1441,6 +1446,101 @@ def test_slash_in_warc_prefix(warcprox_, http_daemon, archiving_proxies):
     response = requests.get(url, proxies=archiving_proxies, headers=headers)
     assert response.status_code == 500
     assert response.reason == 'request rejected by warcprox: slash and backslash are not permitted in warc-prefix'
+
+def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
+    try:
+        os.unlink(os.path.join(warcprox_.options.crawl_log_dir, 'crawl.log'))
+    except:
+        pass
+
+    url = 'http://localhost:%s/b/d' % http_daemon.server_port
+    response = requests.get(url, proxies=archiving_proxies)
+    assert response.status_code == 200
+
+    url = 'http://localhost:%s/b/e' % http_daemon.server_port
+    headers = {
+        "Warcprox-Meta": json.dumps({"warc-prefix":"test_crawl_log_1"}),
+        "Referer": "http://example.com/referer",
+    }
+    response = requests.get(url, proxies=archiving_proxies, headers=headers)
+    assert response.status_code == 200
+
+    # should be deduplicated
+    url = 'http://localhost:%s/b/d' % http_daemon.server_port
+    headers = {"Warcprox-Meta": json.dumps({
+        "warc-prefix": "test_crawl_log_2",
+        "metadata": {"seed": "http://example.com/seed"}})}
+    response = requests.get(url, proxies=archiving_proxies, headers=headers)
+    assert response.status_code == 200
+
+    start = time.time()
+    while time.time() - start < 10:
+        if os.path.exists(os.path.join(
+            warcprox_.options.crawl_log_dir, 'test_crawl_log_2.log')):
+            break
+        time.sleep(0.5)
+
+    crawl_log = open(os.path.join(
+        warcprox_.options.crawl_log_dir, 'crawl.log'), 'rb').read()
+    crawl_log_1 = open(os.path.join(
+        warcprox_.options.crawl_log_dir, 'test_crawl_log_1.log'), 'rb').read()
+    crawl_log_2 = open(os.path.join(
+        warcprox_.options.crawl_log_dir, 'test_crawl_log_2.log'), 'rb').read()
+
+    # tests will fail in year 3000 :)
+    assert re.match(b'\A2[^\n]+\n\Z', crawl_log)
+    assert crawl_log[24:31] == b'   200 '
+    assert crawl_log[31:42] == b'        44 '
+    fields = crawl_log.split()
+    assert len(fields) == 13
+    assert fields[3].endswith(b'/b/d')
+    assert fields[4] == b'-'
+    assert fields[5] == b'-'
+    assert fields[6] == b'text/plain'
+    assert fields[7] == b'-'
+    assert re.match(br'^\d{17}[+]\d{3}', fields[8])
+    assert fields[9] == b'sha1:NKW7OKGZHXIMRKILQGOB2EB22U2MXJLM'
+    assert fields[10] == b'-'
+    assert fields[11] == b'-'
+    extra_info = json.loads(fields[12].decode('utf-8'))
+    assert extra_info.keys() == {'contentSize','warcFilename','warcFileOffset'}
+    assert extra_info['contentSize'] == 135
+
+    assert re.match(b'\A2[^\n]+\n\Z', crawl_log_1)
+    assert crawl_log_1[24:31] == b'   200 '
+    assert crawl_log_1[31:42] == b'        44 '
+    fields = crawl_log_1.split()
+    assert len(fields) == 13
+    assert fields[3].endswith(b'/b/e')
+    assert fields[4] == b'-'
+    assert fields[5] == b'http://example.com/referer'
+    assert fields[6] == b'text/plain'
+    assert fields[7] == b'-'
+    assert re.match(br'^\d{17}[+]\d{3}', fields[8])
+    assert fields[9] == b'sha1:DJURQDWPRKWTNMHDA6YS2KN2RLTWQ4JJ'
+    assert fields[10] == b'-'
+    assert fields[11] == b'-'
+    extra_info = json.loads(fields[12].decode('utf-8'))
+    assert extra_info.keys() == {'contentSize','warcFilename','warcFileOffset'}
+    assert extra_info['contentSize'] == 135
+
+    assert re.match(b'\A2[^\n]+\n\Z', crawl_log_2)
+    assert crawl_log_2[24:31] == b'   200 '
+    assert crawl_log_2[31:42] == b'        44 '
+    fields = crawl_log_2.split()
+    assert len(fields) == 13
+    assert fields[3].endswith(b'/b/d')
+    assert fields[4] == b'-'
+    assert fields[5] == b'-'
+    assert fields[6] == b'text/plain'
+    assert fields[7] == b'-'
+    assert re.match(br'^\d{17}[+]\d{3}', fields[8])
+    assert fields[9] == b'sha1:NKW7OKGZHXIMRKILQGOB2EB22U2MXJLM'
+    assert fields[10] == b'http://example.com/seed'
+    assert fields[11] == b'-'
+    extra_info = json.loads(fields[12].decode('utf-8'))
+    assert extra_info.keys() == {'contentSize','warcFilename','warcFileOffset'}
+    assert extra_info['contentSize'] == 135
 
 if __name__ == '__main__':
     pytest.main()

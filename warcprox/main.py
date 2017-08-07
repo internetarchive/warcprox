@@ -129,6 +129,11 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
                 'host:port of tor socks proxy, used only to connect to '
                 '.onion sites'))
     arg_parser.add_argument(
+            '--crawl-log-dir', dest='crawl_log_dir', default=None, help=(
+                'if specified, write crawl log files in the specified '
+                'directory; one crawl log is written per warc filename '
+                'prefix; crawl log format mimics heritrix'))
+    arg_parser.add_argument(
             '--plugin', metavar='PLUGIN_CLASS', dest='plugins',
             action='append', help=(
                 'Qualified name of plugin class, e.g. "mypkg.mymod.MyClass". '
@@ -227,6 +232,9 @@ def init_controller(args):
     else:
         playback_index_db = None
         playback_proxy = None
+
+    if args.crawl_log_dir:
+        listeners.append(warcprox.crawl_log.CrawlLogger(args.crawl_log_dir))
 
     for qualname in args.plugins or []:
         try:

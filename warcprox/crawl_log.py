@@ -22,6 +22,8 @@ USA.
 import logging
 import datetime
 import json
+import os
+import warcprox
 
 class CrawlLogger(object):
     def __init__(self, dir_):
@@ -36,33 +38,38 @@ class CrawlLogger(object):
             'warcFileOffset': records[0].offset,
         }
         fields = [
-            '{:%Y-%m-%dT%H:%M:%S}.{:03d}'.format(now, now.microsecond//1000),
+            '{:%Y-%m-%dT%H:%M:%S}.{:03d}Z'.format(now, now.microsecond//1000),
             '% 5s' % recorded_url.status,
             '% 10s' % (recorded_url.response_recorder.len - recorded_url.response_recorder.payload_offset),
             recorded_url.url,
             '-', # hop path
             recorded_url.referer or '-',
-            recorded_url.mimetype,
+            recorded_url.mimetype or '-',
             '-',
             '{:%Y%m%d%H%M%S}{:03d}+{:03d}'.format(
-                recorded_url.timestamp, recorded_url.microsecond//1000,
+                recorded_url.timestamp,
+                recorded_url.timestamp.microsecond//1000,
                 recorded_url.duration.microseconds//1000),
             warcprox.digest_str(
                 recorded_url.response_recorder.payload_digest, True),
             recorded_url.warcprox_meta.get('metadata', {}).get('seed', '-'),
-            'duplicate:digest' if records[0].type == b'revisit' else '0',
+            'duplicate:digest' if records[0].type == b'revisit' else '-',
             json.dumps(extra_info, separators=(',',':')),
         ]
         for i in range(len(fields)):
-            # `fields` is a mix of `bytes` and `unicode`, make them all `bytes
+            # `fields` is a mix of `bytes` and `unicode`, make them all `bytes`
             try:
                 fields[i] = fields[i].encode('utf-8')
             except:
                 pass
-        line = b' '.join(fields)
+        line = b' '.join(fields) + b'\n'
 
         if 'warc-prefix' in recorded_url.warcprox_meta:
             filename = '%s.log' % recorded_url.warcprox_meta['warc-prefix']
-            os.path.join(
-                    self.dir, )
+        else:
+            filename = 'crawl.log'
+
+        crawl_log_path = os.path.join(self.dir, filename)
+        with open(crawl_log_path, 'ab') as f:
+            f.write(line)
 
