@@ -156,16 +156,29 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 limit_key, limit_value = item
                 self._enforce_limit(limit_key, limit_value, soft=True)
 
+    def _security_check(self, warcprox_meta):
+        '''
+        Sends a 400 if `warcprox_meta` specifies a 'warc-prefix' and the
+        'warc-prefix' contains a slash or backslash.
+        '''
+        if warcprox_meta and 'warc-prefix' in warcprox_meta and (
+                '/' in warcprox_meta['warc-prefix']
+                or '\\' in warcprox_meta['warc-prefix']):
+            raise Exception(
+                "request rejected by warcprox: slash and backslash are not "
+                "permitted in warc-prefix")
+
     def _connect_to_remote_server(self):
         '''
-        Wraps MitmProxyHandler._connect_to_remote_server, first enforcing
+        Wraps `MitmProxyHandler._connect_to_remote_server`, first enforcing
         limits and block rules in the Warcprox-Meta request header, if any.
-        Raises warcprox.RequestBlockedByRule if a rule has been enforced.
-        Otherwise calls MitmProxyHandler._connect_to_remote_server, which
-        initializes self._remote_server_sock.
+        Raises `warcprox.RequestBlockedByRule` if a rule has been enforced.
+        Otherwise calls `MitmProxyHandler._connect_to_remote_server`, which
+        initializes `self._remote_server_sock`.
         '''
         if 'Warcprox-Meta' in self.headers:
             warcprox_meta = json.loads(self.headers['Warcprox-Meta'])
+            self._security_check(warcprox_meta)
             self._enforce_limits(warcprox_meta)
             self._enforce_blocks(warcprox_meta)
         return warcprox.mitmproxy.MitmProxyHandler._connect_to_remote_server(self)
