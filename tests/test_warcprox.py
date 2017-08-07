@@ -1490,7 +1490,8 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     assert fields[10] == b'-'
     assert fields[11] == b'-'
     extra_info = json.loads(fields[12].decode('utf-8'))
-    assert extra_info.keys() == {'contentSize','warcFilename','warcFileOffset'}
+    assert set(extra_info.keys()) == {
+            'contentSize', 'warcFilename', 'warcFileOffset'}
     assert extra_info['contentSize'] == 145
 
     crawl_log_1 = open(os.path.join(
@@ -1510,7 +1511,8 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     assert fields[10] == b'-'
     assert fields[11] == b'-'
     extra_info = json.loads(fields[12].decode('utf-8'))
-    assert extra_info.keys() == {'contentSize','warcFilename','warcFileOffset'}
+    assert set(extra_info.keys()) == {
+            'contentSize', 'warcFilename', 'warcFileOffset'}
     assert extra_info['contentSize'] == 145
 
     # should be deduplicated
@@ -1546,7 +1548,8 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     assert fields[10] == b'http://example.com/seed'
     assert fields[11] == b'duplicate:digest'
     extra_info = json.loads(fields[12].decode('utf-8'))
-    assert extra_info.keys() == {'contentSize','warcFilename','warcFileOffset'}
+    assert set(extra_info.keys()) == {
+            'contentSize', 'warcFilename', 'warcFileOffset'}
     assert extra_info['contentSize'] == 145
 
 if __name__ == '__main__':
