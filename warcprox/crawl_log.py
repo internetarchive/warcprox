@@ -28,6 +28,9 @@ import warcprox
 class CrawlLogger(object):
     def __init__(self, dir_):
         self.dir = dir_
+        if not os.path.exists(self.dir):
+            logging.info('creating directory %r', self.dir)
+            os.mkdir(self.dir)
 
     def notify(self, recorded_url, records):
         # 2017-08-03T21:45:24.496Z   200       2189 https://autismcouncil.wisconsin.gov/robots.txt P https://autismcouncil.wisconsin.gov/ text/plain #001 20170803214523617+365 sha1:PBS2CEF7B4OSEXZZF3QE2XN2VHYCPNPX https://autismcouncil.wisconsin.gov/ duplicate:digest {"warcFileOffset":942,"contentSize":2495,"warcFilename":"ARCHIVEIT-2159-TEST-JOB319150-20170803214522386-00000.warc.gz"}
