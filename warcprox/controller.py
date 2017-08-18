@@ -176,7 +176,7 @@ class WarcproxController(object):
             assert(all(
                 wwt.dedup_db is self.warc_writer_threads[0].dedup_db
                 for wwt in self.warc_writer_threads))
-            if self.warc_writer_threads[0].dedup_db:
+            if any((t.dedup_db for t in self.warc_writer_threads)):
                 self.warc_writer_threads[0].dedup_db.start()
 
             for wwt in self.warc_writer_threads:
@@ -211,7 +211,7 @@ class WarcproxController(object):
 
             if self.proxy.stats_db:
                 self.proxy.stats_db.stop()
-            if self.warc_writer_threads[0].dedup_db:
+            if any((t.dedup_db for t in self.warc_writer_threads)):
                 self.warc_writer_threads[0].dedup_db.close()
 
             self.proxy_thread.join()
