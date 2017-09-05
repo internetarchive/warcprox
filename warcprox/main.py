@@ -80,9 +80,9 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
             help='write gzip-compressed warc records')
     arg_parser.add_argument('-n', '--prefix', dest='prefix',
             default='WARCPROX', help='WARC filename prefix')
-    arg_parser.add_argument('-s', '--size', dest='size',
-            default=1000*1000*1000, type=int,
-            help='WARC file rollover size threshold in bytes')
+    arg_parser.add_argument(
+            '-s', '--size', dest='rollover_size', default=1000*1000*1000,
+            type=int, help='WARC file rollover size threshold in bytes')
     arg_parser.add_argument('--rollover-idle-time',
             dest='rollover_idle_time', default=None, type=int,
             help="WARC file rollover idle time threshold in seconds (so that Friday's last open WARC doesn't sit there all weekend waiting for more data)")
