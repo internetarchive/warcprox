@@ -212,11 +212,10 @@ def init_controller(args):
             stats_db=stats_db, options=options)
 
     if args.playback_port is not None:
-        playback_index_db = warcprox.playback.PlaybackIndexDb(args.playback_index_db_file, options=options)
+        playback_index_db = warcprox.playback.PlaybackIndexDb(
+                args.playback_index_db_file, options=options)
         playback_proxy = warcprox.playback.PlaybackProxy(
-                server_address=(args.address, args.playback_port), ca=ca,
-                playback_index_db=playback_index_db, warcs_dir=args.directory,
-                options=options)
+                ca=ca, playback_index_db=playback_index_db, options=options)
         listeners.append(playback_index_db)
     else:
         playback_index_db = None

@@ -210,7 +210,6 @@ class PlaybackProxyHandler(MitmProxyHandler):
 class PlaybackProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
     logger = logging.getLogger("warcprox.playback.PlaybackProxy")
 
-
     def __init__(self, ca=None, playback_index_db=None, options=warcprox.Options()):
         server_address = (options.address or 'localhost', options.playback_port if options.playback_port is not None else 8001)
         http_server.HTTPServer.__init__(self, server_address, PlaybackProxyHandler, bind_and_activate=True)
@@ -231,7 +230,7 @@ class PlaybackProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
 class PlaybackIndexDb(object):
     logger = logging.getLogger("warcprox.playback.PlaybackIndexDb")
 
-    def __init__(self, file='./warcprox.sqlite'):
+    def __init__(self, file='./warcprox.sqlite', options=warcprox.Options()):
         self.file = file
         self._lock = threading.RLock()
 
