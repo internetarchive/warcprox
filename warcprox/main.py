@@ -268,7 +268,11 @@ def real_main(args):
 
     signal.signal(signal.SIGTERM, lambda a,b: controller.stop.set())
     signal.signal(signal.SIGINT, lambda a,b: controller.stop.set())
-    signal.signal(signal.SIGQUIT, dump_state)
+    try:
+        signal.signal(signal.SIGQUIT, dump_state)
+    except AttributeError:
+        # SIGQUIT does not exist on some platforms (windows)
+        pass
 
     controller.run_until_shutdown()
 
