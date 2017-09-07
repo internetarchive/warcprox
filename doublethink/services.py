@@ -110,7 +110,7 @@ class ServiceRegistry(object):
             self.rr.table_create(
                     'services', shards=1,
                     replicas=min(3, len(self.rr.servers))).run()
-            # self.rr.table('services').index_create...?
+            self.rr.table('services').index_create('role').run()
 
     def heartbeat(self, status_info):
         '''
@@ -218,7 +218,7 @@ class ServiceRegistry(object):
             the unique service, if there is one and it is healthy, otherwise
             None
         '''
-        # use the same concept of 'now' for all queries 
+        # use the same concept of 'now' for all queries
         now = doublethink.utcnow()
         if candidate is not None:
             candidate['id'] = role
@@ -275,9 +275,9 @@ class ServiceRegistry(object):
             value of 'load'
         '''
         try:
-            result = self.rr.table('services').filter({"role":role}).filter(
-                lambda svc: r.now().sub(svc["last_heartbeat"]) < svc["ttl"]
-            ).order_by("load")[0].run()
+            result = self.rr.table('services').get_all(role, index='role').filter(
+                    lambda svc: r.now().sub(svc["last_heartbeat"]) < svc["ttl"]
+                ).order_by("load")[0].run()
             return result
         except r.ReqlNonExistenceError:
             return None
@@ -300,7 +300,7 @@ class ServiceRegistry(object):
         try:
             query = self.rr.table('services')
             if role:
-                query = query.filter({"role":role})
+                query = query.get_all(role, index='role')
             query = query.filter(
                 lambda svc: r.now().sub(svc["last_heartbeat"]) < svc["ttl"]   #.default(20.0)
             ).order_by("load")
