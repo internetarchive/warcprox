@@ -81,9 +81,9 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
             help='write gzip-compressed warc records')
     arg_parser.add_argument('-n', '--prefix', dest='prefix',
             default='WARCPROX', help='WARC filename prefix')
-    arg_parser.add_argument('-s', '--size', dest='size',
-            default=1000*1000*1000, type=int,
-            help='WARC file rollover size threshold in bytes')
+    arg_parser.add_argument(
+            '-s', '--size', dest='rollover_size', default=1000*1000*1000,
+            type=int, help='WARC file rollover size threshold in bytes')
     arg_parser.add_argument('--rollover-idle-time',
             dest='rollover_idle_time', default=None, type=int,
             help="WARC file rollover idle time threshold in seconds (so that Friday's last open WARC doesn't sit there all weekend waiting for more data)")
@@ -225,9 +225,7 @@ def init_controller(args):
         playback_index_db = warcprox.playback.PlaybackIndexDb(
                 args.playback_index_db_file, options=options)
         playback_proxy = warcprox.playback.PlaybackProxy(
-                server_address=(args.address, args.playback_port), ca=ca,
-                playback_index_db=playback_index_db, warcs_dir=args.directory,
-                options=options)
+                ca=ca, playback_index_db=playback_index_db, options=options)
         listeners.append(playback_index_db)
     else:
         playback_index_db = None
@@ -306,7 +304,11 @@ def main(argv=sys.argv):
 
     signal.signal(signal.SIGTERM, lambda a,b: controller.stop.set())
     signal.signal(signal.SIGINT, lambda a,b: controller.stop.set())
-    signal.signal(signal.SIGQUIT, dump_state)
+    try:
+        signal.signal(signal.SIGQUIT, dump_state)
+    except AttributeError:
+        # SIGQUIT does not exist on some platforms (windows)
+        pass
 
     controller.run_until_shutdown()
 
