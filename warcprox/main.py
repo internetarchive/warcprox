@@ -42,6 +42,7 @@ import warcprox
 import re
 import doublethink
 import cryptography.hazmat.backends.openssl
+import importlib
 
 class BetterArgumentDefaultsHelpFormatter(
                 argparse.ArgumentDefaultsHelpFormatter,
@@ -116,18 +117,27 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
     arg_parser.add_argument(
             '--rethinkdb-big-table-name', dest='rethinkdb_big_table_name',
             default='captures', help=argparse.SUPPRESS)
-    arg_parser.add_argument('--kafka-broker-list', dest='kafka_broker_list',
-            default=None, help='kafka broker list for capture feed')
-    arg_parser.add_argument('--kafka-capture-feed-topic', dest='kafka_capture_feed_topic',
-            default=None, help='kafka capture feed topic')
     arg_parser.add_argument('--queue-size', dest='queue_size', type=int,
             default=500, help=argparse.SUPPRESS)
     arg_parser.add_argument('--max-threads', dest='max_threads', type=int,
             help=argparse.SUPPRESS)
     arg_parser.add_argument('--profile', action='store_true', default=False,
             help=argparse.SUPPRESS)
-    arg_parser.add_argument('--onion-tor-socks-proxy', dest='onion_tor_socks_proxy',
-            default=None, help='host:port of tor socks proxy, used only to connect to .onion sites')
+    arg_parser.add_argument(
+            '--onion-tor-socks-proxy', dest='onion_tor_socks_proxy',
+            default=None, help=(
+                'host:port of tor socks proxy, used only to connect to '
+                '.onion sites'))
+    arg_parser.add_argument(
+            '--plugin', metavar='PLUGIN_CLASS', dest='plugins',
+            action='append', help=(
+                'Qualified name of plugin class, e.g. "mypkg.mymod.MyClass". '
+                'May be used multiple times to register multiple plugins. '
+                'Plugin classes are loaded from the regular python module '
+                'search path. They will be instantiated with no arguments and '
+                'must have a method `notify(self, recorded_url, records)` '
+                'which will be called for each url, after warc records have '
+                'been written.'))
     arg_parser.add_argument('--version', action='version',
             version="warcprox {}".format(warcprox.__version__))
     arg_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true')
@@ -197,11 +207,6 @@ def init_controller(args):
         stats_db = warcprox.stats.StatsDb(args.stats_db_file, options=options)
         listeners.append(stats_db)
 
-    if args.kafka_broker_list:
-        kafka_capture_feed = warcprox.kafkafeed.CaptureFeed(
-                args.kafka_broker_list, args.kafka_capture_feed_topic)
-        listeners.append(kafka_capture_feed)
-
     recorded_url_q = warcprox.TimestampedQueue(maxsize=args.queue_size)
 
     ca_name = 'Warcprox CA on {}'.format(socket.gethostname())[:64]
@@ -220,6 +225,18 @@ def init_controller(args):
     else:
         playback_index_db = None
         playback_proxy = None
+
+    for qualname in args.plugins or []:
+        try:
+            (module_name, class_name) = qualname.rsplit('.', 1)
+            module_ = importlib.import_module(module_name)
+            class_ = getattr(module_, class_name)
+            listener = class_()
+            listener.notify  # make sure it has this method
+            listeners.append(listener)
+        except Exception as e:
+            logging.fatal('problem with plugin class %r: %s', qualname, e)
+            sys.exit(1)
 
     writer_pool = warcprox.writer.WarcWriterPool(options=options)
     # number of warc writer threads = sqrt(proxy.max_threads)
@@ -283,7 +300,6 @@ def main(argv=sys.argv):
             format=(
                 '%(asctime)s %(process)d %(levelname)s %(threadName)s '
                 '%(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s'))
-    logging.getLogger('kafka').setLevel(loglevel + 5)
 
     real_main(args)
 

@@ -48,10 +48,8 @@ Usage
                     [--playback-index-db-file PLAYBACK_INDEX_DB_FILE]
                     [-j DEDUP_DB_FILE | --rethinkdb-servers RETHINKDB_SERVERS]
                     [--rethinkdb-db RETHINKDB_DB] [--rethinkdb-big-table]
-                    [--kafka-broker-list KAFKA_BROKER_LIST]
-                    [--kafka-capture-feed-topic KAFKA_CAPTURE_FEED_TOPIC]
                     [--onion-tor-socks-proxy ONION_TOR_SOCKS_PROXY]
-                    [--version] [-v] [--trace] [-q]
+                    [--plugin PLUGIN_CLASS] [--version] [-v] [--trace] [-q]
 
     warcprox - WARC writing MITM HTTP/S proxy
 
@@ -62,35 +60,35 @@ Usage
                             address to listen on (default: localhost)
       -c CACERT, --cacert CACERT
                             CA certificate file; if file does not exist, it
-                            will be created (default: ./MacBook-Pro.local-
-                            warcprox-ca.pem)
+                            will be created (default:
+                            ./ayutla.monkeybrains.net-warcprox-ca.pem)
       --certs-dir CERTS_DIR
                             where to store and load generated certificates
-                            (default: ./MacBook-Pro.local-warcprox-ca)
+                            (default: ./ayutla.monkeybrains.net-warcprox-ca)
       -d DIRECTORY, --dir DIRECTORY
                             where to write warcs (default: ./warcs)
-      -z, --gzip            write gzip-compressed warc records (default:
-                            False)
+      -z, --gzip            write gzip-compressed warc records
       -n PREFIX, --prefix PREFIX
                             WARC filename prefix (default: WARCPROX)
       -s SIZE, --size SIZE  WARC file rollover size threshold in bytes
                             (default: 1000000000)
       --rollover-idle-time ROLLOVER_IDLE_TIME
                             WARC file rollover idle time threshold in seconds
-                            (so that Friday's last open WARC doesn't sit there
-                            all weekend waiting for more data) (default: None)
+                            (so that Friday's last open WARC doesn't sit
+                            there all weekend waiting for more data)
+                            (default: None)
       -g DIGEST_ALGORITHM, --digest-algorithm DIGEST_ALGORITHM
-                            digest algorithm, one of sha1, md5, sha512,
-                            sha224, sha384, sha256 (default: sha1)
-      --base32              write digests in Base32 instead of hex (default:
-                            False)
+                            digest algorithm, one of sha1, sha384, sha512,
+                            md5, sha224, sha256 (default: sha1)
+      --base32              write digests in Base32 instead of hex
       --method-filter HTTP_METHOD
-                            only record requests with the given http method(s)
-                            (can be used more than once) (default: None)
+                            only record requests with the given http
+                            method(s) (can be used more than once) (default:
+                            None)
       --stats-db-file STATS_DB_FILE
                             persistent statistics database file; empty string
                             or /dev/null disables statistics tracking
-                            (default: ./warcprox-stats.db)
+                            (default: ./warcprox.sqlite)
       -P PLAYBACK_PORT, --playback-port PLAYBACK_PORT
                             port to listen on for instant playback (default:
                             None)
@@ -101,7 +99,7 @@ Usage
       -j DEDUP_DB_FILE, --dedup-db-file DEDUP_DB_FILE
                             persistent deduplication database file; empty
                             string or /dev/null disables deduplication
-                            (default: ./warcprox-dedup.db)
+                            (default: ./warcprox.sqlite)
       --rethinkdb-servers RETHINKDB_SERVERS
                             rethinkdb servers, used for dedup and stats if
                             specified; e.g.
@@ -115,15 +113,20 @@ Usage
                             use a big rethinkdb table called "captures",
                             instead of a small table called "dedup"; table is
                             suitable for use as index for playback (ignored
-                            unless --rethinkdb-servers is specified) (default:
-                            False)
-      --kafka-broker-list KAFKA_BROKER_LIST
-                            kafka broker list for capture feed (default: None)
-      --kafka-capture-feed-topic KAFKA_CAPTURE_FEED_TOPIC
-                            kafka capture feed topic (default: None)
+                            unless --rethinkdb-servers is specified)
       --onion-tor-socks-proxy ONION_TOR_SOCKS_PROXY
-                            host:port of tor socks proxy, used only to connect
-                            to .onion sites (default: None)
+                            host:port of tor socks proxy, used only to
+                            connect to .onion sites (default: None)
+      --plugin PLUGIN_CLASS
+                            Qualified name of plugin class, e.g.
+                            "mypkg.mymod.MyClass". May be used multiple times
+                            to register multiple plugins. Plugin classes are
+                            loaded from the regular python module search
+                            path. They will be instantiated with no arguments
+                            and must have a method `notify(self,
+                            recorded_url, records)` which will be called for
+                            each url, after warc records have been written.
+                            (default: None)
       --version             show program's version number and exit
       -v, --verbose
       --trace

@@ -38,7 +38,6 @@ class PyTest(setuptools.command.test.test):
 deps = [
     'certauth==1.1.6',
     'warctools',
-    'kafka-python>=1.0.1',
     'urlcanon>=0.1.dev16',
     'doublethink>=0.2.0.dev81',
     'PySocks',
