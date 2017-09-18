@@ -192,7 +192,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 warcprox_meta=warcprox_meta, status=prox_rec_res.status,
                 size=prox_rec_res.recorder.len,
                 client_ip=self.client_address[0],
-                content_type=prox_rec_res.getheader("Content-Type"),
+                content_type=prox_rec_res.headers.get("Content-Type"),
                 method=self.command, timestamp=timestamp, host=self.hostname,
                 duration=datetime.datetime.utcnow()-timestamp)
         self.server.recorded_url_q.put(recorded_url)
