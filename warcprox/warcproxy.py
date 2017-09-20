@@ -186,14 +186,22 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         req, prox_rec_res = warcprox.mitmproxy.MitmProxyHandler._proxy_request(
                 self)
 
+        content_type = None
+        try:
+            content_type = prox_rec_res.headers.get('content-type')
+        except AttributeError: # py2
+            raw = prox_rec_res.msg.getrawheader('content-type')
+            if raw:
+                content_type = raw.strip()
+
         recorded_url = RecordedUrl(
                 url=self.url, request_data=req,
                 response_recorder=prox_rec_res.recorder, remote_ip=remote_ip,
                 warcprox_meta=warcprox_meta, status=prox_rec_res.status,
                 size=prox_rec_res.recorder.len,
                 client_ip=self.client_address[0],
-                content_type=prox_rec_res.headers.get("Content-Type"),
-                method=self.command, timestamp=timestamp, host=self.hostname,
+                content_type=content_type, method=self.command,
+                timestamp=timestamp, host=self.hostname,
                 duration=datetime.datetime.utcnow()-timestamp)
         self.server.recorded_url_q.put(recorded_url)
 
