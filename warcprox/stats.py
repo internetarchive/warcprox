@@ -25,7 +25,6 @@ import logging
 import os
 import json
 from hanzo import warctools
-import random
 import warcprox
 import threading
 import rethinkdb as r

@@ -26,7 +26,6 @@ import os
 import json
 from hanzo import warctools
 import warcprox
-import random
 import sqlite3
 
 class DedupDb(object):

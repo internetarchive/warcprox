@@ -29,13 +29,8 @@ except ImportError:
 
 import logging
 import threading
-import os
-import hashlib
 import time
-import socket
-import base64
 from datetime import datetime
-import hanzo.httptools
 from hanzo import warctools
 import warcprox
 import cProfile

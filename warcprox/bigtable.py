@@ -25,8 +25,6 @@ USA.
 from __future__ import absolute_import
 
 import logging
-from hanzo import warctools
-import random
 import warcprox
 import base64
 import urlcanon

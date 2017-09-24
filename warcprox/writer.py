@@ -27,7 +27,6 @@ from hanzo import warctools
 import time
 import warcprox
 import os
-import socket
 import string
 import random
 import threading

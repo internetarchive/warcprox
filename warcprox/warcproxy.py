@@ -35,15 +35,12 @@ try:
 except ImportError:
     import Queue as queue
 import logging
-import re
-import traceback
 import json
 import socket
 from hanzo import warctools
 from certauth.certauth import CertificateAuthority
 import warcprox
 import datetime
-import ipaddress
 import urlcanon
 import os
 
