@@ -58,9 +58,6 @@ class DedupDb(object):
     def stop(self):
         pass
 
-    def close(self):
-        pass
-
     def sync(self):
         pass
 
@@ -152,9 +149,6 @@ class RethinkDedupDb:
         pass
 
     def stop(self):
-        pass
-
-    def close(self):
         pass
 
     def sync(self):
