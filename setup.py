@@ -18,4 +18,5 @@ setuptools.setup(
     description='rethinkdb python library',
     long_description=codecs.open(
         'README.rst', mode='r', encoding='utf-8').read(),
+    scripts=glob.glob('scripts/*.py'),
 )

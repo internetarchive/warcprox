@@ -312,3 +312,8 @@ class ServiceRegistry(object):
     available_service = healthy_service
     available_services = healthy_services
 
+    def purge_stale_services(self, grace_period=0):
+        result = self.rr.table('services').filter(
+                lambda svc: r.now().sub(svc["last_heartbeat"]).gt(svc["ttl"] + grace_period)
+            ).delete().run()
+        return result
