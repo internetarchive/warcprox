@@ -31,12 +31,22 @@ def purge_stale_services(argv=None):
             prog=os.path.basename(argv[0]),
             description='purge-stale-services: utility to periodically purge stale entries from the "services" table.')
 
-    arg_parser.add_argument("db", help="A RethinkDB database containing a 'services' table")
+    arg_parser.add_argument("-d", "--rethinkdb-db", required=True,
+        help="A RethinkDB database containing a 'services' table")
 
     arg_parser.add_argument("-s", "--rethinkdb-servers",
         metavar="SERVERS", dest="servers", required=True,
-        help="a comma-separated list of hostnames of rethinkdb servers. Required.")
+        help="rethinkdb servers, e.g. db0.foo.org,db0.foo.org:38015,db1.foo.org")
+
+    arg_parser.add_argument(
+        '-v', '--verbose', dest='log_level', action='store_const',
+        default=logging.INFO, const=logging.DEBUG, help=(
+                'verbose logging'))
     args = arg_parser.parse_args(argv[1:])
+    logging.basicConfig(
+            stream=sys.stdout, level=args.log_level, format=(
+                '%(asctime)s %(process)d %(levelname)s %(threadName)s '
+                '%(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s'))
 
     args.servers = [srv.strip() for srv in args.servers.split(",")]
 

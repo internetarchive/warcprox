@@ -313,7 +313,10 @@ class ServiceRegistry(object):
     available_services = healthy_services
 
     def purge_stale_services(self, ttls_until_deletion=2):
-        result = self.rr.table('services').filter(
+        query = self.rr.table('services').filter(
                 lambda svc: r.now().sub(svc["last_heartbeat"]).gt(svc["ttl"] * ttls_until_deletion)
-            ).delete().run()
+            ).delete()
+        logging.debug("Running query: %s", query)
+        result = query.run()
+        logging.debug("Results: %s", result)
         return result
