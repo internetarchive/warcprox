@@ -37,6 +37,12 @@ except ImportError:
     import urlparse as urllib_parse
 try:
     import http.client as http_client
+    # In python3 http.client.parse_headers() enforces http_client._MAXLINE
+    # as max length of an http header line, but we want to support very
+    # long warcprox-meta headers, so we tweak it here. Python2 doesn't seem
+    # to enforce any limit. Multiline headers could be an option but it
+    # turns out those are illegal as of RFC 7230. Plus, this is easier.
+    http_client._MAXLINE = 4194304  # 4 MiB
 except ImportError:
     import httplib as http_client
 import socket

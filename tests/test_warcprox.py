@@ -1429,6 +1429,44 @@ def test_via_response_header(warcprox_, http_daemon, archiving_proxies, playback
                 elif record.rec_type == 'request':
                     assert record.http_headers.get_header('via') == '1.1 warcprox'
 
+def test_long_warcprox_meta(
+        warcprox_, http_daemon, archiving_proxies, playback_proxies):
+    url = 'http://localhost:%s/b/g' % http_daemon.server_port
+
+    # create a very long warcprox-meta header
+    headers = {'Warcprox-Meta': json.dumps({
+        'x':'y'*1000000, 'warc-prefix': 'test_long_warcprox_meta'})}
+    response = requests.get(
+            url, proxies=archiving_proxies, headers=headers, verify=False)
+    assert response.status_code == 200
+
+    # wait for writer thread to process
+    time.sleep(0.5)
+    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
+        time.sleep(0.5)
+    time.sleep(0.5)
+
+    # check that warcprox-meta was parsed and honored ("warc-prefix" param)
+    assert warcprox_.warc_writer_threads[0].writer_pool.warc_writers["test_long_warcprox_meta"]
+    writer = warcprox_.warc_writer_threads[0].writer_pool.warc_writers["test_long_warcprox_meta"]
+    warc_path = os.path.join(writer.directory, writer._f_finalname)
+    warcprox_.warc_writer_threads[0].writer_pool.warc_writers["test_long_warcprox_meta"].close_writer()
+    assert os.path.exists(warc_path)
+
+    # read the warc
+    with open(warc_path, 'rb') as f:
+        rec_iter = iter(warcio.archiveiterator.ArchiveIterator(f))
+        record = next(rec_iter)
+        assert record.rec_type == 'warcinfo'
+        record = next(rec_iter)
+        assert record.rec_type == 'response'
+        assert record.rec_headers.get_header('warc-target-uri') == url
+        record = next(rec_iter)
+        assert record.rec_type == 'request'
+        assert record.rec_headers.get_header('warc-target-uri') == url
+        with pytest.raises(StopIteration):
+            next(rec_iter)
+
 if __name__ == '__main__':
     pytest.main()
 
