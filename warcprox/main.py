@@ -39,7 +39,6 @@ import signal
 import threading
 import certauth.certauth
 import warcprox
-import re
 import doublethink
 import cryptography.hazmat.backends.openssl
 import importlib

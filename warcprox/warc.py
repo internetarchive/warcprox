@@ -27,7 +27,6 @@ import hashlib
 import socket
 import hanzo.httptools
 from hanzo import warctools
-import warcprox
 import datetime
 
 class WarcRecordBuilder:
