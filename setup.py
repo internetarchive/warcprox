@@ -40,7 +40,7 @@ deps = [
     'warctools',
     'urlcanon>=0.1.dev16',
     'doublethink>=0.2.0.dev81',
-    'PySocks'
+    'PySocks',
 ]
 try:
     import concurrent.futures
