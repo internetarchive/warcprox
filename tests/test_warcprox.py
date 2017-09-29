@@ -274,12 +274,10 @@ def rethink_dedup_db(request, rethinkdb_servers, captures_db):
             ddb = warcprox.dedup.RethinkDedupDb(rr)
 
     def fin():
-        if rethinkdb_servers:
-            ddb.close()
-            if not captures_db:
-                logging.info('dropping rethinkdb database {}'.format(db))
-                result = ddb.rr.db_drop(db).run()
-                logging.info("result=%s", result)
+        if rethinkdb_servers and not captures_db:
+            logging.info('dropping rethinkdb database {}'.format(db))
+            result = ddb.rr.db_drop(db).run()
+            logging.info("result=%s", result)
     request.addfinalizer(fin)
 
     return ddb
