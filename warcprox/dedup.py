@@ -54,15 +54,6 @@ class DedupDb(object):
         conn.commit()
         conn.close()
 
-    def stop(self):
-        pass
-
-    def close(self):
-        pass
-
-    def sync(self):
-        pass
-
     def save(self, digest_key, response_record, bucket=""):
         record_id = response_record.get_header(warctools.WarcRecord.ID).decode('latin1')
         url = response_record.get_header(warctools.WarcRecord.URL).decode('latin1')
@@ -148,15 +139,6 @@ class RethinkDedupDb:
 
 
     def start(self):
-        pass
-
-    def stop(self):
-        pass
-
-    def close(self):
-        pass
-
-    def sync(self):
         pass
 
     def save(self, digest_key, response_record, bucket=""):
