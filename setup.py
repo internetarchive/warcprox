@@ -20,7 +20,7 @@ setuptools.setup(
         'README.rst', mode='r', encoding='utf-8').read(),
     entry_points={
             'console_scripts': [
-                'purge-stale-services=doublethink.cli:purge_stale_services',
+                'doublethink-purge-stale-services=doublethink.cli:purge_stale_services',
             ]
     },
 )

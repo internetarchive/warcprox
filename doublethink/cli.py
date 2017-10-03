@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 '''
-doublethink/orm.py - rethinkdb ORM Command Line Interface
+doublethink/cli.py - doublethink Command Line Tools
 
 Copyright (C) 2017 Internet Archive
 
@@ -30,7 +30,7 @@ def purge_stale_services(argv=None):
     argv = argv or sys.argv
     arg_parser = argparse.ArgumentParser(
             prog=os.path.basename(argv[0]),
-            description='purge-stale-services: utility to periodically purge stale entries from the "services" table.')
+            description='doublethink-purge-stale-services: utility to periodically purge stale entries from the "services" table.')
 
     arg_parser.add_argument("-d", "--rethinkdb-db", required=True,
         dest="database",
@@ -55,4 +55,4 @@ def purge_stale_services(argv=None):
     rethinker = doublethink.Rethinker(servers=args.servers, db=args.database)
     registry = doublethink.services.ServiceRegistry(rethinker)
     registry.purge_stale_services()
-    sys.exit(0)
+    return 0

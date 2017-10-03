@@ -50,14 +50,15 @@ def rr():
 
 def test_cli(capsys, rr):
     entrypoint = pkg_resources.get_entry_map(
-            'doublethink')['console_scripts']['purge-stale-services']
+            'doublethink')['console_scripts']['doublethink-purge-stale-services']
     callable = entrypoint.resolve()
     with pytest.raises(SystemExit) as exit:
-        callable(['purge-stale-services'])
+        callable(['doublethink-purge-stale-services'])
     print(dir(exit))
     assert exit.value.code != 0
     out, err = capsys.readouterr()
     with pytest.raises(SystemExit) as exit:
-        callable(['purge-stale-services', '-d', 'test'])
+        # this wrap with sys.exit matches what occurs in the generated command
+        sys.exit(callable(['doublethink-purge-stale-services', '-d', 'test']))
     assert exit.value.code == 0
     out, err = capsys.readouterr()
