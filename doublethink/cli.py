@@ -55,3 +55,4 @@ def purge_stale_services(argv=None):
     rethinker = doublethink.Rethinker(servers=args.servers, db=args.database)
     registry = doublethink.services.ServiceRegistry(rethinker)
     registry.purge_stale_services()
+    sys.exit(0)

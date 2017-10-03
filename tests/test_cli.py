@@ -17,13 +17,24 @@ limitations under the License.
 '''
 
 import doublethink
+import doublethink.cli
 import logging
 import sys
 import pytest
 import rethinkdb as r
+import pkg_resources
 
 logging.basicConfig(stream=sys.stderr, level=logging.INFO,
         format="%(asctime)s %(process)d %(levelname)s %(threadName)s %(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s")
+
+class RethinkerForTesting(doublethink.Rethinker):
+    def __init__(self, *args, **kwargs):
+        super(RethinkerForTesting, self).__init__(*args, **kwargs)
+
+    def _random_server_connection(self):
+        self.last_conn = super(RethinkerForTesting, self)._random_server_connection()
+        # logging.info("self.last_conn=%s", self.last_conn)
+        return self.last_conn
 
 @pytest.fixture(scope="module")
 def rr():
@@ -37,6 +48,16 @@ def rr():
     assert result["dbs_created"] == 1
     return RethinkerForTesting(db="doublethink_test_db")
 
-def test_cli(rr):
-    print(rr)
-    doublethink.cli.purge_stale_services(['test'])
+def test_cli(capsys, rr):
+    entrypoint = pkg_resources.get_entry_map(
+            'doublethink')['console_scripts']['purge-stale-services']
+    callable = entrypoint.resolve()
+    with pytest.raises(SystemExit) as exit:
+        callable(['purge-stale-services'])
+    print(dir(exit))
+    assert exit.value.code != 0
+    out, err = capsys.readouterr()
+    with pytest.raises(SystemExit) as exit:
+        callable(['purge-stale-services', '-d', 'test'])
+    assert exit.value.code == 0
+    out, err = capsys.readouterr()
