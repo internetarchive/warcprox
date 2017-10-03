@@ -108,6 +108,7 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
             default='./warcprox.sqlite', help='persistent deduplication database file; empty string or /dev/null disables deduplication')
     group.add_argument('--rethinkdb-servers', dest='rethinkdb_servers',
             help='rethinkdb servers, used for dedup and stats if specified; e.g. db0.foo.org,db0.foo.org:38015,db1.foo.org')
+    group.add_argument('--trough', help='use trough for deduplication 🐷 🐷 🐷 🐷', action='store_true')
     arg_parser.add_argument('--rethinkdb-db', dest='rethinkdb_db', default='warcprox',
             help='rethinkdb database name (ignored unless --rethinkdb-servers is specified)')
     arg_parser.add_argument('--rethinkdb-big-table',
@@ -177,7 +178,10 @@ def init_controller(args):
         exit(1)
 
     listeners = []
-    if args.rethinkdb_servers:
+    if args.trough:
+        dedup_db = warcprox.dedup.TroughDedupDb(options)
+        listeners.append(dedup_db)
+    elif args.rethinkdb_servers:
         rr = doublethink.Rethinker(
                 args.rethinkdb_servers.split(","), args.rethinkdb_db)
         if args.rethinkdb_big_table:
