@@ -258,3 +258,13 @@ def test_svcreg_heartbeat_server_down(rr):
     assert not 'host' in svc0
     assert not 'pid' in svc0
 
+def test_purge_stale_services(rr):
+    rr.table('services').delete().run()
+    rr.table('services').insert({ 'id': 'old-service', "last_heartbeat": r.now(), 'ttl': 0.4 }).run()
+    time.sleep(1)
+    rr.table('services').insert({ 'id': 'new-service', "last_heartbeat": r.now(), 'ttl': 0.4 }).run()
+    svcreg = doublethink.ServiceRegistry(rr)
+    assert rr.table('services').count().run() == 2
+    svcreg.purge_stale_services()
+    assert rr.table('services').count().run() == 1
+    rr.table('services').delete().run()

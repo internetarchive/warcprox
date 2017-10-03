@@ -18,4 +18,9 @@ setuptools.setup(
     description='rethinkdb python library',
     long_description=codecs.open(
         'README.rst', mode='r', encoding='utf-8').read(),
+    entry_points={
+            'console_scripts': [
+                'doublethink-purge-stale-services=doublethink.cli:purge_stale_services',
+            ]
+    },
 )
