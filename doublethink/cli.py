@@ -20,6 +20,7 @@ limitations under the License.
 import os, sys
 import argparse
 import doublethink
+import logging
 
 def purge_stale_services(argv=None):
     """Command-line utility to periodically purge stale entries from the "services" table.
@@ -32,10 +33,11 @@ def purge_stale_services(argv=None):
             description='purge-stale-services: utility to periodically purge stale entries from the "services" table.')
 
     arg_parser.add_argument("-d", "--rethinkdb-db", required=True,
+        dest="database",
         help="A RethinkDB database containing a 'services' table")
 
     arg_parser.add_argument("-s", "--rethinkdb-servers",
-        metavar="SERVERS", dest="servers", required=True,
+        metavar="SERVERS", dest="servers", default='localhost',
         help="rethinkdb servers, e.g. db0.foo.org,db0.foo.org:38015,db1.foo.org")
 
     arg_parser.add_argument(
@@ -50,6 +52,6 @@ def purge_stale_services(argv=None):
 
     args.servers = [srv.strip() for srv in args.servers.split(",")]
 
-    rethinker = doublethink.Rethinker(servers=args.servers, db=args)
+    rethinker = doublethink.Rethinker(servers=args.servers, db=args.database)
     registry = doublethink.services.ServiceRegistry(rethinker)
     registry.purge_stale_services()
