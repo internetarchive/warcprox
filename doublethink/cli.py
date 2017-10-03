@@ -29,12 +29,13 @@ def purge_stale_services(argv=None):
     """
     argv = argv or sys.argv
     arg_parser = argparse.ArgumentParser(
-            prog=os.path.basename(argv[0]),
-            description='doublethink-purge-stale-services: utility to periodically purge stale entries from the "services" table.')
+            prog=os.path.basename(argv[0]), description=(
+                'doublethink-purge-stale-services: utility to periodically '
+                'purge stale entries from the "services" table.'))
 
-    arg_parser.add_argument("-d", "--rethinkdb-db", required=True,
-        dest="database",
-        help="A RethinkDB database containing a 'services' table")
+    arg_parser.add_argument(
+            "-d", "--rethinkdb-db", required=True, dest="database",
+            help="A RethinkDB database containing a 'services' table")
 
     arg_parser.add_argument("-s", "--rethinkdb-servers",
         metavar="SERVERS", dest="servers", default='localhost',
