@@ -11,7 +11,7 @@ do
     docker run --rm -it --volume="$script_dir/..:/doublethink" internetarchive/rethinkdb /sbin/my_init -- \
         bash -x -c "cd /tmp && git clone /doublethink \
                 && cd /tmp/doublethink \
-                && (cd /doublethink && git diff) | patch -p1 \
+                && (cd /doublethink && git diff HEAD) | patch -p1 \
                 && virtualenv -p $python /tmp/venv \
                 && source /tmp/venv/bin/activate \
                 && pip install pytest . \
