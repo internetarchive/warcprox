@@ -113,6 +113,7 @@ class RethinkCaptures:
                     [r.row["abbr_canon_surt"], r.row["timestamp"]]).run()
             self.rr.table(self.table).index_create("sha1_warc_type", [
                 r.row["sha1base32"], r.row["warc_type"], r.row["bucket"]]).run()
+            self.rr.table(self.table).index_wait().run()
 
     def find_response_by_digest(self, algo, raw_digest, bucket="__unspecified__"):
         if algo != "sha1":
