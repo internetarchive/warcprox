@@ -3,7 +3,7 @@ import codecs
 
 setuptools.setup(
     name='doublethink',
-    version='0.2.0.dev85',
+    version='0.2.0.dev86',
     packages=['doublethink'],
     classifiers=[
         'Programming Language :: Python :: 2.7',
