@@ -57,7 +57,7 @@ def parse_rethinkdb_url(s):
         `table` and `database` may be None
 
     Raises:
-        ValueError if url cannot be pasrsed a a rethinkdb url
+        ValueError if url cannot be parsed as a rethinkdb url
 
     There is some precedent for this kind of url (though only with a single
     host):
