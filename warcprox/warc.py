@@ -127,7 +127,7 @@ class WarcRecordBuilder:
                     warcprox.digest_str(recorder.payload_digest, self.base32)))
 
             recorder.tempfile.seek(0)
-            record = warctools.WarcRecord(headers=headers, content_file=recorder.tempfile)
+            return warctools.WarcRecord(headers=headers, content_file=recorder.tempfile)
 
         else:
             headers.append((warctools.WarcRecord.CONTENT_LENGTH, str(len(data)).encode('latin1')))
@@ -139,32 +139,22 @@ class WarcRecordBuilder:
                                 warcprox.digest_str(digest, self.base32)))
 
             content_tuple = content_type, data
-            record = warctools.WarcRecord(headers=headers, content=content_tuple)
-
-        return record
+            return warctools.WarcRecord(headers=headers, content=content_tuple)
 
     def build_warcinfo_record(self, filename):
         warc_record_date = warctools.warc.warc_datetime_str(datetime.datetime.utcnow())
         record_id = warctools.WarcRecord.random_warc_uuid()
-
-        headers = []
-        headers.append((warctools.WarcRecord.ID, record_id))
-        headers.append((warctools.WarcRecord.TYPE, warctools.WarcRecord.WARCINFO))
-        headers.append((warctools.WarcRecord.FILENAME, filename.encode('latin1')))
-        headers.append((warctools.WarcRecord.DATE, warc_record_date))
-
-        warcinfo_fields = []
-        warcinfo_fields.append(b'software: warcprox ' + warcprox.__version__.encode('latin1'))
+        headers = [(warctools.WarcRecord.ID, record_id),
+                   (warctools.WarcRecord.TYPE, warctools.WarcRecord.WARCINFO),
+                   (warctools.WarcRecord.FILENAME, filename.encode('latin1')),
+                   (warctools.WarcRecord.DATE, warc_record_date)]
         hostname = socket.gethostname()
-        warcinfo_fields.append('hostname: {}'.format(hostname).encode('latin1'))
-        warcinfo_fields.append('ip: {}'.format(socket.gethostbyname(hostname)).encode('latin1'))
-        warcinfo_fields.append(b'format: WARC File Format 1.0')
+        warcinfo_fields = [b'software: warcprox ' + warcprox.__version__.encode('latin1'),
+                           'hostname: {}'.format(hostname).encode('latin1'),
+                           'ip: {}'.format(socket.gethostbyname(hostname)).encode('latin1'),
+                           b'format: WARC File Format 1.0']
         # warcinfo_fields.append('robots: ignore')
         # warcinfo_fields.append('description: {0}'.format(self.description))
         # warcinfo_fields.append('isPartOf: {0}'.format(self.is_part_of))
         data = b'\r\n'.join(warcinfo_fields) + b'\r\n'
-
-        record = warctools.WarcRecord(headers=headers, content=(b'application/warc-fields', data))
-
-        return record
-
+        return warctools.WarcRecord(headers=headers, content=(b'application/warc-fields', data))
