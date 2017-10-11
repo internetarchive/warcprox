@@ -242,7 +242,7 @@ def https_daemon(request, cert):
     return https_daemon
 
 @pytest.fixture(scope="module")
-def warcprox_(request, rethinkdb_servers, rethinkdb_big_table):
+def warcprox_(request):
     orig_dir = os.getcwd()
     work_dir = tempfile.mkdtemp()
     logging.info('changing to working directory %r', work_dir)
@@ -254,12 +254,15 @@ def warcprox_(request, rethinkdb_servers, rethinkdb_big_table):
             '--port=0',
             '--playback-port=0',
             '--onion-tor-socks-proxy=localhost:9050']
-    if rethinkdb_servers:
-        rethinkdb_db = 'warcprox_test_%s' % ''.join(random.sample("abcdefghijklmnopqrstuvwxyz0123456789_",8))
-        argv.append('--rethinkdb-servers=%s' % rethinkdb_servers)
-        argv.append('--rethinkdb-db=%s' % rethinkdb_db)
-    if rethinkdb_big_table:
-        argv.append('--rethinkdb-big-table')
+    if request.config.getoption('--rethinkdb-dedup-url'):
+        argv.append('--rethinkdb-dedup-url=%s' % request.config.getoption('--rethinkdb-dedup-url'))
+        # test these here only
+        argv.append('--rethinkdb-stats-url=rethinkdb://localhost/test0/stats')
+        argv.append('--rethinkdb-services-url=rethinkdb://localhost/test0/services')
+    elif request.config.getoption('--rethinkdb-big-table-url'):
+        argv.append('--rethinkdb-big-table-url=%s' % request.config.getoption('--rethinkdb-big-table-url'))
+    elif request.config.getoption('--rethinkdb-trough-db-url'):
+        argv.append('--rethinkdb-trough-db-url=%s' % request.config.getoption('--rethinkdb-trough-db-url'))
 
     args = warcprox.main.parse_args(argv)
     warcprox_ = warcprox.main.init_controller(args)
@@ -272,10 +275,22 @@ def warcprox_(request, rethinkdb_servers, rethinkdb_big_table):
     def fin():
         warcprox_.stop.set()
         warcprox_thread.join()
-        if rethinkdb_servers:
-            logging.info('dropping rethinkdb database %r', rethinkdb_db)
-            rr = doublethink.Rethinker(rethinkdb_servers)
-            result = rr.db_drop(rethinkdb_db).run()
+        for rethinkdb_url in (
+                warcprox_.options.rethinkdb_big_table_url,
+                warcprox_.options.rethinkdb_dedup_url,
+                warcprox_.options.rethinkdb_services_url,
+                warcprox_.options.rethinkdb_stats_url):
+            if not rethinkdb_url:
+                continue
+            parsed = doublethink.parse_rethinkdb_url(rethinkdb_url)
+            rr = doublethink.Rethinker(servers=parsed.hosts)
+            try:
+                logging.info('dropping rethinkdb database %r', parsed.database)
+                rr.db_drop(parsed.database).run()
+            except Exception as e:
+                logging.warn(
+                        'problem deleting rethinkdb database %r: %s',
+                        parsed.database, e)
         logging.info('deleting working directory %r', work_dir)
         os.chdir(orig_dir)
         shutil.rmtree(work_dir)

@@ -28,6 +28,8 @@ from hanzo import warctools
 import warcprox
 import sqlite3
 import requests
+import doublethink
+import rethinkdb as r
 
 class DedupDb(object):
     logger = logging.getLogger("warcprox.dedup.DedupDb")
@@ -115,11 +117,11 @@ def decorate_with_dedup_info(dedup_db, recorded_url, base32=False):
 class RethinkDedupDb:
     logger = logging.getLogger("warcprox.dedup.RethinkDedupDb")
 
-    def __init__(self, rr, table="dedup", shards=None, replicas=None, options=warcprox.Options()):
-        self.rr = rr
-        self.table = table
-        self.shards = shards or len(rr.servers)
-        self.replicas = replicas or min(3, len(rr.servers))
+    def __init__(self, options=warcprox.Options()):
+        parsed = doublethink.parse_rethinkdb_url(options.rethinkdb_dedup_url)
+        self.rr = doublethink.Rethinker(
+                servers=parsed.hosts, db=parsed.database)
+        self.table = parsed.table
         self._ensure_db_table()
         self.options = options
 
@@ -132,12 +134,11 @@ class RethinkDedupDb:
         if not self.table in tables:
             self.logger.info(
                     "creating rethinkdb table %r in database %r shards=%r "
-                    "replicas=%r", self.table, self.rr.dbname, self.shards,
-                    self.replicas)
+                    "replicas=%r", self.table, self.rr.dbname,
+                    len(self.rr.servers), min(3, len(self.rr.servers)))
             self.rr.table_create(
-                    self.table, primary_key="key", shards=self.shards,
-                    replicas=self.replicas).run()
-
+                    self.table, primary_key="key", shards=len(self.rr.servers),
+                    replicas=min(3, len(self.rr.servers))).run()
 
     def start(self):
         pass
@@ -182,6 +183,11 @@ class TroughDedupDb(object):
     logger = logging.getLogger("warcprox.dedup.TroughDedupDb")
 
     def __init__(self, options=warcprox.Options()):
+        parsed = doublethink.parse_rethinkdb_url(
+                options.rethinkdb_trough_db_url)
+        self.rr = doublethink.Rethinker(
+                servers=parsed.hosts, db=parsed.database)
+        self.svcreg = doublethink.ServiceRegistry(self.rr)
         self.options = options
 
     def start(self):
@@ -191,28 +197,21 @@ class TroughDedupDb(object):
         pass
 
     def _write_url(self, bucket):
-        import doublethink
         segment_id = 'warcprox-trough-%s' % bucket
-        rr = doublethink.Rethinker(
-                servers=['localhost'], db='trough_configuration')
-        services = doublethink.ServiceRegistry(rr)
-        master_node = services.unique_service('trough-sync-master')
+        master_node = self.svcreg.unique_service('trough-sync-master')
         response = requests.post(master_node['url'], segment_id)
         response.raise_for_status()
         write_url = response.text.strip()
         return write_url
 
     def _read_url(self, bucket):
-        import doublethink
-        import rethinkdb as r
         segment_id = 'warcprox-trough-%s' % bucket
-        rr = doublethink.Rethinker(
-                servers=['localhost'], db='trough_configuration')
-        reql = rr.table('services').get_all(segment_id, index='segment').filter(
-                {'role':'trough-read'}).filter(
-                        lambda svc: r.now().sub(
-                            svc['last_heartbeat']).lt(svc['ttl'])
-                    ).order_by('load')
+        reql = self.rr.table('services').get_all(
+                segment_id, index='segment').filter(
+                        {'role':'trough-read'}).filter(
+                                lambda svc: r.now().sub(
+                                    svc['last_heartbeat']).lt(svc['ttl'])
+                                ).order_by('load')
         logging.debug('querying rethinkdb: %r', reql)
         results = reql.run()
         if results:

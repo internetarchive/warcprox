@@ -42,7 +42,9 @@ do
             && source /tmp/venv/bin/activate \
             && pip --log-file /tmp/pip.log install . pytest requests warcio \
             && py.test -v tests \
-            && py.test -v --rethinkdb-servers=localhost tests \
-            && py.test -v --rethinkdb-servers=localhost --rethinkdb-big-table tests"
+            && py.test -v --rethinkdb-dedup-url=rethinkdb://localhost/test1/dedup tests \
+            && py.test -v --rethinkdb-big-table-url=rethinkdb://localhost/test2/captures tests \
+            && py.test -v --rethinkdb-trough-db-url=rethinkdb://localhost/test3 tests \
+            "
 done
 

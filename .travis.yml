@@ -34,8 +34,8 @@ before_script:
 
 script:
 - py.test -v tests
-- py.test -v --rethinkdb-servers=localhost tests
-- py.test -v --rethinkdb-servers=localhost --rethinkdb-big-table tests
+- py.test -v --rethinkdb-dedup-url=rethinkdb://localhost/test1/dedup tests
+- py.test -v --rethinkdb-big-table-url=rethinkdb://localhost/test2/captures tests
 
 notifications:
   slack:

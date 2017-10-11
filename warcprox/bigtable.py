@@ -39,13 +39,12 @@ class RethinkCaptures:
     """Inserts in batches every 0.5 seconds"""
     logger = logging.getLogger("warcprox.bigtable.RethinkCaptures")
 
-    def __init__(
-            self, rr, table="captures", shards=None, replicas=None,
-            options=warcprox.Options()):
-        self.rr = rr
-        self.table = table
-        self.shards = shards or len(rr.servers)
-        self.replicas = replicas or min(3, len(rr.servers))
+    def __init__(self, options=warcprox.Options()):
+        parsed = doublethink.parse_rethinkdb_url(
+                options.rethinkdb_big_table_url)
+        self.rr = doublethink.Rethinker(
+                servers=parsed.hosts, db=parsed.database)
+        self.table = parsed.table
         self.options = options
         self._ensure_db_table()
 
@@ -107,7 +106,9 @@ class RethinkCaptures:
             self.logger.info(
                     "creating rethinkdb table %r in database %r",
                     self.table, self.rr.dbname)
-            self.rr.table_create(self.table, shards=self.shards, replicas=self.replicas).run()
+            self.rr.table_create(
+                    self.table, shards=len(self.rr.servers),
+                    replicas=min(3, len(self.rr.servers))).run()
             self.rr.table(self.table).index_create(
                     "abbr_canon_surt_timestamp",
                     [r.row["abbr_canon_surt"], r.row["timestamp"]]).run()
@@ -216,8 +217,8 @@ class RethinkCaptures:
 class RethinkCapturesDedup:
     logger = logging.getLogger("warcprox.dedup.RethinkCapturesDedup")
 
-    def __init__(self, captures_db, options=warcprox.Options()):
-        self.captures_db = captures_db
+    def __init__(self, options=warcprox.Options()):
+        self.captures_db = RethinkCaptures(options=options)
         self.options = options
 
     def lookup(self, digest_key, bucket="__unspecified__"):
@@ -247,3 +248,7 @@ class RethinkCapturesDedup:
 
     def close(self):
         self.captures_db.close()
+
+    def notify(self, recorded_url, records):
+        self.captures_db.notify(recorded_url, records)
+
