@@ -5,8 +5,6 @@
 # features enabled, against that instance of rethinkdb, and also run without
 # rethinkdb features enabled.  With python 2.7 and 3.4.
 #
-# tests/conftest.py - command line options for warcprox tests
-#
 # Copyright (C) 2015-2017 Internet Archive
 #
 # This program is free software; you can redistribute it and/or
@@ -44,7 +42,7 @@ do
             && py.test -v tests \
             && py.test -v --rethinkdb-dedup-url=rethinkdb://localhost/test1/dedup tests \
             && py.test -v --rethinkdb-big-table-url=rethinkdb://localhost/test2/captures tests \
-            && py.test -v --rethinkdb-trough-db-url=rethinkdb://localhost/test3 tests \
+            && py.test -v --rethinkdb-trough-db-url=rethinkdb://localhost/trough_configuration tests \
             "
 done
 
