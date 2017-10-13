@@ -39,6 +39,7 @@ deps = [
     'certauth==1.1.6',
     'warctools',
     'urlcanon>=0.1.dev16',
+    'urllib3',
     'doublethink>=0.2.0.dev81',
     'PySocks',
     'cryptography!=2.1.1', # 2.1.1 installation is failing on ubuntu

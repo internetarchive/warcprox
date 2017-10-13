@@ -21,12 +21,16 @@ USA.
 
 from __future__ import absolute_import
 
+from datetime import datetime
 import logging
 import os
 import json
 from hanzo import warctools
 import warcprox
 import sqlite3
+import urllib3
+
+urllib3.disable_warnings()
 
 class DedupDb(object):
     logger = logging.getLogger("warcprox.dedup.DedupDb")
@@ -107,9 +111,16 @@ def decorate_with_dedup_info(dedup_db, recorded_url, base32=False):
             and recorded_url.response_recorder.payload_size() > 0):
         digest_key = warcprox.digest_str(recorded_url.response_recorder.payload_digest, base32)
         if recorded_url.warcprox_meta and "captures-bucket" in recorded_url.warcprox_meta:
-            recorded_url.dedup_info = dedup_db.lookup(digest_key, recorded_url.warcprox_meta["captures-bucket"])
+            if isinstance(dedup_db, CdxServerDedup):
+                recorded_url.dedup_info = dedup_db.lookup(digest_key, recorded_url.warcprox_meta["captures-bucket"],
+                                                          recorded_url)
+            else:
+                recorded_url.dedup_info = dedup_db.lookup(digest_key, recorded_url.warcprox_meta["captures-bucket"])
         else:
-            recorded_url.dedup_info = dedup_db.lookup(digest_key)
+            if isinstance(dedup_db, CdxServerDedup):
+                recorded_url.dedup_info = dedup_db.lookup(digest_key, recorded_url)
+            else:
+                recorded_url.dedup_info = dedup_db.lookup(digest_key)
 
 class RethinkDedupDb:
     logger = logging.getLogger("warcprox.dedup.RethinkDedupDb")
@@ -174,3 +185,74 @@ class RethinkDedupDb:
             else:
                 self.save(digest_key, records[0])
 
+
+def _split_timestamp(timestamp):
+    """split `timestamp` into a tuple of 6 integers.
+
+    :param timestamp: full-length timestamp.
+    :type timestamp: bytes
+    """
+    return (
+        int(timestamp[:-10]),
+        int(timestamp[-10:-8]),
+        int(timestamp[-8:-6]),
+        int(timestamp[-6:-4]),
+        int(timestamp[-4:-2]),
+        int(timestamp[-2:])
+        )
+
+
+class CdxServerDedup(object):
+    """Query a CDX server to perform deduplication.
+    """
+    logger = logging.getLogger("warcprox.dedup.CdxServerDedup")
+
+    def __init__(self, cdx_url="https://web.archive.org/cdx/search/cdx",
+                 options=warcprox.Options()):
+        self.http_pool = urllib3.PoolManager()
+        self.cdx_url = cdx_url
+        self.options = options
+
+    def start(self):
+        pass
+
+    def save(self, digest_key, response_record, bucket=""):
+        """Does not apply to CDX server, as it is obviously read-only.
+        """
+        pass
+
+    def lookup(self, digest_key, recorded_url):
+        """Compare `sha1` with SHA1 hash of fetched content (note SHA1 must be
+        computed on the original content, after decoding Content-Encoding and
+        Transfer-Encoding, if any), if they match, write a revisit record.
+
+        :param digest_key: b'sha1:<KEY-VALUE>'.
+            Example: b'sha1:B2LTWWPUOYAH7UIPQ7ZUPQ4VMBSVC36A'
+        :param recorded_url: RecordedUrl object
+        Result must contain:
+        {"url", "date": "%Y-%m-%dT%H:%M:%SZ", "id": "warc_id" if available}
+        """
+        url = recorded_url.url
+        u = url.decode("utf-8") if isinstance(url, bytes) else url
+        try:
+            result = self.http_pool.request('GET', self.cdx_url, fields=dict(
+                url=u, fl="timestamp,digest", limit=-1))
+        except urllib3.HTTPError as exc:
+            self.logger.error('CdxServerDedup request failed for url=%s %s',
+                              url, exc)
+        if result.status == 200:
+            digest_key = digest_key[5:]  # drop sha1: prefix
+            for line in result.data.split(b'\n'):
+                if line:
+                    (cdx_ts, cdx_digest) = line.split(b' ')
+                    if cdx_digest == digest_key:
+                        dt = datetime(*_split_timestamp(cdx_ts.decode('ascii')))
+                        # TODO find out id
+                        return dict(id=url, url=url,
+                                    date=dt.strftime('%Y-%m-%dT%H:%M:%SZ'))
+        return None
+
+    def notify(self, recorded_url, records):
+        """Since we don't save anything to CDX server, this does not apply.
+        """
+        pass
