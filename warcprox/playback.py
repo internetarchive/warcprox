@@ -131,7 +131,7 @@ class PlaybackProxyHandler(MitmProxyHandler):
                 pass
 
             if errors:
-                raise Exception('warc errors at {}:{} -- {}'.format(warcfilename, offset, errors))
+                raise Exception('warc errors at {}:{} -- {}'.format(location['f'], offset, errors))
 
             warc_type = record.get_header(warctools.WarcRecord.TYPE)
             if warc_type != warctools.WarcRecord.RESPONSE:
