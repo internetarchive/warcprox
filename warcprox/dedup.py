@@ -55,13 +55,12 @@ class DedupDb(object):
         conn.close()
 
     def save(self, digest_key, response_record, bucket=""):
-        record_id = response_record.get_header(warctools.WarcRecord.ID).decode('latin1')
         url = response_record.get_header(warctools.WarcRecord.URL).decode('latin1')
         date = response_record.get_header(warctools.WarcRecord.DATE).decode('latin1')
 
         key = digest_key.decode('utf-8') + "|" + bucket
 
-        py_value = {'id':record_id, 'url':url, 'date':date}
+        py_value = {'url':url, 'date':date}
         json_value = json.dumps(py_value, separators=(',',':'))
 
         conn = sqlite3.connect(self.file)
@@ -81,7 +80,6 @@ class DedupDb(object):
         conn.close()
         if result_tuple:
             result = json.loads(result_tuple[0])
-            result['id'] = result['id'].encode('latin1')
             result['url'] = result['url'].encode('latin1')
             result['date'] = result['date'].encode('latin1')
         self.logger.debug('dedup db lookup of key=%s returning %s', key, result)
@@ -144,10 +142,9 @@ class RethinkDedupDb:
     def save(self, digest_key, response_record, bucket=""):
         k = digest_key.decode("utf-8") if isinstance(digest_key, bytes) else digest_key
         k = "{}|{}".format(k, bucket)
-        record_id = response_record.get_header(warctools.WarcRecord.ID).decode('latin1')
         url = response_record.get_header(warctools.WarcRecord.URL).decode('latin1')
         date = response_record.get_header(warctools.WarcRecord.DATE).decode('latin1')
-        record = {'key':k,'url':url,'date':date,'id':record_id}
+        record = {'key': k, 'url': url, 'date': date}
         result = self.rr.table(self.table).insert(
                 record, conflict="replace").run()
         if sorted(result.values()) != [0,0,0,0,0,1] and [result["deleted"],result["skipped"],result["errors"]] != [0,0,0]:

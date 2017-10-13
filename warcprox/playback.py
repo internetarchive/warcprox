@@ -120,9 +120,12 @@ class PlaybackProxyHandler(MitmProxyHandler):
 
 
     def _send_headers_and_refd_payload(
-            self, headers, refers_to, refers_to_target_uri, refers_to_date):
+            self, headers, refers_to_target_uri, refers_to_date, payload_digest):
+        """Parameters:
+
+        """
         location = self.server.playback_index_db.lookup_exact(
-                refers_to_target_uri, refers_to_date, record_id=refers_to)
+                refers_to_target_uri, refers_to_date, payload_digest)
         self.logger.debug('loading http payload from {}'.format(location))
 
         fh = self._open_warc_at_offset(location['f'], location['o'])
@@ -177,20 +180,19 @@ class PlaybackProxyHandler(MitmProxyHandler):
                 if warc_profile != warctools.WarcRecord.PROFILE_IDENTICAL_PAYLOAD_DIGEST:
                     raise Exception('unknown revisit record profile {}'.format(warc_profile))
 
-                refers_to = record.get_header(
-                        warctools.WarcRecord.REFERS_TO).decode('latin1')
                 refers_to_target_uri = record.get_header(
                         warctools.WarcRecord.REFERS_TO_TARGET_URI).decode(
                                 'latin1')
                 refers_to_date = record.get_header(
                         warctools.WarcRecord.REFERS_TO_DATE).decode('latin1')
-
+                payload_digest = record.get_header(
+                        warctools.WarcRecord.PAYLOAD_DIGEST).decode('latin1')
                 self.logger.debug(
                         'revisit record references %s:%s capture of %s',
-                        refers_to_date, refers_to, refers_to_target_uri)
+                        refers_to_date, payload_digest, refers_to_target_uri)
                 return self._send_headers_and_refd_payload(
-                        record.content[1], refers_to, refers_to_target_uri,
-                        refers_to_date)
+                        record.content[1], refers_to_target_uri, refers_to_date,
+                        payload_digest)
 
             else:
                 # send it back raw, whatever it is
@@ -264,12 +266,12 @@ class PlaybackIndexDb(object):
         # XXX canonicalize url?
         url = response_record.get_header(warctools.WarcRecord.URL).decode('latin1')
         date_str = response_record.get_header(warctools.WarcRecord.DATE).decode('latin1')
-        record_id_str = response_record.get_header(warctools.WarcRecord.ID).decode('latin1')
+        payload_digest_str = response_record.get_header(warctools.WarcRecord.PAYLOAD_DIGEST).decode('latin1')
 
         # there could be two visits of same url in the same second, and WARC-Date is
         # prescribed as YYYY-MM-DDThh:mm:ssZ, so we have to handle it :-\
 
-        # url:{date1:[record1={'f':warcfile,'o':response_offset,'q':request_offset,'i':record_id},record2,...],date2:[{...}],...}
+        # url:{date1:[record1={'f':warcfile,'o':response_offset,'q':request_offset,'d':payload_digest},record2,...],date2:[{...}],...}
 
         with self._lock:
             conn = sqlite3.connect(self.file)
@@ -283,10 +285,10 @@ class PlaybackIndexDb(object):
 
             if date_str in py_value:
                 py_value[date_str].append(
-                        {'f':warcfile, 'o':offset, 'i':record_id_str})
+                        {'f': warcfile, 'o': offset, 'd': payload_digest_str})
             else:
                 py_value[date_str] = [
-                        {'f':warcfile, 'o':offset, 'i':record_id_str}]
+                        {'f': warcfile, 'o': offset, 'd': payload_digest_str}]
 
             json_value = json.dumps(py_value, separators=(',',':'))
 
@@ -314,11 +316,11 @@ class PlaybackIndexDb(object):
 
         latest_date = max(py_value)
         result = py_value[latest_date][0]
-        result['i'] = result['i'].encode('ascii')
+        result['d'] = result['d'].encode('ascii')
         return latest_date, result
 
     # in python3 params are bytes
-    def lookup_exact(self, url, warc_date, record_id):
+    def lookup_exact(self, url, warc_date, payload_digest):
         conn = sqlite3.connect(self.file)
         cursor = conn.execute(
                 'select value from playback where url = ?', (url,))
@@ -334,14 +336,13 @@ class PlaybackIndexDb(object):
 
         if warc_date in py_value:
             for record in py_value[warc_date]:
-                if record['i'] == record_id:
+                if record['d'] == payload_digest:
                     self.logger.debug(
                             "found exact match for (%r,%r,%r)",
-                            warc_date, record_id, url)
-                    record['i'] = record['i']
+                            warc_date, payload_digest, url)
+                    record['d'] = record['d']
                     return record
         else:
             self.logger.info(
-                    "match not found for (%r,%r,%r)", warc_date, record_id, url)
+                    "match not found for (%r,%r,%r)", warc_date, payload_digest, url)
             return None
-
