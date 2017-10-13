@@ -28,15 +28,32 @@ services:
 before_install:
 - sudo service docker restart ; sleep 10  # https://github.com/travis-ci/travis-ci/issues/4778
 - docker run -d --publish=28015:28015 rethinkdb
+- docker run -d --publish=8020:8020 --publish=50070:50070 --publish=50010:50010 --publish=50020:50020 --publish=50075:50075 chalimartines/cdh5-pseudo-distributed
+- virtualenv -p python3 /opt/trough-ve3
+- . /opt/trough-ve3/bin/activate
+- pip install git+https://github.com/jkafader/snakebite@feature/python3-version-string
+- pip install git+https://github.com/nlevitt/trough.git@toward-warcprox-dedup
+- 'sync.py >>/tmp/trough-sync-local.out 2>&1 &'
+- sleep 5 ; 'python -c $"import doublethink ; from trough.settings import settings ; rr = doublethink.Rethinker(settings[\"RETHINKDB_HOSTS\"]) ; rr.db(\"trough_configuration\").wait().run()"'
+- 'sync.py --server >>/tmp/trough-sync-server.out 2>&1 &'
+- 'uwsgi --venv=/opt/trough-ve3 --http :6222 --master --processes=2 --harakiri=240 --max-requests=50000 --vacuum --die-on-term --wsgi-file /opt/trough-ve3/bin/writer.py >>/tmp/trough-write.out 2>&1 &'
+- 'uwsgi --venv=/opt/trough-ve3 --http :6112 --master --processes=2 --harakiri=20 --max-requests=50000 --vacuum --die-on-term --wsgi-file /opt/trough-ve3/bin/write_provisioner_local.py >>/tmp/trough-write-provisioner-local.out 2>&1 &'
+- 'uwsgi --venv=/opt/trough-ve3 --http :6111 --master --processes=2 --harakiri=20 --max-requests=50000 --vacuum --die-on-term --wsgi-file /opt/trough-ve3/bin/write_provisioner_server.py >>/tmp/trough-write-provisioner-server.out 2>&1 &'
+
+install:
+- pip install . pytest requests warcio
 
 before_script:
-- pip install . pytest requests warcio
+- ps -fHe
 
 script:
 - py.test -v tests
 - py.test -v --rethinkdb-dedup-url=rethinkdb://localhost/test1/dedup tests
 - py.test -v --rethinkdb-big-table-url=rethinkdb://localhost/test2/captures tests
 - py.test -v --rethinkdb-trough-db-url=rethinkdb://localhost/trough_configuration tests
+
+after_script:
+- 'cat /tmp/*.out'
 
 notifications:
   slack:
