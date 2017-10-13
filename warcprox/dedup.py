@@ -30,6 +30,7 @@ import sqlite3
 import requests
 import doublethink
 import rethinkdb as r
+import datetime
 
 class DedupDb(object):
     logger = logging.getLogger("warcprox.dedup.DedupDb")
@@ -219,11 +220,33 @@ class TroughDedupDb(object):
         else:
             return None
 
+    def sql_value(self, x):
+        if x is None:
+            return 'null'
+        elif isinstance(x, datetime.datetime):
+            return 'datetime(%r)' % x.isoformat()
+        elif isinstance(x, bool):
+            return int(x)
+        elif isinstance(x, str) or isinstance(x, bytes):
+            # py3: repr(u'abc') => 'abc'
+            #      repr(b'abc') => b'abc'
+            # py2: repr(u'abc') => u'abc'
+            #      repr(b'abc') => 'abc'
+            # Repr gives us a prefix we don't want in different situations
+            # depending on whether this is py2 or py3. Chop it off either way.
+            r = repr(x)
+            if r[:1] == "'":
+                return r
+            else:
+                return r[1:]
+        else:
+            raise Exception("don't know how to make an sql value from %r" % x)
+
     def save(self, digest_key, response_record, bucket='__unspecified__'):
         write_url = self._write_url(bucket)
-        record_id = response_record.get_header(warctools.WarcRecord.ID).decode('ascii')
-        url = response_record.get_header(warctools.WarcRecord.URL).decode('ascii')
-        warc_date = response_record.get_header(warctools.WarcRecord.DATE).decode('ascii')
+        record_id = response_record.get_header(warctools.WarcRecord.ID)
+        url = response_record.get_header(warctools.WarcRecord.URL)
+        warc_date = response_record.get_header(warctools.WarcRecord.DATE)
 
         # XXX create table statement here is a temporary hack,
         # see https://webarchive.jira.com/browse/AITFIVE-1465
@@ -233,8 +256,9 @@ class TroughDedupDb(object):
                '    date datetime not null,\n'
                '    id varchar(100));\n' # warc record id
                'insert into dedup (digest_key, url, date, id) '
-               'values (%r, %r, %r, %r);') % (
-                       digest_key.decode('ascii'), url, warc_date, record_id)
+               'values (%s, %s, %s, %s);') % (
+                       self.sql_value(digest_key), self.sql_value(url),
+                       self.sql_value(warc_date), self.sql_value(record_id))
         response = requests.post(write_url, sql)
         if response.status_code != 200:
             logging.warn(
@@ -245,7 +269,8 @@ class TroughDedupDb(object):
         read_url = self._read_url(bucket)
         if not read_url:
             return None
-        sql = 'select * from dedup where digest_key=%r;' % digest_key.decode('ascii')
+        sql = 'select * from dedup where digest_key=%s;' % (
+                self.sql_value(digest_key))
         response = requests.post(read_url, sql)
         if response.status_code != 200:
             logging.warn(

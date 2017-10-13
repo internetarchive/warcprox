@@ -60,7 +60,7 @@ class BetterArgumentDefaultsHelpFormatter(
         if isinstance(action, argparse._StoreConstAction):
             return action.help
         else:
-            return super()._get_help_string(action)
+            return argparse.ArgumentDefaultsHelpFormatter._get_help_string(self, action)
 
 def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
     arg_parser = argparse.ArgumentParser(prog=prog,
