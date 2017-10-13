@@ -406,13 +406,11 @@ def test_dedup_http(http_daemon, warcprox_, archiving_proxies, playback_proxies)
     time.sleep(0.5)
 
     # check in dedup db
-    # {u'id': u'<urn:uuid:e691dc0f-4bb9-4ad8-9afb-2af836aa05e4>', u'url': u'https://localhost:62841/c/d', u'date': u'2013-11-22T00:14:37Z'}
+    # {u'url': u'https://localhost:62841/c/d', u'date': u'2013-11-22T00:14:37Z'}
     dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
             b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
     assert dedup_lookup['url'] == url.encode('ascii')
-    assert re.match(br'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$', dedup_lookup['id'])
     assert re.match(br'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$', dedup_lookup['date'])
-    record_id = dedup_lookup['id']
     dedup_date = dedup_lookup['date']
 
     # need revisit to have a later timestamp than original, else playing
@@ -435,7 +433,6 @@ def test_dedup_http(http_daemon, warcprox_, archiving_proxies, playback_proxies)
     dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
             b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
     assert dedup_lookup['url'] == url.encode('ascii')
-    assert dedup_lookup['id'] == record_id
     assert dedup_lookup['date'] == dedup_date
 
     # test playback
@@ -479,13 +476,11 @@ def test_dedup_https(https_daemon, warcprox_, archiving_proxies, playback_proxie
     time.sleep(0.5)
 
     # check in dedup db
-    # {u'id': u'<urn:uuid:e691dc0f-4bb9-4ad8-9afb-2af836aa05e4>', u'url': u'https://localhost:62841/c/d', u'date': u'2013-11-22T00:14:37Z'}
+    # {u'url': u'https://localhost:62841/c/d', u'date': u'2013-11-22T00:14:37Z'}
     dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
             b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
     assert dedup_lookup['url'] == url.encode('ascii')
-    assert re.match(br'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$', dedup_lookup['id'])
     assert re.match(br'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$', dedup_lookup['date'])
-    record_id = dedup_lookup['id']
     dedup_date = dedup_lookup['date']
 
     # need revisit to have a later timestamp than original, else playing
@@ -508,7 +503,6 @@ def test_dedup_https(https_daemon, warcprox_, archiving_proxies, playback_proxie
     dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
             b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
     assert dedup_lookup['url'] == url.encode('ascii')
-    assert dedup_lookup['id'] == record_id
     assert dedup_lookup['date'] == dedup_date
 
     # test playback
@@ -576,9 +570,7 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
     dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
             b'sha1:bc3fac8847c9412f49d955e626fb58a76befbf81', bucket="bucket_a")
     assert dedup_lookup['url'] == url1.encode('ascii')
-    assert re.match(br'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$', dedup_lookup['id'])
     assert re.match(br'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$', dedup_lookup['date'])
-    record_id = dedup_lookup['id']
     dedup_date = dedup_lookup['date']
 
     # check url1 not in dedup db bucket_b
@@ -603,9 +595,7 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
     dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
             b'sha1:bc3fac8847c9412f49d955e626fb58a76befbf81', bucket="bucket_b")
     assert dedup_lookup['url'] == url2.encode('ascii')
-    assert re.match(br'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$', dedup_lookup['id'])
     assert re.match(br'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$', dedup_lookup['date'])
-    record_id = dedup_lookup['id']
     dedup_date = dedup_lookup['date']
 
     # archive url2 bucket_a
