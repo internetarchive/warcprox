@@ -41,6 +41,7 @@ deps = [
     'urlcanon>=0.1.dev16',
     'doublethink>=0.2.0.dev87',
     'PySocks',
+    'cryptography!=2.1.1', # 2.1.1 installation is failing on ubuntu
 ]
 try:
     import concurrent.futures
