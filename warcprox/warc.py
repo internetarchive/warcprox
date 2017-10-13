@@ -50,6 +50,7 @@ class WarcRecordBuilder:
                     url=recorded_url.url, warc_date=warc_date,
                     data=response_header_block,
                     warc_type=warctools.WarcRecord.REVISIT,
+                    refers_to=recorded_url.dedup_info.get('id'),
                     refers_to_target_uri=recorded_url.dedup_info['url'],
                     refers_to_date=recorded_url.dedup_info['date'],
                     payload_digest=warcprox.digest_str(recorded_url.response_recorder.payload_digest, self.base32),
@@ -86,8 +87,8 @@ class WarcRecordBuilder:
 
     def build_warc_record(self, url, warc_date=None, recorder=None, data=None,
         concurrent_to=None, warc_type=None, content_type=None, remote_ip=None,
-        profile=None, refers_to_target_uri=None, refers_to_date=None,
-        payload_digest=None):
+        profile=None, refers_to=None, refers_to_target_uri=None,
+        refers_to_date=None, payload_digest=None):
 
         if warc_date is None:
             warc_date = warctools.warc.warc_datetime_str(datetime.datetime.utcnow())
@@ -104,6 +105,8 @@ class WarcRecordBuilder:
             headers.append((warctools.WarcRecord.IP_ADDRESS, remote_ip))
         if profile is not None:
             headers.append((warctools.WarcRecord.PROFILE, profile))
+        if refers_to is not None:
+            headers.append((warctools.WarcRecord.REFERS_TO, refers_to))
         if refers_to_target_uri is not None:
             headers.append((warctools.WarcRecord.REFERS_TO_TARGET_URI, refers_to_target_uri))
         if refers_to_date is not None:
