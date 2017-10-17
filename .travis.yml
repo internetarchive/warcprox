@@ -50,7 +50,14 @@ before_install:
 - 'uwsgi --venv=/opt/trough-ve3 --http :6222 --master --processes=2 --harakiri=240 --max-requests=50000 --vacuum --die-on-term --wsgi-file /opt/trough-ve3/bin/writer.py >>/tmp/trough-write.out 2>&1 &'
 - 'uwsgi --venv=/opt/trough-ve3 --http :6112 --master --processes=2 --harakiri=20 --max-requests=50000 --vacuum --die-on-term --wsgi-file /opt/trough-ve3/bin/write_provisioner_local.py >>/tmp/trough-write-provisioner-local.out 2>&1 &'
 - 'uwsgi --venv=/opt/trough-ve3 --http :6111 --master --processes=2 --harakiri=20 --max-requests=50000 --vacuum --die-on-term --wsgi-file /opt/trough-ve3/bin/write_provisioner_server.py >>/tmp/trough-write-provisioner-server.out 2>&1 &'
+- sleep 3
 - ps ww -fHe
+- cat /tmp/trough-write.out
+- cat /tmp/trough-write-provisioner-server.out
+- cat /tmp/trough-write-provisioner-local.out
+- cat /tmp/trough-sync-server.out
+- cat /tmp/trough-sync-local.out
+- cat /tmp/trough-read.out
 
 install:
 - pip install . pytest requests warcio
@@ -65,7 +72,12 @@ script:
 - py.test -v --rethinkdb-trough-db-url=rethinkdb://localhost/trough_configuration tests
 
 after_script:
-- 'cat /tmp/*.out'
+- cat /tmp/trough-write.out
+- cat /tmp/trough-write-provisioner-server.out
+- cat /tmp/trough-write-provisioner-local.out
+- cat /tmp/trough-sync-server.out
+- cat /tmp/trough-sync-local.out
+- cat /tmp/trough-read.out
 
 notifications:
   slack:
