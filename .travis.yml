@@ -50,6 +50,7 @@ before_install:
 - 'uwsgi --venv=/opt/trough-ve3 --http :6222 --master --processes=2 --harakiri=240 --max-requests=50000 --vacuum --die-on-term --wsgi-file /opt/trough-ve3/bin/writer.py >>/tmp/trough-write.out 2>&1 &'
 - 'uwsgi --venv=/opt/trough-ve3 --http :6112 --master --processes=2 --harakiri=20 --max-requests=50000 --vacuum --die-on-term --wsgi-file /opt/trough-ve3/bin/write_provisioner_local.py >>/tmp/trough-write-provisioner-local.out 2>&1 &'
 - 'uwsgi --venv=/opt/trough-ve3 --http :6111 --master --processes=2 --harakiri=20 --max-requests=50000 --vacuum --die-on-term --wsgi-file /opt/trough-ve3/bin/write_provisioner_server.py >>/tmp/trough-write-provisioner-server.out 2>&1 &'
+- 'uwsgi --venv=/opt/trough-ve3 --http :6444 --master --processes=2 --harakiri=3200 --socket-timeout=3200 --max-requests=50000 --vacuum --die-on-term --wsgi-file /opt/trough-ve3/bin/reader.py >>/tmp/trough-read.out 2>&1'
 - sleep 3
 - ps ww -fHe
 - cat /tmp/trough-write.out
