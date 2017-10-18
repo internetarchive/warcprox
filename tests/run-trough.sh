@@ -1,0 +1,33 @@
+#!/bin/bash
+#
+# this is used by .travis.yml
+#
+
+pip install git+https://github.com/jkafader/snakebite@feature/python3-version-string
+pip install git+https://github.com/nlevitt/trough.git@9ae5f477a28f22
+
+mkdir /etc/trough
+
+# hello docker user-defined bridge networking
+echo '
+HDFS_HOST: hadoop
+RETHINKDB_HOSTS:
+- rethinkdb
+' > /etc/trough/settings.yml
+
+sync.py >>/tmp/trough-sync-local.out 2>&1 &
+
+sleep 5
+python -c "
+import doublethink
+from trough.settings import settings
+rr = doublethink.Rethinker(settings['RETHINKDB_HOSTS'])
+rr.db('trough_configuration').wait().run()"
+
+sync.py --server >>/tmp/trough-sync-server.out 2>&1 &
+uwsgi --http :6222 --master --processes=2 --harakiri=240 --max-requests=50000 --vacuum --die-on-term --wsgi-file /usr/local/bin/writer.py >>/tmp/trough-write.out 2>&1 &
+uwsgi --http :6112 --master --processes=2 --harakiri=20 --max-requests=50000 --vacuum --die-on-term --wsgi-file /usr/local/bin/write_provisioner_local.py >>/tmp/trough-write-provisioner-local.out 2>&1 &
+uwsgi --http :6111 --master --processes=2 --harakiri=20 --max-requests=50000 --vacuum --die-on-term --wsgi-file /usr/local/bin/write_provisioner_server.py >>/tmp/trough-write-provisioner-server.out 2>&1 &
+uwsgi --http :6444 --master --processes=2 --harakiri=3200 --socket-timeout=3200 --max-requests=50000 --vacuum --die-on-term --wsgi-file /usr/local/bin/reader.py >>/tmp/trough-read.out 2>&1 &
+
+wait
