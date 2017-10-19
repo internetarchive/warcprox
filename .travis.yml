@@ -1,5 +1,7 @@
 group: deprecated-2017Q2
 
+sudo: required
+
 language: python
 python:
 - 3.6
@@ -32,9 +34,10 @@ before_install:
 - docker run --detach --network=trough --hostname=rethinkdb --name=rethinkdb --publish=28015:28015 rethinkdb
 - docker run --detach --network=trough --hostname=hadoop --name=hadoop chalimartines/cdh5-pseudo-distributed
 - docker run --detach --network=trough --hostname=trough --volume="$PWD/tests/run-trough.sh:/run-trough.sh" --publish=6111:6111 --publish=6112:6112 --publish=6222:6222 --publish=6444:6444 python:3 bash /run-trough.sh
-- echo 127.0.0.1 rethinkdb >> /etc/hosts
-- echo 127.0.0.1 hadoop >> /etc/hosts
-- echo 127.0.0.1 trough >> /etc/hosts
+- echo 127.0.0.1 rethinkdb | sudo tee -a /etc/hosts
+- echo 127.0.0.1 hadoop | sudo tee -a /etc/hosts
+- echo 127.0.0.1 trough | sudo tee -a /etc/hosts
+- cat /etc/hosts
 - ping -c2 trough
 
 install:
