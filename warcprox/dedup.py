@@ -29,6 +29,7 @@ from hanzo import warctools
 import warcprox
 import sqlite3
 import urllib3
+from urllib3.exceptions import HTTPError
 
 urllib3.disable_warnings()
 
@@ -206,10 +207,10 @@ class CdxServerDedup(object):
     """Query a CDX server to perform deduplication.
     """
     logger = logging.getLogger("warcprox.dedup.CdxServerDedup")
+    http_pool = urllib3.PoolManager()
 
     def __init__(self, cdx_url="https://web.archive.org/cdx/search/cdx",
                  options=warcprox.Options()):
-        self.http_pool = urllib3.PoolManager()
         self.cdx_url = cdx_url
         self.options = options
 
@@ -226,30 +227,33 @@ class CdxServerDedup(object):
         computed on the original content, after decoding Content-Encoding and
         Transfer-Encoding, if any), if they match, write a revisit record.
 
-        :param digest_key: b'sha1:<KEY-VALUE>'.
+        :param digest_key: b'sha1:<KEY-VALUE>' (prefix is optional).
             Example: b'sha1:B2LTWWPUOYAH7UIPQ7ZUPQ4VMBSVC36A'
         :param recorded_url: RecordedUrl object
         Result must contain:
-        {"url", "date": "%Y-%m-%dT%H:%M:%SZ", "id": "warc_id" if available}
+        {"url": <URL>, "date": "%Y-%m-%dT%H:%M:%SZ"}
         """
         url = recorded_url.url
         u = url.decode("utf-8") if isinstance(url, bytes) else url
         try:
             result = self.http_pool.request('GET', self.cdx_url, fields=dict(
                 url=u, fl="timestamp,digest", limit=-1))
-        except urllib3.HTTPError as exc:
-            self.logger.error('CdxServerDedup request failed for url=%s %s',
-                              url, exc)
-        if result.status == 200:
-            digest_key = digest_key[5:]  # drop sha1: prefix
+            assert result.status == 200
+            if isinstance(digest_key, bytes):
+                dkey = digest_key
+            else:
+                dkey = digest_key.encode('utf-8')
+            dkey = dkey[5:] if dkey.startswith(b'sha1:') else dkey
             for line in result.data.split(b'\n'):
                 if line:
                     (cdx_ts, cdx_digest) = line.split(b' ')
-                    if cdx_digest == digest_key:
+                    if cdx_digest == dkey:
                         dt = datetime(*_split_timestamp(cdx_ts.decode('ascii')))
-                        # TODO find out id
-                        return dict(id=url, url=url,
+                        return dict(url=url,
                                     date=dt.strftime('%Y-%m-%dT%H:%M:%SZ'))
+        except (HTTPError, AssertionError, ValueError) as exc:
+            self.logger.error('CdxServerDedup request failed for url=%s %s',
+                              url, exc)
         return None
 
     def notify(self, recorded_url, records):
