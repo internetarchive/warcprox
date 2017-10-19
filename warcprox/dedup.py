@@ -209,7 +209,7 @@ class CdxServerDedup(object):
     logger = logging.getLogger("warcprox.dedup.CdxServerDedup")
     http_pool = urllib3.PoolManager()
 
-    def __init__(self, cdx_url="https://web.archive.org/cdx/search/cdx",
+    def __init__(self, cdx_url="https://web.archive.org/cdx/search",
                  options=warcprox.Options()):
         self.cdx_url = cdx_url
         self.options = options
@@ -237,7 +237,7 @@ class CdxServerDedup(object):
         u = url.decode("utf-8") if isinstance(url, bytes) else url
         try:
             result = self.http_pool.request('GET', self.cdx_url, fields=dict(
-                url=u, fl="timestamp,digest", limit=-1))
+                url=u, fl="timestamp,digest", limit=-10))
             assert result.status == 200
             if isinstance(digest_key, bytes):
                 dkey = digest_key
@@ -249,8 +249,8 @@ class CdxServerDedup(object):
                     (cdx_ts, cdx_digest) = line.split(b' ')
                     if cdx_digest == dkey:
                         dt = datetime(*_split_timestamp(cdx_ts.decode('ascii')))
-                        return dict(url=url,
-                                    date=dt.strftime('%Y-%m-%dT%H:%M:%SZ'))
+                        date = dt.strftime('%Y-%m-%dT%H:%M:%SZ').encode('utf-8')
+                        return dict(url=url, date=date)
         except (HTTPError, AssertionError, ValueError) as exc:
             self.logger.error('CdxServerDedup request failed for url=%s %s',
                               url, exc)
