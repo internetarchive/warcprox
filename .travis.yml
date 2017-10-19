@@ -46,12 +46,12 @@ script:
 
 after_script:
 - ps ww -fHe
-- cat /tmp/trough-write.out
-- cat /tmp/trough-write-provisioner-server.out
-- cat /tmp/trough-write-provisioner-local.out
-- cat /tmp/trough-sync-server.out
-- cat /tmp/trough-sync-local.out
-- cat /tmp/trough-read.out
+- docker exec trough cat /tmp/trough-write.out
+- docker exec trough cat /tmp/trough-write-provisioner-server.out
+- docker exec trough cat /tmp/trough-write-provisioner-local.out
+- docker exec trough cat /tmp/trough-sync-server.out
+- docker exec trough cat /tmp/trough-sync-local.out
+- docker exec trough cat /tmp/trough-read.out
 
 notifications:
   slack:
