@@ -29,8 +29,7 @@ def test_cdx_dedup():
         cdx_server = CdxServerDedup(cdx_url="dummy-cdx-server-url")
         res = cdx_server.lookup(digest_key="B2LTWWPUOYAH7UIPQ7ZUPQ4VMBSVC36A",
                                 recorded_url=recorded_url)
-        assert res["url"] == "http://example.com"
-        assert res["date"] == "2017-02-03T04:05:03Z"
+        assert res["date"] == b"2017-02-03T04:05:03Z"
 
         # invalid CDX result status code
         result = mock.Mock()
