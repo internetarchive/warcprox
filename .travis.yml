@@ -26,11 +26,16 @@ services:
 - docker
 
 before_install:
+- cat /etc/hosts
 - sudo service docker restart ; sleep 10  # https://github.com/travis-ci/travis-ci/issues/4778
 - docker network create --driver=bridge trough
-- docker run --detach --network=trough --name=rethinkdb --publish=28015:28015 rethinkdb
-- docker run --detach --network=trough --name=hadoop chalimartines/cdh5-pseudo-distributed
-- docker run --detach --network=trough --volume="$PWD/tests/run-trough.sh:/run-trough.sh" --publish=6111:6111 --publish=6112:6112 --publish=6222:6222 --publish=6444:6444 python:3 bash /run-trough.sh
+- docker run --detach --network=trough --host=rethinkdb --name=rethinkdb --publish=28015:28015 rethinkdb
+- docker run --detach --network=trough --host=hadoop --name=hadoop chalimartines/cdh5-pseudo-distributed
+- docker run --detach --network=trough --host=trough --volume="$PWD/tests/run-trough.sh:/run-trough.sh" --publish=6111:6111 --publish=6112:6112 --publish=6222:6222 --publish=6444:6444 python:3 bash /run-trough.sh
+- echo 127.0.0.1 rethinkdb >> /etc/hosts
+- echo 127.0.0.1 hadoop >> /etc/hosts
+- echo 127.0.0.1 trough >> /etc/hosts
+- ping -c2 trough
 
 install:
 - pip install . pytest requests warcio
