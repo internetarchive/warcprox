@@ -77,7 +77,7 @@ class DedupDb(object):
         conn.close()
         self.logger.debug('dedup db saved %s:%s', key, json_value)
 
-    def lookup(self, digest_key, bucket=""):
+    def lookup(self, digest_key, bucket="", recorded_url=None):
         result = None
         key = digest_key.decode('utf-8') + '|' + bucket
         conn = sqlite3.connect(self.file)
@@ -112,16 +112,10 @@ def decorate_with_dedup_info(dedup_db, recorded_url, base32=False):
             and recorded_url.response_recorder.payload_size() > 0):
         digest_key = warcprox.digest_str(recorded_url.response_recorder.payload_digest, base32)
         if recorded_url.warcprox_meta and "captures-bucket" in recorded_url.warcprox_meta:
-            if isinstance(dedup_db, CdxServerDedup):
-                recorded_url.dedup_info = dedup_db.lookup(digest_key, recorded_url.warcprox_meta["captures-bucket"],
-                                                          recorded_url)
-            else:
-                recorded_url.dedup_info = dedup_db.lookup(digest_key, recorded_url.warcprox_meta["captures-bucket"])
+            recorded_url.dedup_info = dedup_db.lookup(digest_key, recorded_url.warcprox_meta["captures-bucket"],
+                                                      recorded_url)
         else:
-            if isinstance(dedup_db, CdxServerDedup):
-                recorded_url.dedup_info = dedup_db.lookup(digest_key, recorded_url)
-            else:
-                recorded_url.dedup_info = dedup_db.lookup(digest_key)
+            recorded_url.dedup_info = dedup_db.lookup(digest_key, recorded_url=recorded_url)
 
 class RethinkDedupDb:
     logger = logging.getLogger("warcprox.dedup.RethinkDedupDb")
@@ -166,7 +160,7 @@ class RethinkDedupDb:
             raise Exception("unexpected result %s saving %s", result, record)
         self.logger.debug('dedup db saved %s:%s', k, record)
 
-    def lookup(self, digest_key, bucket=""):
+    def lookup(self, digest_key, bucket="", recorded_url=None):
         k = digest_key.decode("utf-8") if isinstance(digest_key, bytes) else digest_key
         k = "{}|{}".format(k, bucket)
         result = self.rr.table(self.table).get(k).run()
@@ -185,22 +179,6 @@ class RethinkDedupDb:
                 self.save(digest_key, records[0], bucket=recorded_url.warcprox_meta["captures-bucket"])
             else:
                 self.save(digest_key, records[0])
-
-
-def _split_timestamp(timestamp):
-    """split `timestamp` into a tuple of 6 integers.
-
-    :param timestamp: full-length timestamp.
-    :type timestamp: bytes
-    """
-    return (
-        int(timestamp[:-10]),
-        int(timestamp[-10:-8]),
-        int(timestamp[-8:-6]),
-        int(timestamp[-6:-4]),
-        int(timestamp[-4:-2]),
-        int(timestamp[-2:])
-        )
 
 
 class CdxServerDedup(object):
@@ -248,7 +226,8 @@ class CdxServerDedup(object):
                 if line:
                     (cdx_ts, cdx_digest) = line.split(b' ')
                     if cdx_digest == dkey:
-                        dt = datetime(*_split_timestamp(cdx_ts.decode('ascii')))
+                        dt = datetime.strptime(cdx_ts.decode('ascii'),
+                                               '%Y%m%d%H%M%S')
                         date = dt.strftime('%Y-%m-%dT%H:%M:%SZ').encode('utf-8')
                         return dict(url=url, date=date)
         except (HTTPError, AssertionError, ValueError) as exc:

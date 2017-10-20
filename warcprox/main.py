@@ -107,7 +107,7 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
     group.add_argument('-j', '--dedup-db-file', dest='dedup_db_file',
             default='./warcprox.sqlite', help='persistent deduplication database file; empty string or /dev/null disables deduplication')
     group.add_argument('--cdxserver-dedup', dest='cdxserver_dedup',
-            help='use a CDX Server for deduplication')
+            help='use a CDX Server URL for deduplication; e.g. https://web.archive.org/cdx/search')
     group.add_argument('--rethinkdb-servers', dest='rethinkdb_servers',
             help='rethinkdb servers, used for dedup and stats if specified; e.g. db0.foo.org,db0.foo.org:38015,db1.foo.org')
     arg_parser.add_argument('--rethinkdb-db', dest='rethinkdb_db', default='warcprox',
