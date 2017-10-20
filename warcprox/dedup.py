@@ -215,7 +215,8 @@ class CdxServerDedup(object):
         u = url.decode("utf-8") if isinstance(url, bytes) else url
         try:
             result = self.http_pool.request('GET', self.cdx_url, fields=dict(
-                url=u, fl="timestamp,digest", limit=-10))
+                url=u, fl="timestamp,digest", filter="!mimetype:warc/revisit",
+                limit=-10))
             assert result.status == 200
             if isinstance(digest_key, bytes):
                 dkey = digest_key
