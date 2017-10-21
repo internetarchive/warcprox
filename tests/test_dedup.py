@@ -16,13 +16,10 @@ def test_cdx_dedup():
                                 url=url)
         assert res is None
 
-        # found in the 2nd CDX line
+        # found case
         result = mock.Mock()
         result.status = 200
-        result.data = b"""\
-20170101020304 xxx
-20170203040503 B2LTWWPUOYAH7UIPQ7ZUPQ4VMBSVC36A
-20160505050505 yyyyyyyyyyyyyyyyyyyyyy"""
+        result.data = b'20170203040503 B2LTWWPUOYAH7UIPQ7ZUPQ4VMBSVC36A'
         request.return_value = result
         cdx_server = CdxServerDedup(cdx_url="dummy-cdx-server-url")
         res = cdx_server.lookup(digest_key="B2LTWWPUOYAH7UIPQ7ZUPQ4VMBSVC36A",

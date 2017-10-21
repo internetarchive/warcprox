@@ -216,21 +216,21 @@ class CdxServerDedup(object):
         try:
             result = self.http_pool.request('GET', self.cdx_url, fields=dict(
                 url=u, fl="timestamp,digest", filter="!mimetype:warc/revisit",
-                limit=-10))
+                limit=-1))
             assert result.status == 200
             if isinstance(digest_key, bytes):
                 dkey = digest_key
             else:
                 dkey = digest_key.encode('utf-8')
             dkey = dkey[5:] if dkey.startswith(b'sha1:') else dkey
-            for line in result.data.split(b'\n'):
-                if line:
-                    (cdx_ts, cdx_digest) = line.split(b' ')
-                    if cdx_digest == dkey:
-                        dt = datetime.strptime(cdx_ts.decode('ascii'),
-                                               '%Y%m%d%H%M%S')
-                        date = dt.strftime('%Y-%m-%dT%H:%M:%SZ').encode('utf-8')
-                        return dict(url=url, date=date)
+            line = result.data.split(b'\n')
+            if line:
+                (cdx_ts, cdx_digest) = line[0].split(b' ')
+                if cdx_digest == dkey:
+                    dt = datetime.strptime(cdx_ts.decode('ascii'),
+                                            '%Y%m%d%H%M%S')
+                    date = dt.strftime('%Y-%m-%dT%H:%M:%SZ').encode('utf-8')
+                    return dict(url=url, date=date)
         except (HTTPError, AssertionError, ValueError) as exc:
             self.logger.error('CdxServerDedup request failed for url=%s %s',
                               url, exc)
