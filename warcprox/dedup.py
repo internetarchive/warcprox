@@ -77,7 +77,7 @@ class DedupDb(object):
         conn.close()
         self.logger.debug('dedup db saved %s:%s', key, json_value)
 
-    def lookup(self, digest_key, bucket="", recorded_url=None):
+    def lookup(self, digest_key, bucket="", url=None):
         result = None
         key = digest_key.decode('utf-8') + '|' + bucket
         conn = sqlite3.connect(self.file)
@@ -113,9 +113,10 @@ def decorate_with_dedup_info(dedup_db, recorded_url, base32=False):
         digest_key = warcprox.digest_str(recorded_url.response_recorder.payload_digest, base32)
         if recorded_url.warcprox_meta and "captures-bucket" in recorded_url.warcprox_meta:
             recorded_url.dedup_info = dedup_db.lookup(digest_key, recorded_url.warcprox_meta["captures-bucket"],
-                                                      recorded_url)
+                                                      recorded_url.url)
         else:
-            recorded_url.dedup_info = dedup_db.lookup(digest_key, recorded_url=recorded_url)
+            recorded_url.dedup_info = dedup_db.lookup(digest_key,
+                                                      url=recorded_url.url)
 
 class RethinkDedupDb:
     logger = logging.getLogger("warcprox.dedup.RethinkDedupDb")
@@ -160,7 +161,7 @@ class RethinkDedupDb:
             raise Exception("unexpected result %s saving %s", result, record)
         self.logger.debug('dedup db saved %s:%s', k, record)
 
-    def lookup(self, digest_key, bucket="", recorded_url=None):
+    def lookup(self, digest_key, bucket="", url=None):
         k = digest_key.decode("utf-8") if isinstance(digest_key, bytes) else digest_key
         k = "{}|{}".format(k, bucket)
         result = self.rr.table(self.table).get(k).run()
@@ -200,18 +201,17 @@ class CdxServerDedup(object):
         """
         pass
 
-    def lookup(self, digest_key, recorded_url):
+    def lookup(self, digest_key, url):
         """Compare `sha1` with SHA1 hash of fetched content (note SHA1 must be
         computed on the original content, after decoding Content-Encoding and
         Transfer-Encoding, if any), if they match, write a revisit record.
 
         :param digest_key: b'sha1:<KEY-VALUE>' (prefix is optional).
             Example: b'sha1:B2LTWWPUOYAH7UIPQ7ZUPQ4VMBSVC36A'
-        :param recorded_url: RecordedUrl object
+        :param url: Target URL string
         Result must contain:
         {"url": <URL>, "date": "%Y-%m-%dT%H:%M:%SZ"}
         """
-        url = recorded_url.url
         u = url.decode("utf-8") if isinstance(url, bytes) else url
         try:
             result = self.http_pool.request('GET', self.cdx_url, fields=dict(

@@ -1,13 +1,11 @@
 import mock
-import pytest
 from warcprox.dedup import CdxServerDedup
 
 
 def test_cdx_dedup():
     # Mock CDX Server responses to simulate found, not found and errors.
     with mock.patch('warcprox.dedup.CdxServerDedup.http_pool.request') as request:
-        recorded_url = mock.Mock();
-        recorded_url.url = "http://example.com"
+        url = "http://example.com"
         # not found case
         result = mock.Mock()
         result.status = 200
@@ -15,7 +13,7 @@ def test_cdx_dedup():
         request.return_value = result
         cdx_server = CdxServerDedup(cdx_url="dummy-cdx-server-url")
         res = cdx_server.lookup(digest_key="B2LTWWPUOYAH7UIPQ7ZUPQ4VMBSVC36A",
-                                recorded_url=recorded_url)
+                                url=url)
         assert res is None
 
         # found in the 2nd CDX line
@@ -28,7 +26,7 @@ def test_cdx_dedup():
         request.return_value = result
         cdx_server = CdxServerDedup(cdx_url="dummy-cdx-server-url")
         res = cdx_server.lookup(digest_key="B2LTWWPUOYAH7UIPQ7ZUPQ4VMBSVC36A",
-                                recorded_url=recorded_url)
+                                url=url)
         assert res["date"] == b"2017-02-03T04:05:03Z"
 
         # invalid CDX result status code
@@ -38,7 +36,7 @@ def test_cdx_dedup():
         request.return_value = result
         cdx_server = CdxServerDedup(cdx_url="dummy-cdx-server-url")
         res = cdx_server.lookup(digest_key="B2LTWWPUOYAH7UIPQ7ZUPQ4VMBSVC36A",
-                                recorded_url=recorded_url)
+                                url=url)
         assert res is None
         # invalid CDX result content
         result = mock.Mock()
@@ -47,5 +45,5 @@ def test_cdx_dedup():
         request.return_value = result
         cdx_server = CdxServerDedup(cdx_url="dummy-cdx-server-url")
         res = cdx_server.lookup(digest_key="B2LTWWPUOYAH7UIPQ7ZUPQ4VMBSVC36A",
-                                recorded_url=recorded_url)
+                                url=url)
         assert res is None
