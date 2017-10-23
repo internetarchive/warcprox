@@ -223,9 +223,9 @@ class CdxServerDedup(object):
             else:
                 dkey = digest_key.encode('utf-8')
             dkey = dkey[5:] if dkey.startswith(b'sha1:') else dkey
-            line = result.data.split(b'\n')
+            line = result.data.strip()
             if line:
-                (cdx_ts, cdx_digest) = line[0].split(b' ')
+                (cdx_ts, cdx_digest) = line.split(b' ')
                 if cdx_digest == dkey:
                     dt = datetime.strptime(cdx_ts.decode('ascii'),
                                             '%Y%m%d%H%M%S')
