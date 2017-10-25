@@ -206,6 +206,10 @@ class CdxServerDedup(object):
         computed on the original content, after decoding Content-Encoding and
         Transfer-Encoding, if any), if they match, write a revisit record.
 
+        Get only the last item (limit=-1) because Wayback Machine has special
+        performance optimisation to handle that. limit < 0 is very inefficient
+        in general. Maybe it could be configurable in the future.
+
         :param digest_key: b'sha1:<KEY-VALUE>' (prefix is optional).
             Example: b'sha1:B2LTWWPUOYAH7UIPQ7ZUPQ4VMBSVC36A'
         :param url: Target URL string
