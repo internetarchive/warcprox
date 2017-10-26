@@ -24,6 +24,7 @@ from __future__ import absolute_import
 import logging
 from datetime import datetime
 from hanzo import warctools
+import fcntl
 import time
 import warcprox
 import os
@@ -71,6 +72,8 @@ class WarcWriter:
         with self._lock:
             if self._fpath:
                 self.logger.info('closing %s', self._f_finalname)
+                if self._f_finalname_suffix == '':
+                    fcntl.flock(self._f, fcntl.LOCK_UN)
                 self._f.close()
                 finalpath = os.path.sep.join(
                         [self.directory, self._f_finalname])
@@ -95,6 +98,10 @@ class WarcWriter:
                     self.directory, self._f_finalname + self._f_finalname_suffix])
 
                 self._f = open(self._fpath, 'wb')
+                # if no '.open' suffix is used for WARC, acquire an exclusive
+                # file lock.
+                if self._f_finalname_suffix == '':
+                    fcntl.flock(self._f, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
                 warcinfo_record = self.record_builder.build_warcinfo_record(
                         self._f_finalname)
