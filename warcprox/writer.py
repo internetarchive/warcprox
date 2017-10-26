@@ -53,6 +53,7 @@ class WarcWriter:
         self._f = None
         self._fpath = None
         self._f_finalname = None
+        self._f_finalname_suffix = '' if options.no_warc_open_suffix else '.open'
         self._serial = 0
         self._lock = threading.RLock()
 
@@ -91,7 +92,7 @@ class WarcWriter:
                         self.prefix, self.timestamp17(), self._serial,
                         self._randomtoken, '.gz' if self.gzip else '')
                 self._fpath = os.path.sep.join([
-                    self.directory, self._f_finalname + '.open'])
+                    self.directory, self._f_finalname + self._f_finalname_suffix])
 
                 self._f = open(self._fpath, 'wb')
 
