@@ -24,7 +24,7 @@ def lock_file(queue, filename):
     """
     try:
         fi = open(filename, 'ab')
-        fcntl.flock(fi, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.lockf(fi, fcntl.LOCK_EX | fcntl.LOCK_NB)
         fi.close()
         queue.put('1')
     except IOError:

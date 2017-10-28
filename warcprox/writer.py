@@ -74,7 +74,7 @@ class WarcWriter:
                 self.logger.info('closing %s', self._f_finalname)
                 if self._f_open_suffix == '':
                     try:
-                        fcntl.flock(self._f, fcntl.LOCK_UN)
+                        fcntl.lockf(self._f, fcntl.LOCK_UN)
                     except IOError as exc:
                         self.logger.error('could not unlock file %s (%s)',
                                           self._fpath, exc)
@@ -106,7 +106,7 @@ class WarcWriter:
                 # file lock.
                 if self._f_open_suffix == '':
                     try:
-                        fcntl.flock(self._f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        fcntl.lockf(self._f, fcntl.LOCK_EX | fcntl.LOCK_NB)
                     except IOError as exc:
                         self.logger.error('could not lock file %s (%s)',
                                           self._fpath, exc)
