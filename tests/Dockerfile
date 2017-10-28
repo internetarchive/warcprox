@@ -32,7 +32,7 @@ RUN apt-get update && apt-get --auto-remove -y dist-upgrade
 # "RethinkDB Packaging <packaging@rethinkdb.com>" http://download.rethinkdb.com/apt/pubkey.gpg
 RUN apt-key adv --keyserver pgp.mit.edu --recv-keys 1614552E5765227AEC39EFCFA7E00EF33A8F2399 \
     && echo "deb http://download.rethinkdb.com/apt xenial main" > /etc/apt/sources.list.d/rethinkdb.list \
-    && apt-get update && apt-get -y install rethinkdb
+    && apt-get update && apt-get -y --allow-unauthenticated install rethinkdb
 
 RUN mkdir -vp /etc/service/rethinkdb \
     && echo "#!/bin/sh\nrethinkdb --bind 0.0.0.0 --directory /tmp/rethink-data --runuser rethinkdb --rungroup rethinkdb\n" > /etc/service/rethinkdb/run \
