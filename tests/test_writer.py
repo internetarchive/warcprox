@@ -39,7 +39,7 @@ def test_warc_writer_locking(tmpdir, no_warc_open_suffix, lock_result):
     When we don't have the .open suffix, WarcWriter locks the file and the
     external process trying to ``lock_file`` fails (result=0).
     """
-    dirname = os.path.dirname(tmpdir.mkdir('test-warc-writer'))
+    dirname = os.path.dirname(str(tmpdir.mkdir('test-warc-writer')))
     wwriter = WarcWriter(Options(directory=dirname,
                                  no_warc_open_suffix=no_warc_open_suffix))
     wwriter.write_records(recorded_url)
