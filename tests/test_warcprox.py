@@ -555,6 +555,21 @@ def test_limits(http_daemon, warcprox_, archiving_proxies):
     assert response.headers["content-type"] == "text/plain;charset=utf-8"
     assert response.raw.data == b"request rejected by warcprox: reached limit test_limits_bucket/total/urls=10\n"
 
+def test_return_capture_timestamp(http_daemon, warcprox_, archiving_proxies):
+    url = 'http://localhost:{}/i/j'.format(http_daemon.server_port)
+    request_meta = {"return-capture-timestamp": 1}
+    headers = {"Warcprox-Meta": json.dumps(request_meta)}
+    response = requests.get(url, proxies=archiving_proxies, headers=headers, stream=True)
+    assert response.status_code == 200
+    assert response.headers['Warcprox-Meta']
+    data = json.loads(response.headers['Warcprox-Meta'])
+    assert data['capture-timestamp']
+    try:
+        dt = datetime.datetime.strptime(data['capture-timestamp'], '%Y-%m-%d %H:%M:%S')
+        assert dt
+    except ValueError:
+        pytest.fail('Invalid capture-timestamp format %s', data['capture-timestamp'])
+
 def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, playback_proxies):
     url1 = 'http://localhost:{}/k/l'.format(http_daemon.server_port)
     url2 = 'https://localhost:{}/k/l'.format(https_daemon.server_port)

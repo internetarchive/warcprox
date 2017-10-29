@@ -45,6 +45,7 @@ try:
     http_client._MAXLINE = 4194304  # 4 MiB
 except ImportError:
     import httplib as http_client
+import json
 import socket
 import logging
 import ssl
@@ -163,13 +164,17 @@ class ProxyingRecordingHTTPResponse(http_client.HTTPResponse):
                 self.fp, proxy_client, digest_algorithm, url=url)
         self.fp = self.recorder
 
-    def begin(self):
+    def begin(self, timestamp=None):
         http_client.HTTPResponse.begin(self)  # reads status line, headers
 
         status_and_headers = 'HTTP/1.1 {} {}\r\n'.format(
                 self.status, self.reason)
         self.msg['Via'] = via_header_value(
                 self.msg.get('Via'), '%0.1f' % (self.version / 10.0))
+        if timestamp:
+            rmeta = {"capture-timestamp": timestamp.strftime('%Y-%m-%d %H:%M:%S')}
+            self.msg['Warcprox-Meta'] = json.dumps(rmeta, separators=',:')
+
         for k,v in self.msg.items():
             if k.lower() not in (
                     'connection', 'proxy-connection', 'keep-alive',
@@ -361,12 +366,15 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             self.logger.error("exception proxying request", exc_info=True)
             raise
 
-    def _proxy_request(self):
+    def _proxy_request(self, timestamp=None):
         '''
         Sends the request to the remote server, then uses a ProxyingRecorder to
         read the response and send it to the proxy client, while recording the
         bytes in transit. Returns a tuple (request, response) where request is
         the raw request bytes, and response is a ProxyingRecorder.
+
+        :param timestamp: generated on warcprox._proxy_request. It is the
+        timestamp written in the WARC record for this request.
         '''
         # Build request
         req_str = '{} {} {}\r\n'.format(
@@ -407,7 +415,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                     self._remote_server_sock, proxy_client=self.connection,
                     digest_algorithm=self.server.digest_algorithm,
                     url=self.url, method=self.command)
-            prox_rec_res.begin()
+            prox_rec_res.begin(timestamp=timestamp)
 
             buf = prox_rec_res.read(8192)
             while buf != b'':
