@@ -557,15 +557,16 @@ def test_limits(http_daemon, warcprox_, archiving_proxies):
 
 def test_return_capture_timestamp(http_daemon, warcprox_, archiving_proxies):
     url = 'http://localhost:{}/i/j'.format(http_daemon.server_port)
-    request_meta = {"return-capture-timestamp": 1}
+    request_meta = {"accept": ["capture-metadata"]}
     headers = {"Warcprox-Meta": json.dumps(request_meta)}
     response = requests.get(url, proxies=archiving_proxies, headers=headers, stream=True)
     assert response.status_code == 200
     assert response.headers['Warcprox-Meta']
     data = json.loads(response.headers['Warcprox-Meta'])
-    assert data['capture-timestamp']
+    assert data['capture-metadata']
     try:
-        dt = datetime.datetime.strptime(data['capture-timestamp'], '%Y-%m-%d %H:%M:%S')
+        dt = datetime.datetime.strptime(data['capture-metadata']['timestamp'],
+                                        '%Y-%m-%dT%H:%M:%SZ')
         assert dt
     except ValueError:
         pytest.fail('Invalid capture-timestamp format %s', data['capture-timestamp'])

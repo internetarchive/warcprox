@@ -164,15 +164,15 @@ class ProxyingRecordingHTTPResponse(http_client.HTTPResponse):
                 self.fp, proxy_client, digest_algorithm, url=url)
         self.fp = self.recorder
 
-    def begin(self, timestamp=None):
+    def begin(self, extra_response_headers={}):
         http_client.HTTPResponse.begin(self)  # reads status line, headers
 
         status_and_headers = 'HTTP/1.1 {} {}\r\n'.format(
                 self.status, self.reason)
         self.msg['Via'] = via_header_value(
                 self.msg.get('Via'), '%0.1f' % (self.version / 10.0))
-        if timestamp:
-            rmeta = {"capture-timestamp": timestamp.strftime('%Y-%m-%d %H:%M:%S')}
+        if extra_response_headers:
+            rmeta = {"capture-metadata": extra_response_headers}
             self.msg['Warcprox-Meta'] = json.dumps(rmeta, separators=',:')
 
         for k,v in self.msg.items():
@@ -366,7 +366,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             self.logger.error("exception proxying request", exc_info=True)
             raise
 
-    def _proxy_request(self, timestamp=None):
+    def _proxy_request(self, extra_response_headers={}):
         '''
         Sends the request to the remote server, then uses a ProxyingRecorder to
         read the response and send it to the proxy client, while recording the
@@ -415,7 +415,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                     self._remote_server_sock, proxy_client=self.connection,
                     digest_algorithm=self.server.digest_algorithm,
                     url=self.url, method=self.command)
-            prox_rec_res.begin(timestamp=timestamp)
+            prox_rec_res.begin(extra_response_headers=extra_response_headers)
 
             buf = prox_rec_res.read(8192)
             while buf != b'':
