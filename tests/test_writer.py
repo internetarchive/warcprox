@@ -11,10 +11,10 @@ from warcprox import Options
 recorder = ProxyingRecorder(None, None, 'sha1', url='http://example.com')
 
 recorded_url = RecordedUrl(url='http://example.com', content_type='text/plain',
-                           status=200, client_ip='5.5.5.5',
+                           status=200, client_ip='127.0.0.2',
                            request_data=b'abc',
                            response_recorder=recorder,
-                           remote_ip='6.6.6.6',
+                           remote_ip='127.0.0.3',
                            timestamp=datetime.utcnow())
 
 
@@ -26,29 +26,20 @@ def lock_file(queue, filename):
         fi = open(filename, 'ab')
         fcntl.lockf(fi, fcntl.LOCK_EX | fcntl.LOCK_NB)
         fi.close()
-        queue.put('1')
+        queue.put('OBTAINED LOCK')
     except IOError:
-        queue.put('0')
+        queue.put('FAILED TO OBTAIN LOCK')
 
 
-@pytest.mark.parametrize("no_warc_open_suffix,lock_result", [
-                         (True, '0'),
-                         (False, '1')])
-def test_warc_writer_locking(tmpdir, no_warc_open_suffix, lock_result):
+def test_warc_writer_locking(tmpdir):
     """Test if WarcWriter is locking WARC files.
     When we don't have the .open suffix, WarcWriter locks the file and the
     external process trying to ``lock_file`` fails (result=0).
     """
     dirname = os.path.dirname(str(tmpdir.mkdir('test-warc-writer')))
-    wwriter = WarcWriter(Options(directory=dirname,
-                                 no_warc_open_suffix=no_warc_open_suffix))
+    wwriter = WarcWriter(Options(directory=dirname, no_warc_open_suffix=True))
     wwriter.write_records(recorded_url)
-
-    if no_warc_open_suffix:
-        suffix = '.warc'
-    else:
-        suffix = '.warc.open'
-    warcs = [fn for fn in os.listdir(dirname) if fn.endswith(suffix)]
+    warcs = [fn for fn in os.listdir(dirname) if fn.endswith('.warc')]
     assert warcs
     target_warc = os.path.join(dirname, warcs[0])
     # launch another process and try to lock WARC file
@@ -56,4 +47,11 @@ def test_warc_writer_locking(tmpdir, no_warc_open_suffix, lock_result):
     p = Process(target=lock_file, args=(queue, target_warc))
     p.start()
     p.join()
-    assert queue.get() == lock_result
+    assert queue.get() == 'FAILED TO OBTAIN LOCK'
+    wwriter.close_writer()
+
+    # locking must succeed after writer has closed the WARC file.
+    p = Process(target=lock_file, args=(queue, target_warc))
+    p.start()
+    p.join()
+    assert queue.get() == 'OBTAINED LOCK'
