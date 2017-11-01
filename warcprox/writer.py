@@ -24,6 +24,7 @@ from __future__ import absolute_import
 import logging
 from datetime import datetime
 from hanzo import warctools
+import fcntl
 import time
 import warcprox
 import os
@@ -53,6 +54,7 @@ class WarcWriter:
         self._f = None
         self._fpath = None
         self._f_finalname = None
+        self._f_open_suffix = '' if options.no_warc_open_suffix else '.open'
         self._serial = 0
         self._lock = threading.RLock()
 
@@ -70,6 +72,12 @@ class WarcWriter:
         with self._lock:
             if self._fpath:
                 self.logger.info('closing %s', self._f_finalname)
+                if self._f_open_suffix == '':
+                    try:
+                        fcntl.lockf(self._f, fcntl.LOCK_UN)
+                    except IOError as exc:
+                        self.logger.error('could not unlock file %s (%s)',
+                                          self._fpath, exc)
                 self._f.close()
                 finalpath = os.path.sep.join(
                         [self.directory, self._f_finalname])
@@ -91,9 +99,17 @@ class WarcWriter:
                         self.prefix, self.timestamp17(), self._serial,
                         self._randomtoken, '.gz' if self.gzip else '')
                 self._fpath = os.path.sep.join([
-                    self.directory, self._f_finalname + '.open'])
+                    self.directory, self._f_finalname + self._f_open_suffix])
 
                 self._f = open(self._fpath, 'wb')
+                # if no '.open' suffix is used for WARC, acquire an exclusive
+                # file lock.
+                if self._f_open_suffix == '':
+                    try:
+                        fcntl.lockf(self._f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    except IOError as exc:
+                        self.logger.error('could not lock file %s (%s)',
+                                          self._fpath, exc)
 
                 warcinfo_record = self.record_builder.build_warcinfo_record(
                         self._f_finalname)

@@ -78,6 +78,8 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
             default='./warcs', help='where to write warcs')
     arg_parser.add_argument('-z', '--gzip', dest='gzip', action='store_true',
             help='write gzip-compressed warc records')
+    arg_parser.add_argument('--no-warc-open-suffix', dest='no_warc_open_suffix',
+            default=False, action='store_true', help=argparse.SUPPRESS)
     arg_parser.add_argument('-n', '--prefix', dest='prefix',
             default='WARCPROX', help='WARC filename prefix')
     arg_parser.add_argument(
