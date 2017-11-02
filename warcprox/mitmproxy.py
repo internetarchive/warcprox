@@ -373,8 +373,9 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         bytes in transit. Returns a tuple (request, response) where request is
         the raw request bytes, and response is a ProxyingRecorder.
 
-        :param timestamp: generated on warcprox._proxy_request. It is the
-        timestamp written in the WARC record for this request.
+        :param extra_response_headers: generated on warcprox._proxy_request.
+        It may contain extra HTTP headers such as ``Warcprox-Meta`` which
+        are written in the WARC record for this request.
         '''
         # Build request
         req_str = '{} {} {}\r\n'.format(
