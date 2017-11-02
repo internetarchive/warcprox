@@ -179,9 +179,14 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
 
         remote_ip = self._remote_server_sock.getpeername()[0]
         timestamp = datetime.datetime.utcnow()
+        extra_response_headers = {}
+        if warcprox_meta and 'accept' in warcprox_meta and \
+                'capture-metadata' in warcprox_meta['accept']:
+            rmeta = {'capture-metadata': {'timestamp': timestamp.strftime('%Y-%m-%dT%H:%M:%SZ')}}
+            extra_response_headers['Warcprox-Meta'] = json.dumps(rmeta, separators=',:')
 
         req, prox_rec_res = warcprox.mitmproxy.MitmProxyHandler._proxy_request(
-                self)
+                self, extra_response_headers=extra_response_headers)
 
         content_type = None
         try:
