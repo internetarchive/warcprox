@@ -38,7 +38,7 @@ do
             && (cd /warcprox && git diff HEAD) | patch -p1 \
             && virtualenv -p $python /tmp/venv \
             && source /tmp/venv/bin/activate \
-            && pip --log-file /tmp/pip.log install . pytest requests warcio \
+            && pip --log-file /tmp/pip.log install . pytest mock requests warcio \
             && py.test -v tests \
             && py.test -v --rethinkdb-dedup-url=rethinkdb://localhost/test1/dedup tests \
             && py.test -v --rethinkdb-big-table-url=rethinkdb://localhost/test2/captures tests \

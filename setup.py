@@ -40,6 +40,7 @@ deps = [
     'warctools',
     'urlcanon>=0.1.dev16',
     'doublethink>=0.2.0.dev87',
+    'urllib3',
     'PySocks',
     'cryptography!=2.1.1', # 2.1.1 installation is failing on ubuntu
 ]
@@ -50,7 +51,7 @@ except:
 
 setuptools.setup(
         name='warcprox',
-        version='2.2b1.dev105',
+        version='2.2.1b2.dev107',
         description='WARC writing MITM HTTP/S proxy',
         url='https://github.com/internetarchive/warcprox',
         author='Noah Levitt',
@@ -59,7 +60,7 @@ setuptools.setup(
         license='GPL',
         packages=['warcprox'],
         install_requires=deps,
-        tests_require=['requests>=2.0.1', 'pytest', 'warcio'],  # >=2.0.1 for https://github.com/kennethreitz/requests/pull/1636
+        tests_require=['requests>=2.0.1', 'mock', 'pytest', 'warcio'],  # >=2.0.1 for https://github.com/kennethreitz/requests/pull/1636
         cmdclass = {'test': PyTest},
         test_suite='warcprox.tests',
         entry_points={

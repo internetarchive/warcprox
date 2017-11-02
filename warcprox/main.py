@@ -80,6 +80,8 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
             default='./warcs', help='where to write warcs')
     arg_parser.add_argument('-z', '--gzip', dest='gzip', action='store_true',
             help='write gzip-compressed warc records')
+    arg_parser.add_argument('--no-warc-open-suffix', dest='no_warc_open_suffix',
+            default=False, action='store_true', help=argparse.SUPPRESS)
     arg_parser.add_argument('-n', '--prefix', dest='prefix',
             default='WARCPROX', help='WARC filename prefix')
     arg_parser.add_argument(
@@ -133,6 +135,8 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
                 '🐷   url pointing to trough configuration rethinkdb database, '
                 'e.g. rethinkdb://db0.foo.org,db1.foo.org:38015'
                 '/trough_configuration'))
+    group.add_argument('--cdxserver-dedup', dest='cdxserver_dedup',
+            help='use a CDX Server URL for deduplication; e.g. https://web.archive.org/cdx/search')
     arg_parser.add_argument(
             '--rethinkdb-services-url', dest='rethinkdb_services_url', help=(
                 'rethinkdb service registry table url; if provided, warcprox '
@@ -205,6 +209,8 @@ def init_controller(args):
         dedup_db = warcprox.bigtable.RethinkCapturesDedup(options=options)
     elif args.rethinkdb_trough_db_url:
         dedup_db = warcprox.dedup.TroughDedupDb(options)
+    elif args.cdxserver_dedup:
+        dedup_db = warcprox.dedup.CdxServerDedup(cdx_url=args.cdxserver_dedup)
     elif args.dedup_db_file in (None, '', '/dev/null'):
         logging.info('deduplication disabled')
         dedup_db = None

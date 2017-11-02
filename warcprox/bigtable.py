@@ -221,7 +221,7 @@ class RethinkCapturesDedup:
         self.captures_db = RethinkCaptures(options=options)
         self.options = options
 
-    def lookup(self, digest_key, bucket="__unspecified__"):
+    def lookup(self, digest_key, bucket="__unspecified__", url=None):
         k = digest_key.decode("utf-8") if isinstance(digest_key, bytes) else digest_key
         algo, value_str = k.split(":")
         if self.options.base32:
