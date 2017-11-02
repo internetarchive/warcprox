@@ -172,8 +172,8 @@ class ProxyingRecordingHTTPResponse(http_client.HTTPResponse):
         self.msg['Via'] = via_header_value(
                 self.msg.get('Via'), '%0.1f' % (self.version / 10.0))
         if extra_response_headers:
-            rmeta = {"capture-metadata": extra_response_headers}
-            self.msg['Warcprox-Meta'] = json.dumps(rmeta, separators=',:')
+            for header, value in extra_response_headers.items():
+                self.msg[header] = value
 
         for k,v in self.msg.items():
             if k.lower() not in (
