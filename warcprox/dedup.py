@@ -322,17 +322,30 @@ class TroughDedupDb(object):
     def __init__(self, options=warcprox.Options()):
         self.options = options
         self._trough_cli = TroughClient(options.rethinkdb_trough_db_url)
+        self._write_url_cache = {}
+        self._read_url_cache = {}
 
     def start(self):
         self._trough_cli.register_schema(self.SCHEMA_ID, self.SCHEMA_SQL)
 
     def _write_url(self, bucket):
-        segment_id = 'warcprox-trough-%s' % bucket
-        return self._trough_cli.write_url(segment_id, self.SCHEMA_ID)
+        if not bucket in self._write_url_cache:
+            segment_id = 'warcprox-trough-%s' % bucket
+            self._write_url_cache[bucket] = self._trough_cli.write_url(
+                    segment_id, self.SCHEMA_ID)
+            logging.info(
+                    'bucket %r write url is %r', bucket,
+                    self._write_url_cache[bucket])
+        return self._write_url_cache[bucket]
 
     def _read_url(self, bucket):
-        segment_id = 'warcprox-trough-%s' % bucket
-        return self._trough_cli.read_url(segment_id)
+        if not self._read_url_cache.get(bucket):
+            segment_id = 'warcprox-trough-%s' % bucket
+            self._read_url_cache[bucket] = self._trough_cli.read_url(segment_id)
+            logging.info(
+                    'bucket %r read url is %r', bucket,
+                    self._read_url_cache[bucket])
+        return self._read_url_cache[bucket]
 
     def sql_value(self, x):
         if x is None:
@@ -371,6 +384,8 @@ class TroughDedupDb(object):
             logging.warn(
                     'unexpected response %r %r %r to sql=%r',
                     response.status_code, response.reason, response.text, sql)
+        else:
+            logging.trace('posted %r to %s', sql, write_url)
 
     def lookup(self, digest_key, bucket='__unspecified__', url=None):
         read_url = self._read_url(bucket)

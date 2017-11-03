@@ -84,7 +84,8 @@ def _send(self, data):
 # http_client.HTTPConnection.send = _send
 
 logging.basicConfig(
-        stream=sys.stdout, level=logging.DEBUG, # level=warcprox.TRACE,
+        # stream=sys.stdout, level=logging.DEBUG, # level=warcprox.TRACE,
+        stream=sys.stdout, level=warcprox.TRACE,
         format='%(asctime)s %(process)d %(levelname)s %(threadName)s '
         '%(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s')
 logging.getLogger("requests.packages.urllib3").setLevel(logging.WARN)
@@ -424,6 +425,7 @@ def test_dedup_http(http_daemon, warcprox_, archiving_proxies, playback_proxies)
     # {u'id': u'<urn:uuid:e691dc0f-4bb9-4ad8-9afb-2af836aa05e4>', u'url': u'https://localhost:62841/c/d', u'date': u'2013-11-22T00:14:37Z'}
     dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
             b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
+    assert dedup_lookup
     assert dedup_lookup['url'] == url.encode('ascii')
     assert re.match(br'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$', dedup_lookup['id'])
     assert re.match(br'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$', dedup_lookup['date'])
@@ -497,6 +499,7 @@ def test_dedup_https(https_daemon, warcprox_, archiving_proxies, playback_proxie
     # {u'id': u'<urn:uuid:e691dc0f-4bb9-4ad8-9afb-2af836aa05e4>', u'url': u'https://localhost:62841/c/d', u'date': u'2013-11-22T00:14:37Z'}
     dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
             b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
+    assert dedup_lookup
     assert dedup_lookup['url'] == url.encode('ascii')
     assert re.match(br'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$', dedup_lookup['id'])
     assert re.match(br'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$', dedup_lookup['date'])
