@@ -256,7 +256,6 @@ class TroughClient(object):
         self.svcreg = doublethink.ServiceRegistry(self.rr)
 
     def segment_manager_url(self):
-        # XXX cache until expired (check last_heartbeat and ttl)
         master_node = self.svcreg.unique_service('trough-sync-master')
         assert master_node
         return master_node['url']
@@ -379,8 +378,16 @@ class TroughDedupDb(object):
                'values (%s, %s, %s, %s);') % (
                        self.sql_value(digest_key), self.sql_value(url),
                        self.sql_value(warc_date), self.sql_value(record_id))
-        response = requests.post(write_url, sql)
+        try:
+            response = requests.post(write_url, sql)
+        except:
+            logging.error(
+                    'problem with trough write url %r', write_url,
+                    exc_info=True)
+            del self._write_url_cache[bucket]
+            return
         if response.status_code != 200:
+            del self._write_url_cache[bucket]
             logging.warn(
                     'unexpected response %r %r %r to sql=%r',
                     response.status_code, response.reason, response.text, sql)
@@ -393,8 +400,15 @@ class TroughDedupDb(object):
             return None
         sql = 'select * from dedup where digest_key=%s;' % (
                 self.sql_value(digest_key))
-        response = requests.post(read_url, sql)
+        try:
+            response = requests.post(read_url, sql)
+        except:
+            logging.error(
+                    'problem with trough read url %r', read_url, exc_info=True)
+            del self._read_url_cache[bucket]
+            return None
         if response.status_code != 200:
+            del self._read_url_cache[bucket]
             logging.warn(
                     'unexpected response %r %r %r to sql=%r',
                     response.status_code, response.reason, response.text, sql)
