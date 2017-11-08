@@ -5,8 +5,6 @@
 # features enabled, against that instance of rethinkdb, and also run without
 # rethinkdb features enabled.  With python 2.7 and 3.4.
 #
-# tests/conftest.py - command line options for warcprox tests
-#
 # Copyright (C) 2015-2017 Internet Archive
 #
 # This program is free software; you can redistribute it and/or
@@ -33,7 +31,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 docker build -t internetarchive/warcprox-tests $script_dir
 
-for python in python2.7 python3
+for python in python3 python2.7
 do
     docker run --rm --volume="$script_dir/..:/warcprox" internetarchive/warcprox-tests /sbin/my_init -- \
         bash -x -c "cd /tmp && git clone /warcprox && cd /tmp/warcprox \
@@ -42,7 +40,9 @@ do
             && source /tmp/venv/bin/activate \
             && pip --log-file /tmp/pip.log install . pytest mock requests warcio \
             && py.test -v tests \
-            && py.test -v --rethinkdb-servers=localhost tests \
-            && py.test -v --rethinkdb-servers=localhost --rethinkdb-big-table tests"
+            && py.test -v --rethinkdb-dedup-url=rethinkdb://localhost/test1/dedup tests \
+            && py.test -v --rethinkdb-big-table-url=rethinkdb://localhost/test2/captures tests \
+            && py.test -v --rethinkdb-trough-db-url=rethinkdb://localhost/trough_configuration tests \
+            "
 done
 
