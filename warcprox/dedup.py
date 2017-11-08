@@ -21,13 +21,17 @@ USA.
 
 from __future__ import absolute_import
 
+from datetime import datetime
 import logging
 import os
 import json
 from hanzo import warctools
 import warcprox
-import random
 import sqlite3
+import urllib3
+from urllib3.exceptions import HTTPError
+
+urllib3.disable_warnings()
 
 class DedupDb(object):
     logger = logging.getLogger("warcprox.dedup.DedupDb")
@@ -55,15 +59,6 @@ class DedupDb(object):
         conn.commit()
         conn.close()
 
-    def stop(self):
-        pass
-
-    def close(self):
-        pass
-
-    def sync(self):
-        pass
-
     def save(self, digest_key, response_record, bucket=""):
         record_id = response_record.get_header(warctools.WarcRecord.ID).decode('latin1')
         url = response_record.get_header(warctools.WarcRecord.URL).decode('latin1')
@@ -82,7 +77,7 @@ class DedupDb(object):
         conn.close()
         self.logger.debug('dedup db saved %s:%s', key, json_value)
 
-    def lookup(self, digest_key, bucket=""):
+    def lookup(self, digest_key, bucket="", url=None):
         result = None
         key = digest_key.decode('utf-8') + '|' + bucket
         conn = sqlite3.connect(self.file)
@@ -117,9 +112,11 @@ def decorate_with_dedup_info(dedup_db, recorded_url, base32=False):
             and recorded_url.response_recorder.payload_size() > 0):
         digest_key = warcprox.digest_str(recorded_url.response_recorder.payload_digest, base32)
         if recorded_url.warcprox_meta and "captures-bucket" in recorded_url.warcprox_meta:
-            recorded_url.dedup_info = dedup_db.lookup(digest_key, recorded_url.warcprox_meta["captures-bucket"])
+            recorded_url.dedup_info = dedup_db.lookup(digest_key, recorded_url.warcprox_meta["captures-bucket"],
+                                                      recorded_url.url)
         else:
-            recorded_url.dedup_info = dedup_db.lookup(digest_key)
+            recorded_url.dedup_info = dedup_db.lookup(digest_key,
+                                                      url=recorded_url.url)
 
 class RethinkDedupDb:
     logger = logging.getLogger("warcprox.dedup.RethinkDedupDb")
@@ -151,15 +148,6 @@ class RethinkDedupDb:
     def start(self):
         pass
 
-    def stop(self):
-        pass
-
-    def close(self):
-        pass
-
-    def sync(self):
-        pass
-
     def save(self, digest_key, response_record, bucket=""):
         k = digest_key.decode("utf-8") if isinstance(digest_key, bytes) else digest_key
         k = "{}|{}".format(k, bucket)
@@ -173,7 +161,7 @@ class RethinkDedupDb:
             raise Exception("unexpected result %s saving %s", result, record)
         self.logger.debug('dedup db saved %s:%s', k, record)
 
-    def lookup(self, digest_key, bucket=""):
+    def lookup(self, digest_key, bucket="", url=None):
         k = digest_key.decode("utf-8") if isinstance(digest_key, bytes) else digest_key
         k = "{}|{}".format(k, bucket)
         result = self.rr.table(self.table).get(k).run()
@@ -193,3 +181,66 @@ class RethinkDedupDb:
             else:
                 self.save(digest_key, records[0])
 
+
+class CdxServerDedup(object):
+    """Query a CDX server to perform deduplication.
+    """
+    logger = logging.getLogger("warcprox.dedup.CdxServerDedup")
+    http_pool = urllib3.PoolManager()
+
+    def __init__(self, cdx_url="https://web.archive.org/cdx/search",
+                 options=warcprox.Options()):
+        self.cdx_url = cdx_url
+        self.options = options
+
+    def start(self):
+        pass
+
+    def save(self, digest_key, response_record, bucket=""):
+        """Does not apply to CDX server, as it is obviously read-only.
+        """
+        pass
+
+    def lookup(self, digest_key, url):
+        """Compare `sha1` with SHA1 hash of fetched content (note SHA1 must be
+        computed on the original content, after decoding Content-Encoding and
+        Transfer-Encoding, if any), if they match, write a revisit record.
+
+        Get only the last item (limit=-1) because Wayback Machine has special
+        performance optimisation to handle that. limit < 0 is very inefficient
+        in general. Maybe it could be configurable in the future.
+
+        :param digest_key: b'sha1:<KEY-VALUE>' (prefix is optional).
+            Example: b'sha1:B2LTWWPUOYAH7UIPQ7ZUPQ4VMBSVC36A'
+        :param url: Target URL string
+        Result must contain:
+        {"url": <URL>, "date": "%Y-%m-%dT%H:%M:%SZ"}
+        """
+        u = url.decode("utf-8") if isinstance(url, bytes) else url
+        try:
+            result = self.http_pool.request('GET', self.cdx_url, fields=dict(
+                url=u, fl="timestamp,digest", filter="!mimetype:warc/revisit",
+                limit=-1))
+            assert result.status == 200
+            if isinstance(digest_key, bytes):
+                dkey = digest_key
+            else:
+                dkey = digest_key.encode('utf-8')
+            dkey = dkey[5:] if dkey.startswith(b'sha1:') else dkey
+            line = result.data.strip()
+            if line:
+                (cdx_ts, cdx_digest) = line.split(b' ')
+                if cdx_digest == dkey:
+                    dt = datetime.strptime(cdx_ts.decode('ascii'),
+                                            '%Y%m%d%H%M%S')
+                    date = dt.strftime('%Y-%m-%dT%H:%M:%SZ').encode('utf-8')
+                    return dict(url=url, date=date)
+        except (HTTPError, AssertionError, ValueError) as exc:
+            self.logger.error('CdxServerDedup request failed for url=%s %s',
+                              url, exc)
+        return None
+
+    def notify(self, recorded_url, records):
+        """Since we don't save anything to CDX server, this does not apply.
+        """
+        pass

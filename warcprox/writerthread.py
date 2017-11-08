@@ -29,13 +29,8 @@ except ImportError:
 
 import logging
 import threading
-import os
-import hashlib
 import time
-import socket
-import base64
 from datetime import datetime
-import hanzo.httptools
 from hanzo import warctools
 import warcprox
 import cProfile
@@ -46,7 +41,7 @@ class WarcWriterThread(threading.Thread):
 
     def __init__(
             self, name='WarcWriterThread', recorded_url_q=None,
-            writer_pool=None, dedup_db=None, listeners=None,
+            writer_pool=None, dedup_db=None, listeners=[],
             options=warcprox.Options()):
         """recorded_url_q is a queue.Queue of warcprox.warcprox.RecordedUrl."""
         threading.Thread.__init__(self, name=name)

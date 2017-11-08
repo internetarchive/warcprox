@@ -35,15 +35,12 @@ try:
 except ImportError:
     import Queue as queue
 import logging
-import re
-import traceback
 import json
 import socket
 from hanzo import warctools
 from certauth.certauth import CertificateAuthority
 import warcprox
 import datetime
-import ipaddress
 import urlcanon
 import os
 
@@ -195,9 +192,22 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
 
         remote_ip = self._remote_server_sock.getpeername()[0]
         timestamp = datetime.datetime.utcnow()
+        extra_response_headers = {}
+        if warcprox_meta and 'accept' in warcprox_meta and \
+                'capture-metadata' in warcprox_meta['accept']:
+            rmeta = {'capture-metadata': {'timestamp': timestamp.strftime('%Y-%m-%dT%H:%M:%SZ')}}
+            extra_response_headers['Warcprox-Meta'] = json.dumps(rmeta, separators=',:')
 
         req, prox_rec_res = warcprox.mitmproxy.MitmProxyHandler._proxy_request(
-                self)
+                self, extra_response_headers=extra_response_headers)
+
+        content_type = None
+        try:
+            content_type = prox_rec_res.headers.get('content-type')
+        except AttributeError: # py2
+            raw = prox_rec_res.msg.getrawheader('content-type')
+            if raw:
+                content_type = raw.strip()
 
         recorded_url = RecordedUrl(
                 url=self.url, request_data=req,
@@ -205,9 +215,9 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 warcprox_meta=warcprox_meta, status=prox_rec_res.status,
                 size=prox_rec_res.recorder.len,
                 client_ip=self.client_address[0],
-                content_type=prox_rec_res.getheader("Content-Type"),
-                method=self.command, timestamp=timestamp, host=self.hostname,
-                duration=datetime.datetime.utcnow()-timestamp,
+                content_type=content_type, method=self.command,
+                timestamp=timestamp, host=self.hostname,
+                duration=datetime.datetime.utcnow() - timestamp,
                 referer=self.headers.get('referer'))
         self.server.recorded_url_q.put(recorded_url)
 

@@ -47,6 +47,7 @@ Usage
                     [--stats-db-file STATS_DB_FILE] [-P PLAYBACK_PORT]
                     [--playback-index-db-file PLAYBACK_INDEX_DB_FILE]
                     [-j DEDUP_DB_FILE | --rethinkdb-servers RETHINKDB_SERVERS]
+                    [--cdxserver-dedup CDX_SERVER_URL]
                     [--rethinkdb-db RETHINKDB_DB] [--rethinkdb-big-table]
                     [--onion-tor-socks-proxy ONION_TOR_SOCKS_PROXY]
                     [--plugin PLUGIN_CLASS] [--version] [-v] [--trace] [-q]
@@ -100,6 +101,9 @@ Usage
                             persistent deduplication database file; empty
                             string or /dev/null disables deduplication
                             (default: ./warcprox.sqlite)
+      --cdxserver-dedup CDX_SERVER_URL
+                            use a CDX server for deduplication
+                            (default: None)
       --rethinkdb-servers RETHINKDB_SERVERS
                             rethinkdb servers, used for dedup and stats if
                             specified; e.g.

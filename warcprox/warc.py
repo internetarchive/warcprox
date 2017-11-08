@@ -27,7 +27,6 @@ import hashlib
 import socket
 import hanzo.httptools
 from hanzo import warctools
-import warcprox
 import datetime
 
 class WarcRecordBuilder:
@@ -51,7 +50,7 @@ class WarcRecordBuilder:
                     url=recorded_url.url, warc_date=warc_date,
                     data=response_header_block,
                     warc_type=warctools.WarcRecord.REVISIT,
-                    refers_to=recorded_url.dedup_info['id'],
+                    refers_to=recorded_url.dedup_info.get('id'),
                     refers_to_target_uri=recorded_url.dedup_info['url'],
                     refers_to_date=recorded_url.dedup_info['date'],
                     payload_digest=warcprox.digest_str(recorded_url.response_recorder.payload_digest, self.base32),
