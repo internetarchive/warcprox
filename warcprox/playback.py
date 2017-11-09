@@ -259,7 +259,8 @@ class PlaybackIndexDb(object):
         pass
 
     def notify(self, recorded_url, records):
-        self.save(records[0].warc_filename, records, records[0].offset)
+        if records:
+            self.save(records[0].warc_filename, records, records[0].offset)
 
     def save(self, warcfile, recordset, offset):
         response_record = recordset[0]

@@ -200,9 +200,10 @@ class RethinkCaptures:
         return entry
 
     def notify(self, recorded_url, records):
-        entry = self._assemble_entry(recorded_url, records)
-        with self._batch_lock:
-            self._batch.append(entry)
+        if records:
+            entry = self._assemble_entry(recorded_url, records)
+            with self._batch_lock:
+                self._batch.append(entry)
 
     def close(self):
         self.stop()

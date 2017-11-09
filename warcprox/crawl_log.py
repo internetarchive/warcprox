@@ -36,11 +36,10 @@ class CrawlLogger(object):
     def notify(self, recorded_url, records):
         # 2017-08-03T21:45:24.496Z   200       2189 https://autismcouncil.wisconsin.gov/robots.txt P https://autismcouncil.wisconsin.gov/ text/plain #001 20170803214523617+365 sha1:PBS2CEF7B4OSEXZZF3QE2XN2VHYCPNPX https://autismcouncil.wisconsin.gov/ duplicate:digest {"warcFileOffset":942,"contentSize":2495,"warcFilename":"ARCHIVEIT-2159-TEST-JOB319150-20170803214522386-00000.warc.gz"}
         now = datetime.datetime.utcnow()
-        extra_info = {
-            'contentSize': recorded_url.size,
-            'warcFilename': records[0].warc_filename,
-            'warcFileOffset': records[0].offset,
-        }
+        extra_info = {'contentSize': recorded_url.size,}
+        if records:
+            extra_info['warcFilename'] = records[0].warc_filename
+            extra_info['warcFileOffset'] = records[0].offset
         if recorded_url.response_recorder:
             content_length = recorded_url.response_recorder.len - recorded_url.response_recorder.payload_offset
             payload_digest = warcprox.digest_str(
@@ -49,8 +48,7 @@ class CrawlLogger(object):
         else:
             # WARCPROX_WRITE_RECORD request
             content_length = len(recorded_url.request_data)
-            payload_digest = records[0].get_header(
-                    b'WARC-Payload-Digest')
+            payload_digest = records[0].get_header(b'WARC-Payload-Digest')
         fields = [
             '{:%Y-%m-%dT%H:%M:%S}.{:03d}Z'.format(now, now.microsecond//1000),
             '% 5s' % recorded_url.status,
@@ -66,7 +64,7 @@ class CrawlLogger(object):
                 recorded_url.duration.microseconds//1000),
             payload_digest,
             recorded_url.warcprox_meta.get('metadata', {}).get('seed', '-'),
-            'duplicate:digest' if records[0].type == b'revisit' else '-',
+            'duplicate:digest' if records and records[0].type == b'revisit' else '-',
             json.dumps(extra_info, separators=(',',':')),
         ]
         for i in range(len(fields)):
