@@ -293,16 +293,19 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 if raw_warcprox_meta:
                     warcprox_meta = json.loads(raw_warcprox_meta)
 
-                rec_custom = RecordedUrl(url=self.url,
-                                         request_data=request_data,
-                                         response_recorder=None,
-                                         remote_ip=b'',
-                                         warcprox_meta=warcprox_meta,
-                                         content_type=self.headers['Content-Type'],
-                                         custom_type=warc_type or self.headers['WARC-Type'].encode('utf-8'),
-                                         status=204, size=len(request_data),
-                                         client_ip=self.client_address[0],
-                                         method=self.command, timestamp=timestamp)
+                rec_custom = RecordedUrl(
+                        url=self.url,
+                        request_data=request_data,
+                        response_recorder=None,
+                        remote_ip=b'',
+                        warcprox_meta=warcprox_meta,
+                        content_type=self.headers['Content-Type'],
+                        custom_type=warc_type or self.headers['WARC-Type'].encode('utf-8'),
+                        status=204, size=len(request_data),
+                        client_ip=self.client_address[0],
+                        method=self.command,
+                        timestamp=timestamp,
+                        duration=datetime.datetime.utcnow()-timestamp)
 
                 self.server.recorded_url_q.put(rec_custom)
                 self.send_response(204, 'OK')

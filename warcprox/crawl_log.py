@@ -26,8 +26,9 @@ import os
 import warcprox
 
 class CrawlLogger(object):
-    def __init__(self, dir_):
+    def __init__(self, dir_, options=warcprox.Options()):
         self.dir = dir_
+        self.options = options
         if not os.path.exists(self.dir):
             logging.info('creating directory %r', self.dir)
             os.mkdir(self.dir)
@@ -40,10 +41,20 @@ class CrawlLogger(object):
             'warcFilename': records[0].warc_filename,
             'warcFileOffset': records[0].offset,
         }
+        if recorded_url.response_recorder:
+            content_length = recorded_url.response_recorder.len - recorded_url.response_recorder.payload_offset
+            payload_digest = warcprox.digest_str(
+                recorded_url.response_recorder.payload_digest,
+                self.options.base32)
+        else:
+            # WARCPROX_WRITE_RECORD request
+            content_length = len(recorded_url.request_data)
+            payload_digest = records[0].get_header(
+                    b'WARC-Payload-Digest')
         fields = [
             '{:%Y-%m-%dT%H:%M:%S}.{:03d}Z'.format(now, now.microsecond//1000),
             '% 5s' % recorded_url.status,
-            '% 10s' % (recorded_url.response_recorder.len - recorded_url.response_recorder.payload_offset),
+            '% 10s' % content_length,
             recorded_url.url,
             '-', # hop path
             recorded_url.referer or '-',
@@ -53,8 +64,7 @@ class CrawlLogger(object):
                 recorded_url.timestamp,
                 recorded_url.timestamp.microsecond//1000,
                 recorded_url.duration.microseconds//1000),
-            warcprox.digest_str(
-                recorded_url.response_recorder.payload_digest, True),
+            payload_digest,
             recorded_url.warcprox_meta.get('metadata', {}).get('seed', '-'),
             'duplicate:digest' if records[0].type == b'revisit' else '-',
             json.dumps(extra_info, separators=(',',':')),

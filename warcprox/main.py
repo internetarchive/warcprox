@@ -238,7 +238,8 @@ def init_controller(args):
         playback_proxy = None
 
     if args.crawl_log_dir:
-        listeners.append(warcprox.crawl_log.CrawlLogger(args.crawl_log_dir))
+        listeners.append(warcprox.crawl_log.CrawlLogger(
+            args.crawl_log_dir, options=options))
 
     for qualname in args.plugins or []:
         try:
