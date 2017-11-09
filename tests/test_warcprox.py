@@ -1374,7 +1374,7 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     assert fields[6] == b'text/plain'
     assert fields[7] == b'-'
     assert re.match(br'^\d{17}[+]\d{3}', fields[8])
-    assert fields[9] == b'sha1:NHKRURXEJICOQEINUDERRF6OZ2LZ7JYP'
+    assert fields[9] == b'sha1:69d51a46e44a04e8110da0c91897cece979fa70f'
     assert fields[10] == b'-'
     assert fields[11] == b'-'
     extra_info = json.loads(fields[12].decode('utf-8'))
@@ -1395,7 +1395,7 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     assert fields[6] == b'text/plain'
     assert fields[7] == b'-'
     assert re.match(br'^\d{17}[+]\d{3}', fields[8])
-    assert fields[9] == b'sha1:TKXGVS3ZPR24VDVV3XWZXYQSPTDBWP53'
+    assert fields[9] == b'sha1:9aae6acb797c75ca8eb5dded9be2127cc61b3fbb'
     assert fields[10] == b'-'
     assert fields[11] == b'-'
     extra_info = json.loads(fields[12].decode('utf-8'))
@@ -1432,13 +1432,65 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     assert fields[6] == b'text/plain'
     assert fields[7] == b'-'
     assert re.match(br'^\d{17}[+]\d{3}', fields[8])
-    assert fields[9] == b'sha1:NHKRURXEJICOQEINUDERRF6OZ2LZ7JYP'
+    assert fields[9] == b'sha1:69d51a46e44a04e8110da0c91897cece979fa70f'
     assert fields[10] == b'http://example.com/seed'
     assert fields[11] == b'duplicate:digest'
     extra_info = json.loads(fields[12].decode('utf-8'))
     assert set(extra_info.keys()) == {
             'contentSize', 'warcFilename', 'warcFileOffset'}
     assert extra_info['contentSize'] == 145
+
+    # a request that is not saved to a warc (because of --method-filter)
+    # currently not logged at all (XXX maybe it should be)
+    url = 'http://localhost:%s/b/cc' % http_daemon.server_port
+    headers = {'Warcprox-Meta': json.dumps({'warc-prefix': 'test_crawl_log_3'})}
+    response = requests.head(url, proxies=archiving_proxies, headers=headers)
+    time.sleep(3)
+    assert not os.path.exists(os.path.join(
+        warcprox_.options.crawl_log_dir, 'test_crawl_log_3.log'))
+
+    # WARCPROX_WRITE_RECORD
+    url = 'http://fakeurl/'
+    payload = b'I am the WARCPROX_WRITE_RECORD payload'
+    headers = {
+        'Content-Type': 'text/plain',
+        'WARC-Type': 'metadata',
+        'Host': 'N/A',
+        'Warcprox-Meta': json.dumps({'warc-prefix': 'test_crawl_log_4'}),
+    }
+    response = requests.request(
+            method='WARCPROX_WRITE_RECORD', url=url, data=payload,
+            headers=headers, proxies=archiving_proxies)
+    assert response.status_code == 204
+
+    start = time.time()
+    while time.time() - start < 10:
+        if os.path.exists(os.path.join(
+            warcprox_.options.crawl_log_dir, 'test_crawl_log_4.log')):
+            break
+        time.sleep(0.5)
+
+    crawl_log_4 = open(os.path.join(
+        warcprox_.options.crawl_log_dir, 'test_crawl_log_4.log'), 'rb').read()
+
+    assert re.match(b'\A2[^\n]+\n\Z', crawl_log_4)
+    assert crawl_log_4[24:31] == b'   204 '
+    assert crawl_log_4[31:42] == b'        38 '
+    fields = crawl_log_4.split()
+    assert len(fields) == 13
+    assert fields[3] == b'http://fakeurl/'
+    assert fields[4] == b'-'
+    assert fields[5] == b'-'
+    assert fields[6] == b'text/plain'
+    assert fields[7] == b'-'
+    assert re.match(br'^\d{17}[+]\d{3}', fields[8])
+    assert fields[9] == b'sha1:bb56497c17d2684f5eca4af9df908c78ba74ca1c'
+    assert fields[10] == b'-'
+    assert fields[11] == b'-'
+    extra_info = json.loads(fields[12].decode('utf-8'))
+    assert set(extra_info.keys()) == {
+            'contentSize', 'warcFilename', 'warcFileOffset'}
+    assert extra_info['contentSize'] == 38
 
 def test_long_warcprox_meta(
         warcprox_, http_daemon, archiving_proxies, playback_proxies):
