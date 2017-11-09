@@ -253,7 +253,8 @@ def warcprox_(request, rethinkdb_servers, rethinkdb_big_table):
             '--method-filter=POST',
             '--port=0',
             '--playback-port=0',
-            '--onion-tor-socks-proxy=localhost:9050']
+            '--onion-tor-socks-proxy=localhost:9050',
+            '--crawl-log-dir=crawl-logs']
     if rethinkdb_servers:
         rethinkdb_db = 'warcprox_test_%s' % ''.join(random.sample("abcdefghijklmnopqrstuvwxyz0123456789_",8))
         argv.append('--rethinkdb-servers=%s' % rethinkdb_servers)
