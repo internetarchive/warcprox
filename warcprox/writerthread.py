@@ -82,13 +82,15 @@ class WarcWriterThread(threading.Thread):
                                 self.logger.info("%s urls left to write", qsize)
 
                         recorded_url = self.recorded_url_q.get(block=True, timeout=0.5)
+                        records = []
                         self.idle = None
                         if self._filter_accepts(recorded_url):
                             if self.dedup_db:
                                 warcprox.dedup.decorate_with_dedup_info(self.dedup_db,
                                         recorded_url, base32=self.options.base32)
                             records = self.writer_pool.write_records(recorded_url)
-                            self._final_tasks(recorded_url, records)
+
+                        self._final_tasks(recorded_url, records)
 
                         # try to release resources in a timely fashion
                         if recorded_url.response_recorder and recorded_url.response_recorder.tempfile:
@@ -134,11 +136,15 @@ class WarcWriterThread(threading.Thread):
             payload_digest = "-"
 
         # 2015-07-17T22:32:23.672Z     1         58 dns:www.dhss.delaware.gov P http://www.dhss.delaware.gov/dhss/ text/dns #045 20150717223214881+316 sha1:63UTPB7GTWIHAGIK3WWL76E57BBTJGAK http://www.dhss.delaware.gov/dhss/ - {"warcFileOffset":2964,"warcFilename":"ARCHIVEIT-1303-WEEKLY-JOB165158-20150717223222113-00000.warc.gz"}
-        self.logger.info("{} {} {} {} {} size={} {} {} {} offset={}".format(
-            recorded_url.client_ip, recorded_url.status, recorded_url.method,
-            recorded_url.url.decode("utf-8"), recorded_url.mimetype,
-            recorded_url.size, payload_digest, records[0].type.decode("utf-8"),
-            records[0].warc_filename, records[0].offset))
+        type_ = records[0].type.decode("utf-8") if records else '-'
+        filename = records[0].warc_filename if records else '-'
+        offset = records[0].offset if records else '-'
+        self.logger.info(
+                "%s %s %s %s %s size=%s %s %s %s offset=%s",
+                recorded_url.client_ip, recorded_url.status,
+                recorded_url.method, recorded_url.url.decode("utf-8"),
+                recorded_url.mimetype, recorded_url.size, payload_digest,
+                type_, filename, offset)
 
     def _final_tasks(self, recorded_url, records):
         if self.listeners:

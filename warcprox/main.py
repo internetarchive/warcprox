@@ -153,6 +153,11 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
                 'host:port of tor socks proxy, used only to connect to '
                 '.onion sites'))
     arg_parser.add_argument(
+            '--crawl-log-dir', dest='crawl_log_dir', default=None, help=(
+                'if specified, write crawl log files in the specified '
+                'directory; one crawl log is written per warc filename '
+                'prefix; crawl log format mimics heritrix'))
+    arg_parser.add_argument(
             '--plugin', metavar='PLUGIN_CLASS', dest='plugins',
             action='append', help=(
                 'Qualified name of plugin class, e.g. "mypkg.mymod.MyClass". '
@@ -248,6 +253,10 @@ def init_controller(args):
         playback_index_db = None
         playback_proxy = None
 
+    if args.crawl_log_dir:
+        listeners.append(warcprox.crawl_log.CrawlLogger(
+            args.crawl_log_dir, options=options))
+
     for qualname in args.plugins or []:
         try:
             (module_name, class_name) = qualname.rsplit('.', 1)
@@ -285,22 +294,6 @@ def init_controller(args):
 
     return controller
 
-def real_main(args):
-    # see https://github.com/pyca/cryptography/issues/2911
-    cryptography.hazmat.backends.openssl.backend.activate_builtin_random()
-
-    controller = init_controller(args)
-
-    signal.signal(signal.SIGTERM, lambda a,b: controller.stop.set())
-    signal.signal(signal.SIGINT, lambda a,b: controller.stop.set())
-    try:
-        signal.signal(signal.SIGQUIT, dump_state)
-    except AttributeError:
-        # SIGQUIT does not exist on some platforms (windows)
-        pass
-
-    controller.run_until_shutdown()
-
 def parse_args(argv=sys.argv):
     '''
     Parses command line arguments with argparse.
@@ -329,7 +322,20 @@ def main(argv=sys.argv):
                 '%(asctime)s %(process)d %(levelname)s %(threadName)s '
                 '%(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s'))
 
-    real_main(args)
+    # see https://github.com/pyca/cryptography/issues/2911
+    cryptography.hazmat.backends.openssl.backend.activate_builtin_random()
+
+    controller = init_controller(args)
+
+    signal.signal(signal.SIGTERM, lambda a,b: controller.stop.set())
+    signal.signal(signal.SIGINT, lambda a,b: controller.stop.set())
+    try:
+        signal.signal(signal.SIGQUIT, dump_state)
+    except AttributeError:
+        # SIGQUIT does not exist on some platforms (windows)
+        pass
+
+    controller.run_until_shutdown()
 
 def ensure_rethinkdb_tables():
     '''
