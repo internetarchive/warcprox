@@ -39,7 +39,6 @@ import signal
 import threading
 import certauth.certauth
 import warcprox
-import re
 import doublethink
 import cryptography.hazmat.backends.openssl
 import importlib
@@ -79,6 +78,8 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
             default='./warcs', help='where to write warcs')
     arg_parser.add_argument('-z', '--gzip', dest='gzip', action='store_true',
             help='write gzip-compressed warc records')
+    arg_parser.add_argument('--no-warc-open-suffix', dest='no_warc_open_suffix',
+            default=False, action='store_true', help=argparse.SUPPRESS)
     arg_parser.add_argument('-n', '--prefix', dest='prefix',
             default='WARCPROX', help='WARC filename prefix')
     arg_parser.add_argument(
@@ -107,6 +108,8 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
     group = arg_parser.add_mutually_exclusive_group()
     group.add_argument('-j', '--dedup-db-file', dest='dedup_db_file',
             default='./warcprox.sqlite', help='persistent deduplication database file; empty string or /dev/null disables deduplication')
+    group.add_argument('--cdxserver-dedup', dest='cdxserver_dedup',
+            help='use a CDX Server URL for deduplication; e.g. https://web.archive.org/cdx/search')
     group.add_argument('--rethinkdb-servers', dest='rethinkdb_servers',
             help='rethinkdb servers, used for dedup and stats if specified; e.g. db0.foo.org,db0.foo.org:38015,db1.foo.org')
     arg_parser.add_argument('--rethinkdb-db', dest='rethinkdb_db', default='warcprox',
@@ -195,6 +198,9 @@ def init_controller(args):
         else:
             dedup_db = warcprox.dedup.RethinkDedupDb(rr, options=options)
             listeners.append(dedup_db)
+    elif args.cdxserver_dedup:
+        dedup_db = warcprox.dedup.CdxServerDedup(cdx_url=args.cdxserver_dedup)
+        listeners.append(dedup_db)
     elif args.dedup_db_file in (None, '', '/dev/null'):
         logging.info('deduplication disabled')
         dedup_db = None

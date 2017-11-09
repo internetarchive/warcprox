@@ -25,8 +25,6 @@ USA.
 from __future__ import absolute_import
 
 import logging
-from hanzo import warctools
-import random
 import warcprox
 import base64
 import urlcanon
@@ -115,6 +113,7 @@ class RethinkCaptures:
                     [r.row["abbr_canon_surt"], r.row["timestamp"]]).run()
             self.rr.table(self.table).index_create("sha1_warc_type", [
                 r.row["sha1base32"], r.row["warc_type"], r.row["bucket"]]).run()
+            self.rr.table(self.table).index_wait().run()
 
     def find_response_by_digest(self, algo, raw_digest, bucket="__unspecified__"):
         if algo != "sha1":
@@ -221,7 +220,7 @@ class RethinkCapturesDedup:
         self.captures_db = captures_db
         self.options = options
 
-    def lookup(self, digest_key, bucket="__unspecified__"):
+    def lookup(self, digest_key, bucket="__unspecified__", url=None):
         k = digest_key.decode("utf-8") if isinstance(digest_key, bytes) else digest_key
         algo, value_str = k.split(":")
         if self.options.base32:

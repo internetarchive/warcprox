@@ -60,6 +60,7 @@ except ImportError:
 import certauth.certauth
 
 import warcprox
+import warcprox.main
 
 try:
     import http.client as http_client
@@ -241,173 +242,44 @@ def https_daemon(request, cert):
     return https_daemon
 
 @pytest.fixture(scope="module")
-def captures_db(request, rethinkdb_servers, rethinkdb_big_table):
-    captures_db = None
+def warcprox_(request, rethinkdb_servers, rethinkdb_big_table):
+    orig_dir = os.getcwd()
+    work_dir = tempfile.mkdtemp()
+    logging.info('changing to working directory %r', work_dir)
+    os.chdir(work_dir)
+
+    argv = ['warcprox',
+            '--method-filter=GET',
+            '--method-filter=POST',
+            '--port=0',
+            '--playback-port=0',
+            '--onion-tor-socks-proxy=localhost:9050']
     if rethinkdb_servers:
-        servers = rethinkdb_servers.split(",")
-        if rethinkdb_big_table:
-            db = 'warcprox_test_captures_' + "".join(random.sample("abcdefghijklmnopqrstuvwxyz0123456789_",8))
-            rr = doublethink.Rethinker(servers, db)
-            captures_db = warcprox.bigtable.RethinkCaptures(rr)
-            captures_db.start()
+        rethinkdb_db = 'warcprox_test_%s' % ''.join(random.sample("abcdefghijklmnopqrstuvwxyz0123456789_",8))
+        argv.append('--rethinkdb-servers=%s' % rethinkdb_servers)
+        argv.append('--rethinkdb-db=%s' % rethinkdb_db)
+    if rethinkdb_big_table:
+        argv.append('--rethinkdb-big-table')
 
-    def fin():
-        if captures_db:
-            captures_db.close()
-            # logging.info('dropping rethinkdb database {}'.format(db))
-            # result = captures_db.rr.db_drop(db).run()
-            # logging.info("result=%s", result)
-    request.addfinalizer(fin)
+    args = warcprox.main.parse_args(argv)
+    warcprox_ = warcprox.main.init_controller(args)
 
-    return captures_db
-
-@pytest.fixture(scope="module")
-def rethink_dedup_db(request, rethinkdb_servers, captures_db):
-    ddb = None
-    if rethinkdb_servers:
-        if captures_db:
-            ddb = warcprox.bigtable.RethinkCapturesDedup(captures_db)
-        else:
-            servers = rethinkdb_servers.split(",")
-            db = 'warcprox_test_dedup_' + "".join(random.sample("abcdefghijklmnopqrstuvwxyz0123456789_",8))
-            rr = doublethink.Rethinker(servers, db)
-            ddb = warcprox.dedup.RethinkDedupDb(rr)
-
-    def fin():
-        if rethinkdb_servers:
-            ddb.close()
-            if not captures_db:
-                logging.info('dropping rethinkdb database {}'.format(db))
-                result = ddb.rr.db_drop(db).run()
-                logging.info("result=%s", result)
-    request.addfinalizer(fin)
-
-    return ddb
-
-@pytest.fixture(scope="module")
-def dedup_db(request, rethink_dedup_db):
-    dedup_db_file = None
-    ddb = rethink_dedup_db
-    if not ddb:
-        f = tempfile.NamedTemporaryFile(prefix='warcprox-test-dedup-', suffix='.db', delete=False)
-        f.close()
-        dedup_db_file = f.name
-        ddb = warcprox.dedup.DedupDb(dedup_db_file)
-
-    def fin():
-        if dedup_db_file:
-            logging.info('deleting file {}'.format(dedup_db_file))
-            os.unlink(dedup_db_file)
-    request.addfinalizer(fin)
-
-    return ddb
-
-@pytest.fixture(scope="module")
-def stats_db(request, rethinkdb_servers):
-    if rethinkdb_servers:
-        servers = rethinkdb_servers.split(",")
-        db = 'warcprox_test_stats_' + "".join(random.sample("abcdefghijklmnopqrstuvwxyz0123456789_",8))
-        rr = doublethink.Rethinker(servers, db)
-        sdb = warcprox.stats.RethinkStatsDb(rr)
-        sdb.start()
-    else:
-        f = tempfile.NamedTemporaryFile(prefix='warcprox-test-stats-', suffix='.db', delete=False)
-        f.close()
-        stats_db_file = f.name
-        sdb = warcprox.stats.StatsDb(stats_db_file)
-
-    def fin():
-        sdb.close()
-        if rethinkdb_servers:
-            logging.info('dropping rethinkdb database {}'.format(db))
-            result = sdb.rr.db_drop(db).run()
-            logging.info("result=%s", result)
-        # else:
-        #     logging.info('deleting file {}'.format(stats_db_file))
-        #     os.unlink(stats_db_file)
-    request.addfinalizer(fin)
-
-    return sdb
-
-@pytest.fixture(scope="module")
-def service_registry(request, rethinkdb_servers):
-    if rethinkdb_servers:
-        servers = rethinkdb_servers.split(",")
-        db = 'warcprox_test_services_' + "".join(random.sample("abcdefghijklmnopqrstuvwxyz0123456789_",8))
-        rr = doublethink.Rethinker(servers, db)
-
-        def fin():
-            logging.info('dropping rethinkdb database {}'.format(db))
-            result = rr.db_drop(db).run()
-            logging.info("result=%s", result)
-        request.addfinalizer(fin)
-
-        return doublethink.ServiceRegistry(rr)
-    else:
-        return None
-
-@pytest.fixture(scope="module")
-def warcprox_(request, captures_db, dedup_db, stats_db, service_registry):
-    f = tempfile.NamedTemporaryFile(prefix='warcprox-test-ca-', suffix='.pem', delete=True)
-    f.close() # delete it, or CertificateAuthority will try to read it
-    ca_file = f.name
-    ca_dir = tempfile.mkdtemp(prefix='warcprox-test-', suffix='-ca')
-    ca = certauth.certauth.CertificateAuthority(ca_file, ca_dir, 'warcprox-test')
-
-    recorded_url_q = warcprox.TimestampedQueue()
-
-    options = warcprox.Options(port=0, playback_port=0,
-            onion_tor_socks_proxy='localhost:9050')
-    proxy = warcprox.warcproxy.WarcProxy(ca=ca, recorded_url_q=recorded_url_q,
-            stats_db=stats_db, options=options)
-    options.port = proxy.server_port
-
-    options.directory = tempfile.mkdtemp(prefix='warcprox-test-warcs-')
-
-    f = tempfile.NamedTemporaryFile(prefix='warcprox-test-playback-index-', suffix='.db', delete=False)
-    f.close()
-    playback_index_db_file = f.name
-    playback_index_db = warcprox.playback.PlaybackIndexDb(playback_index_db_file)
-    playback_proxy = warcprox.playback.PlaybackProxy(ca=ca,
-            playback_index_db=playback_index_db, options=options)
-    options.playback_proxy = playback_proxy.server_port
-
-    options.method_filter = ['GET','POST']
-
-    options.crawl_log_dir = tempfile.mkdtemp(
-            prefix='warcprox-test-', suffix='-crawl-log')
-    crawl_logger = warcprox.crawl_log.CrawlLogger(options.crawl_log_dir)
-
-    writer_pool = warcprox.writer.WarcWriterPool(options)
-    warc_writer_threads = [
-            warcprox.writerthread.WarcWriterThread(
-                recorded_url_q=recorded_url_q, writer_pool=writer_pool,
-                dedup_db=dedup_db, listeners=[
-                    captures_db or dedup_db, playback_index_db, stats_db,
-                    crawl_logger], options=options)
-            for i in range(int(proxy.max_threads ** 0.5))]
-
-    warcprox_ = warcprox.controller.WarcproxController(
-            proxy=proxy, warc_writer_threads=warc_writer_threads,
-            playback_proxy=playback_proxy, service_registry=service_registry,
-            options=options)
     logging.info('starting warcprox')
-    warcprox_thread = threading.Thread(name='WarcproxThread',
-            target=warcprox_.run_until_shutdown)
+    warcprox_thread = threading.Thread(
+            name='WarcproxThread', target=warcprox_.run_until_shutdown)
     warcprox_thread.start()
 
     def fin():
-        logging.info('stopping warcprox')
         warcprox_.stop.set()
         warcprox_thread.join()
-        for f in (ca_file, ca_dir, options.directory, playback_index_db_file,
-                  options.crawl_log_dir):
-            if os.path.isdir(f):
-                logging.info('deleting directory {}'.format(f))
-                shutil.rmtree(f)
-            else:
-                logging.info('deleting file {}'.format(f))
-                os.unlink(f)
+        if rethinkdb_servers:
+            logging.info('dropping rethinkdb database %r', rethinkdb_db)
+            rr = doublethink.Rethinker(rethinkdb_servers)
+            result = rr.db_drop(rethinkdb_db).run()
+        logging.info('deleting working directory %r', work_dir)
+        os.chdir(orig_dir)
+        shutil.rmtree(work_dir)
+
     request.addfinalizer(fin)
 
     return warcprox_
@@ -682,6 +554,22 @@ def test_limits(http_daemon, warcprox_, archiving_proxies):
     assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
     assert response.headers["content-type"] == "text/plain;charset=utf-8"
     assert response.raw.data == b"request rejected by warcprox: reached limit test_limits_bucket/total/urls=10\n"
+
+def test_return_capture_timestamp(http_daemon, warcprox_, archiving_proxies):
+    url = 'http://localhost:{}/i/j'.format(http_daemon.server_port)
+    request_meta = {"accept": ["capture-metadata"]}
+    headers = {"Warcprox-Meta": json.dumps(request_meta)}
+    response = requests.get(url, proxies=archiving_proxies, headers=headers, stream=True)
+    assert response.status_code == 200
+    assert response.headers['Warcprox-Meta']
+    data = json.loads(response.headers['Warcprox-Meta'])
+    assert data['capture-metadata']
+    try:
+        dt = datetime.datetime.strptime(data['capture-metadata']['timestamp'],
+                                        '%Y-%m-%dT%H:%M:%SZ')
+        assert dt
+    except ValueError:
+        pytest.fail('Invalid capture-timestamp format %s', data['capture-timestamp'])
 
 def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, playback_proxies):
     url1 = 'http://localhost:{}/k/l'.format(http_daemon.server_port)
@@ -1233,9 +1121,8 @@ def test_method_filter(
     assert response.content == payload
 
 def test_dedup_ok_flag(
-        https_daemon, http_daemon, warcprox_, archiving_proxies,
-        rethinkdb_big_table):
-    if not rethinkdb_big_table:
+        https_daemon, http_daemon, warcprox_, archiving_proxies):
+    if not warcprox_.options.rethinkdb_big_table:
         # this feature is n/a unless using rethinkdb big table
         return
 
@@ -1319,11 +1206,11 @@ def test_status_api(warcprox_):
     assert status['pid'] == os.getpid()
     assert status['threads'] == warcprox_.proxy.pool._max_workers
 
-def test_svcreg_status(warcprox_, service_registry):
-    if service_registry:
+def test_svcreg_status(warcprox_):
+    if warcprox_.service_registry:
         start = time.time()
         while time.time() - start < 15:
-            status = service_registry.available_service('warcprox')
+            status = warcprox_.service_registry.available_service('warcprox')
             if status:
                 break
             time.sleep(0.5)
@@ -1380,11 +1267,11 @@ def test_controller_with_defaults():
         assert not wwt.writer_pool.default_warc_writer.record_builder.base32
         assert wwt.writer_pool.default_warc_writer.record_builder.digest_algorithm == 'sha1'
 
-def test_choose_a_port_for_me(service_registry):
+def test_choose_a_port_for_me(warcprox_):
     options = warcprox.Options()
     options.port = 0
     controller = warcprox.controller.WarcproxController(
-            service_registry=service_registry, options=options)
+            service_registry=warcprox_.service_registry, options=options)
     assert controller.proxy.server_port != 0
     assert controller.proxy.server_port != 8000
     assert controller.proxy.server_address == (
@@ -1400,12 +1287,12 @@ def test_choose_a_port_for_me(service_registry):
         status = json.loads(response.content.decode('ascii'))
         assert status['port'] == controller.proxy.server_port
 
-        if service_registry:
+        if warcprox_.service_registry:
             # check that service registry entry lists the correct port
             start = time.time()
             ports = []
             while time.time() - start < 30:
-                svcs = service_registry.available_services('warcprox')
+                svcs = warcprox_.service_registry.available_services('warcprox')
                 ports = [svc['port'] for svc in svcs]
                 if controller.proxy.server_port in ports:
                     break
@@ -1551,6 +1438,44 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     assert set(extra_info.keys()) == {
             'contentSize', 'warcFilename', 'warcFileOffset'}
     assert extra_info['contentSize'] == 145
+
+def test_long_warcprox_meta(
+        warcprox_, http_daemon, archiving_proxies, playback_proxies):
+    url = 'http://localhost:%s/b/g' % http_daemon.server_port
+
+    # create a very long warcprox-meta header
+    headers = {'Warcprox-Meta': json.dumps({
+        'x':'y'*1000000, 'warc-prefix': 'test_long_warcprox_meta'})}
+    response = requests.get(
+            url, proxies=archiving_proxies, headers=headers, verify=False)
+    assert response.status_code == 200
+
+    # wait for writer thread to process
+    time.sleep(0.5)
+    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
+        time.sleep(0.5)
+    time.sleep(0.5)
+
+    # check that warcprox-meta was parsed and honored ("warc-prefix" param)
+    assert warcprox_.warc_writer_threads[0].writer_pool.warc_writers["test_long_warcprox_meta"]
+    writer = warcprox_.warc_writer_threads[0].writer_pool.warc_writers["test_long_warcprox_meta"]
+    warc_path = os.path.join(writer.directory, writer._f_finalname)
+    warcprox_.warc_writer_threads[0].writer_pool.warc_writers["test_long_warcprox_meta"].close_writer()
+    assert os.path.exists(warc_path)
+
+    # read the warc
+    with open(warc_path, 'rb') as f:
+        rec_iter = iter(warcio.archiveiterator.ArchiveIterator(f))
+        record = next(rec_iter)
+        assert record.rec_type == 'warcinfo'
+        record = next(rec_iter)
+        assert record.rec_type == 'response'
+        assert record.rec_headers.get_header('warc-target-uri') == url
+        record = next(rec_iter)
+        assert record.rec_type == 'request'
+        assert record.rec_headers.get_header('warc-target-uri') == url
+        with pytest.raises(StopIteration):
+            next(rec_iter)
 
 if __name__ == '__main__':
     pytest.main()
