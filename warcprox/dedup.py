@@ -280,7 +280,7 @@ class TroughClient(object):
                                 lambda svc: r.now().sub(
                                     svc['last_heartbeat']).lt(svc['ttl'])
                                 ).order_by('load')
-        logging.debug('querying rethinkdb: %r', reql)
+        self.logger.debug('querying rethinkdb: %r', reql)
         results = reql.run()
         if results:
             return results[0]['url']
@@ -329,20 +329,18 @@ class TroughDedupDb(object):
 
     def _write_url(self, bucket):
         if not bucket in self._write_url_cache:
-            segment_id = 'warcprox-trough-%s' % bucket
             self._write_url_cache[bucket] = self._trough_cli.write_url(
-                    segment_id, self.SCHEMA_ID)
-            logging.info(
-                    'bucket %r write url is %r', bucket,
+                    bucket, self.SCHEMA_ID)
+            self.logger.info(
+                    'trough dedup bucket %r write url is %r', bucket,
                     self._write_url_cache[bucket])
         return self._write_url_cache[bucket]
 
     def _read_url(self, bucket):
         if not self._read_url_cache.get(bucket):
-            segment_id = 'warcprox-trough-%s' % bucket
-            self._read_url_cache[bucket] = self._trough_cli.read_url(segment_id)
-            logging.info(
-                    'bucket %r read url is %r', bucket,
+            self._read_url_cache[bucket] = self._trough_cli.read_url(bucket)
+            self.logger.info(
+                    'trough dedup bucket %r read url is %r', bucket,
                     self._read_url_cache[bucket])
         return self._read_url_cache[bucket]
 
@@ -381,18 +379,18 @@ class TroughDedupDb(object):
         try:
             response = requests.post(write_url, sql)
         except:
-            logging.error(
+            self.logger.error(
                     'problem with trough write url %r', write_url,
                     exc_info=True)
             del self._write_url_cache[bucket]
             return
         if response.status_code != 200:
             del self._write_url_cache[bucket]
-            logging.warn(
+            self.logger.warn(
                     'unexpected response %r %r %r to sql=%r',
                     response.status_code, response.reason, response.text, sql)
         else:
-            logging.trace('posted %r to %s', sql, write_url)
+            self.logger.debug('posted %r to %s', sql, write_url)
 
     def lookup(self, digest_key, bucket='__unspecified__', url=None):
         read_url = self._read_url(bucket)
@@ -403,17 +401,17 @@ class TroughDedupDb(object):
         try:
             response = requests.post(read_url, sql)
         except:
-            logging.error(
+            self.logger.error(
                     'problem with trough read url %r', read_url, exc_info=True)
             del self._read_url_cache[bucket]
             return None
         if response.status_code != 200:
             del self._read_url_cache[bucket]
-            logging.warn(
+            self.logger.warn(
                     'unexpected response %r %r %r to sql=%r',
                     response.status_code, response.reason, response.text, sql)
             return None
-        logging.debug('got %r from query %r', response.text, sql)
+        self.logger.trace('got %r from query %r', response.text, sql)
         results = json.loads(response.text)
         assert len(results) <= 1  # sanity check (digest_key is primary key)
         if results:
