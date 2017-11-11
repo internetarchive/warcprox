@@ -361,7 +361,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             return
 
         try:
-            self._proxy_request()
+            return self._proxy_request()
         except:
             self.logger.error("exception proxying request", exc_info=True)
             raise
@@ -406,6 +406,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         if 'Content-Length' in self.headers:
             req += self.rfile.read(int(self.headers['Content-Length']))
 
+        prox_rec_res = None
         try:
             self.logger.debug('sending to remote server req=%r', req)
 
