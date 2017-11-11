@@ -53,7 +53,8 @@ class WarcRecordBuilder:
                     refers_to=recorded_url.dedup_info.get('id'),
                     refers_to_target_uri=recorded_url.dedup_info['url'],
                     refers_to_date=recorded_url.dedup_info['date'],
-                    payload_digest=warcprox.digest_str(recorded_url.response_recorder.payload_digest, self.base32),
+                    payload_digest=warcprox.digest_str(
+                        recorded_url.payload_digest, self.base32),
                     profile=warctools.WarcRecord.PROFILE_IDENTICAL_PAYLOAD_DIGEST,
                     content_type=hanzo.httptools.ResponseMessage.CONTENT_TYPE,
                     remote_ip=recorded_url.remote_ip)
@@ -64,7 +65,9 @@ class WarcRecordBuilder:
                     recorder=recorded_url.response_recorder,
                     warc_type=warctools.WarcRecord.RESPONSE,
                     content_type=hanzo.httptools.ResponseMessage.CONTENT_TYPE,
-                    remote_ip=recorded_url.remote_ip)
+                    remote_ip=recorded_url.remote_ip,
+                    payload_digest=warcprox.digest_str(
+                        recorded_url.payload_digest, self.base32))
 
     def build_warc_records(self, recorded_url):
         """Returns a tuple of hanzo.warctools.warc.WarcRecord (principal_record, ...)"""
@@ -122,13 +125,8 @@ class WarcRecordBuilder:
             headers.append((warctools.WarcRecord.CONTENT_LENGTH, str(len(recorder)).encode('latin1')))
             headers.append((warctools.WarcRecord.BLOCK_DIGEST,
                 warcprox.digest_str(recorder.block_digest, self.base32)))
-            if recorder.payload_digest is not None:
-                headers.append((warctools.WarcRecord.PAYLOAD_DIGEST,
-                    warcprox.digest_str(recorder.payload_digest, self.base32)))
-
             recorder.tempfile.seek(0)
             record = warctools.WarcRecord(headers=headers, content_file=recorder.tempfile)
-
         else:
             headers.append((warctools.WarcRecord.CONTENT_LENGTH, str(len(data)).encode('latin1')))
             digest = hashlib.new(self.digest_algorithm, data)
@@ -137,7 +135,6 @@ class WarcRecordBuilder:
             if not payload_digest:
                 headers.append((warctools.WarcRecord.PAYLOAD_DIGEST,
                                 warcprox.digest_str(digest, self.base32)))
-
             content_tuple = content_type, data
             record = warctools.WarcRecord(headers=headers, content=content_tuple)
 

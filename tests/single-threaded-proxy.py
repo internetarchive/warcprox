@@ -3,7 +3,7 @@
 tests/single-threaded-proxy.py - single-threaded MITM proxy, useful for
 debugging, does not write warcs
 
-Copyright (C) 2015-2016 Internet Archive
+Copyright (C) 2015-2017 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -46,7 +46,7 @@ class FakeQueue(object):
         logging.info("{} {} {} {} {} size={} {}".format(
             recorded_url.client_ip, recorded_url.status, recorded_url.method,
             recorded_url.url.decode("utf-8"), recorded_url.mimetype,
-            recorded_url.size, warcprox.digest_str(recorded_url.response_recorder.payload_digest, False).decode('utf-8')))
+            recorded_url.size, warcprox.digest_str(recorded_url.payload_digest, False).decode('utf-8')))
 
 def parse_args():
     prog = os.path.basename(sys.argv[0])

@@ -218,7 +218,8 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 content_type=content_type, method=self.command,
                 timestamp=timestamp, host=self.hostname,
                 duration=datetime.datetime.utcnow()-timestamp,
-                referer=self.headers.get('referer'))
+                referer=self.headers.get('referer'),
+                payload_digest=prox_rec_res.payload_digest)
         self.server.recorded_url_q.put(recorded_url)
 
         return recorded_url
@@ -328,7 +329,8 @@ class RecordedUrl:
     def __init__(self, url, request_data, response_recorder, remote_ip,
             warcprox_meta=None, content_type=None, custom_type=None,
             status=None, size=None, client_ip=None, method=None,
-            timestamp=None, host=None, duration=None, referer=None):
+            timestamp=None, host=None, duration=None, referer=None,
+            payload_digest=None):
         # XXX should test what happens with non-ascii url (when does
         # url-encoding happen?)
         if type(url) is not bytes:
@@ -366,6 +368,7 @@ class RecordedUrl:
         self.host = host
         self.duration = duration
         self.referer = referer
+        self.payload_digest = payload_digest
 
 # inherit from object so that multiple inheritance from this class works
 # properly in python 2

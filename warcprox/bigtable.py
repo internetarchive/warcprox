@@ -140,16 +140,16 @@ class RethinkCaptures:
         return result
 
     def _assemble_entry(self, recorded_url, records):
-        if recorded_url.response_recorder:
-            if recorded_url.response_recorder.payload_digest.name == "sha1":
+        if recorded_url.payload_digest:
+            if recorded_url.payload_digest.name == "sha1":
                 sha1base32 = base64.b32encode(
-                        recorded_url.response_recorder.payload_digest.digest()
+                        recorded_url.payload_digest.digest()
                         ).decode("utf-8")
             else:
                 self.logger.warn(
                         "digest type is %r but big captures table is indexed "
                         "by sha1",
-                        recorded_url.response_recorder.payload_digest.name)
+                        recorded_url.payload_digest.name)
         else:
             digest = hashlib.new("sha1", records[0].content[1])
             sha1base32 = base64.b32encode(digest.digest()).decode("utf-8")

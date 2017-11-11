@@ -66,7 +66,7 @@ import time
 class ProxyingRecorder(object):
     """
     Wraps a socket._fileobject, recording the bytes as they are read,
-    calculating digests, and sending them on to the proxy client.
+    calculating the block digest, and sending them on to the proxy client.
     """
 
     logger = logging.getLogger("warcprox.mitmproxy.ProxyingRecorder")
@@ -78,27 +78,19 @@ class ProxyingRecorder(object):
         self.digest_algorithm = digest_algorithm
         self.block_digest = hashlib.new(digest_algorithm)
         self.payload_offset = None
-        self.payload_digest = None
         self.proxy_client = proxy_client
         self._proxy_client_conn_open = True
         self.len = 0
         self.url = url
 
     def payload_starts_now(self):
-        self.payload_digest = hashlib.new(self.digest_algorithm)
         self.payload_offset = self.len
 
-    def _update_payload_digest(self, hunk):
-        if self.payload_digest:
-            self.payload_digest.update(hunk)
-
     def _update(self, hunk):
-        self._update_payload_digest(hunk)
         self.block_digest.update(hunk)
-
         self.tempfile.write(hunk)
 
-        if self.payload_digest and self._proxy_client_conn_open:
+        if self.payload_offset is not None and self._proxy_client_conn_open:
             try:
                 self.proxy_client.sendall(hunk)
             except BaseException as e:
@@ -157,12 +149,15 @@ class ProxyingRecordingHTTPResponse(http_client.HTTPResponse):
                 self, sock, debuglevel=debuglevel, method=method)
         self.proxy_client = proxy_client
         self.url = url
+        self.digest_algorithm = digest_algorithm
 
         # Keep around extra reference to self.fp because HTTPResponse sets
         # self.fp=None after it finishes reading, but we still need it
         self.recorder = ProxyingRecorder(
                 self.fp, proxy_client, digest_algorithm, url=url)
         self.fp = self.recorder
+
+        self.payload_digest = None
 
     def begin(self, extra_response_headers={}):
         http_client.HTTPResponse.begin(self)  # reads status line, headers
@@ -185,6 +180,12 @@ class ProxyingRecordingHTTPResponse(http_client.HTTPResponse):
         self.proxy_client.sendall(status_and_headers.encode('latin1'))
 
         self.recorder.payload_starts_now()
+        self.payload_digest = hashlib.new(self.digest_algorithm)
+
+    def read(self, amt=None):
+        buf = http_client.HTTPResponse.read(self, amt)
+        self.payload_digest.update(buf)
+        return buf
 
 def via_header_value(orig, request_version):
     via = orig
@@ -419,9 +420,9 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                     url=self.url, method=self.command)
             prox_rec_res.begin(extra_response_headers=extra_response_headers)
 
-            buf = prox_rec_res.read(8192)
+            buf = prox_rec_res.read(65536)
             while buf != b'':
-                buf = prox_rec_res.read(8192)
+                buf = prox_rec_res.read(65536)
 
             self.log_request(prox_rec_res.status, prox_rec_res.recorder.len)
         except Exception as e:
