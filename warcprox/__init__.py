@@ -28,7 +28,7 @@ except ImportError:
     import Queue as queue
 import datetime
 
-def digest_str(hash_obj, base32):
+def digest_str(hash_obj, base32=False):
     import base64
     return hash_obj.name.encode('utf-8') + b':' + (
             base64.b32encode(hash_obj.digest()) if base32

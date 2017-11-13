@@ -307,7 +307,6 @@ class RethinkStatsDb(StatsDb):
 
     def tally(self, recorded_url, records):
         buckets = self.buckets(recorded_url)
-        is_revisit = records[0].type == b'revisit'
         with self._batch_lock:
             for bucket in buckets:
                 bucket_stats = self._batch.setdefault(
@@ -316,12 +315,13 @@ class RethinkStatsDb(StatsDb):
                 bucket_stats["total"]["urls"] += 1
                 bucket_stats["total"]["wire_bytes"] += recorded_url.size
 
-                if is_revisit:
-                    bucket_stats["revisit"]["urls"] += 1
-                    bucket_stats["revisit"]["wire_bytes"] += recorded_url.size
-                else:
-                    bucket_stats["new"]["urls"] += 1
-                    bucket_stats["new"]["wire_bytes"] += recorded_url.size
+                if records:
+                    if records[0].type == b'revisit':
+                        bucket_stats["revisit"]["urls"] += 1
+                        bucket_stats["revisit"]["wire_bytes"] += recorded_url.size
+                    else:
+                        bucket_stats["new"]["urls"] += 1
+                        bucket_stats["new"]["wire_bytes"] += recorded_url.size
 
     def _add_to_batch(self, add_me):
         with self._batch_lock:

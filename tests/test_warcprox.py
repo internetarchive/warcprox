@@ -46,6 +46,10 @@ from collections import Counter
 import socket
 import datetime
 import warcio.archiveiterator
+import io
+import gzip
+import mock
+import email.message
 
 try:
     import http.server as http_server
@@ -135,6 +139,24 @@ def dump_state(signum=None, frame=None):
 
 signal.signal(signal.SIGQUIT, dump_state)
 
+def chunkify(buf, chunk_size=13):
+    i = 0
+    result = b''
+    while i < len(buf):
+        chunk_len = min(len(buf) - i, chunk_size)
+        result += ('%x\r\n' % chunk_len).encode('ascii')
+        result += buf[i:i+chunk_len]
+        result += b'\r\n'
+        i += chunk_size
+    result += b'0\r\n\r\n'
+    return result
+
+# def gzipify(buf):
+#     with io.BytesIO() as outbuf:
+#         with gzip.GzipFile(fileobj=outbuf, mode='wb') as gz:
+#             gz.write(buf)
+#         return outbuf.getvalue()
+
 class _TestHttpRequestHandler(http_server.BaseHTTPRequestHandler):
     def build_response(self):
         m = re.match(r'^/([^/]+)/([^/]+)$', self.path)
@@ -151,6 +173,71 @@ class _TestHttpRequestHandler(http_server.BaseHTTPRequestHandler):
                     +  b'Content-Type: text/plain\r\n'
                     +  b'\r\n')
             payload = b'This response is missing a Content-Length http header.'
+        elif self.path.startswith('/test_payload_digest-'):
+            content_body = (
+                    b'Hello. How are you. I am the test_payload_digest '
+                    b'content body. The entity body is a possibly content-'
+                    b'encoded version of me. The message body is a possibly '
+                    b'transfer-encoded version of the entity body.\n')
+            gzipped = (
+                    b"\x1f\x8b\x08\x00jA\x06Z\x02\xffm\x8d1\x0e\xc20\x10\x04{^"
+                    b"\xb1\x1f\xc0\xef\x08=}t\x897\xc1\x92\xed\x8b|\x07\xc8"
+                    b"\xbf'\n\xa2@J9\xab\x19\xed\xc0\x9c5`\xd07\xa4\x11]\x9f"
+                    b"\x017H\x81?\x08\xa7\xf9\xb8I\xcf*q\x8ci\xdd\x11\xb3VguL"
+                    b"\x1a{\xc0}\xb7vJ\xde\x8f\x01\xc9 \xd8\xd4,M\xb9\xff\xdc"
+                    b"+\xeb\xac\x91\x11/6KZ\xa1\x0b\n\xbfq\xa1\x99\xac<\xab"
+                    b"\xbdI\xb5\x85\xed,\xf7\xff\xdfp\xf9\x00\xfc\t\x02\xb0"
+                    b"\xc8\x00\x00\x00")
+            double_gzipped = (
+                    b"\x1f\x8b\x08\x00jA\x06Z\x02\xff\x01\x89\x00v\xff\x1f\x8b"
+                    b"\x08\x00jA\x06Z\x02\xffm\x8d1\x0e\xc20\x10\x04{^\xb1\x1f"
+                    b"\xc0\xef\x08=}t\x897\xc1\x92\xed\x8b|\x07\xc8\xbf'\n\xa2"
+                    b"@J9\xab\x19\xed\xc0\x9c5`\xd07\xa4\x11]\x9f\x017H\x81?"
+                    b"\x08\xa7\xf9\xb8I\xcf*q\x8ci\xdd\x11\xb3VguL\x1a{\xc0}"
+                    b"\xb7vJ\xde\x8f\x01\xc9 \xd8\xd4,M\xb9\xff\xdc+\xeb\xac"
+                    b"\x91\x11/6KZ\xa1\x0b\n\xbfq\xa1\x99\xac<\xab\xbdI\xb5"
+                    b"\x85\xed,\xf7\xff\xdfp\xf9\x00\xfc\t\x02\xb0\xc8\x00\x00"
+                    b"\x00\xf9\xdd\x8f\xed\x89\x00\x00\x00")
+            if self.path == '/test_payload_digest-plain':
+                payload = content_body
+                actual_headers = (b'Content-Type: text/plain\r\n'
+                               +  b'Content-Length: ' + str(len(payload)).encode('ascii') + b'\r\n')
+            elif self.path == '/test_payload_digest-gzip':
+                payload = gzipped
+                actual_headers = (b'Content-Type: application/gzip\r\n'
+                               +  b'Content-Length: ' + str(len(payload)).encode('ascii') + b'\r\n')
+            elif self.path == '/test_payload_digest-ce-gzip':
+                payload = gzipped
+                actual_headers = (b'Content-Type: text/plain\r\n'
+                               +  b'Content-Encoding: gzip\r\n'
+                               +  b'Content-Length: ' + str(len(payload)).encode('ascii') + b'\r\n')
+            elif self.path == '/test_payload_digest-gzip-ce-gzip':
+                payload = double_gzipped
+                actual_headers = (b'Content-Type: application/gzip\r\n'
+                               +  b'Content-Encoding: gzip\r\n'
+                               +  b'Content-Length: ' + str(len(payload)).encode('ascii') + b'\r\n')
+            elif self.path == '/test_payload_digest-te-chunked':
+                payload = chunkify(content_body)
+                actual_headers = (b'Content-Type: text/plain\r\n'
+                               +  b'Transfer-Encoding: chunked\r\n')
+            elif self.path == '/test_payload_digest-gzip-te-chunked':
+                payload = chunkify(gzipped)
+                actual_headers = (b'Content-Type: application/gzip\r\n'
+                               +  b'Transfer-Encoding: chunked\r\n')
+            elif self.path == '/test_payload_digest-ce-gzip-te-chunked':
+                payload = chunkify(gzipped)
+                actual_headers = (b'Content-Type: text/plain\r\n'
+                               +  b'Content-Encoding: gzip\r\n'
+                               +  b'Transfer-Encoding: chunked\r\n')
+            elif self.path == '/test_payload_digest-gzip-ce-gzip-te-chunked':
+                payload = chunkify(double_gzipped)
+                actual_headers = (b'Content-Type: application/gzip\r\n'
+                               +  b'Content-Encoding: gzip\r\n'
+                               +  b'Transfer-Encoding: chunked\r\n')
+            else:
+                raise Exception('bad path')
+            headers = b'HTTP/1.1 200 OK\r\n' + actual_headers +  b'\r\n'
+            logging.info('headers=%r payload=%r', headers, payload)
         else:
             payload = b'404 Not Found\n'
             headers = (b'HTTP/1.1 404 Not Found\r\n'
@@ -1372,11 +1459,14 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     assert response.status_code == 200
 
     start = time.time()
+    file = os.path.join(warcprox_.options.crawl_log_dir, 'test_crawl_log_1.log')
     while time.time() - start < 10:
-        if os.path.exists(os.path.join(
-            warcprox_.options.crawl_log_dir, 'test_crawl_log_1.log')):
+        if os.path.exists(file) and os.stat(file).st_size > 0:
             break
         time.sleep(0.5)
+    assert os.path.exists(file)
+    assert os.path.exists(os.path.join(
+        warcprox_.options.crawl_log_dir, 'crawl.log'))
 
     crawl_log = open(os.path.join(
         warcprox_.options.crawl_log_dir, 'crawl.log'), 'rb').read()
@@ -1430,14 +1520,14 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     assert response.status_code == 200
 
     start = time.time()
+    file = os.path.join(warcprox_.options.crawl_log_dir, 'test_crawl_log_2.log')
     while time.time() - start < 10:
-        if os.path.exists(os.path.join(
-            warcprox_.options.crawl_log_dir, 'test_crawl_log_2.log')):
+        if os.path.exists(file) and os.stat(file).st_size > 0:
             break
         time.sleep(0.5)
+    assert os.path.exists(file)
 
-    crawl_log_2 = open(os.path.join(
-        warcprox_.options.crawl_log_dir, 'test_crawl_log_2.log'), 'rb').read()
+    crawl_log_2 = open(file, 'rb').read()
 
     assert re.match(b'\A2[^\n]+\n\Z', crawl_log_2)
     assert crawl_log_2[24:31] == b'   200 '
@@ -1464,16 +1554,15 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     headers = {'Warcprox-Meta': json.dumps({'warc-prefix': 'test_crawl_log_3'})}
     response = requests.head(url, proxies=archiving_proxies, headers=headers)
 
+    file = os.path.join(warcprox_.options.crawl_log_dir, 'test_crawl_log_3.log')
     start = time.time()
     while time.time() - start < 10:
-        if os.path.exists(os.path.join(
-            warcprox_.options.crawl_log_dir, 'test_crawl_log_3.log')):
+        if os.path.exists(file) and os.stat(file).st_size > 0:
             break
         time.sleep(0.5)
 
-    crawl_log_3 = open(os.path.join(
-        warcprox_.options.crawl_log_dir, 'test_crawl_log_3.log'), 'rb').read()
-
+    assert os.path.exists(file)
+    crawl_log_3 = open(file, 'rb').read()
     assert re.match(b'\A2[^\n]+\n\Z', crawl_log_3)
     assert crawl_log_3[24:31] == b'   200 '
     assert crawl_log_3[31:42] == b'         0 '
@@ -1506,14 +1595,14 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     assert response.status_code == 204
 
     start = time.time()
+    file = os.path.join(warcprox_.options.crawl_log_dir, 'test_crawl_log_4.log')
     while time.time() - start < 10:
-        if os.path.exists(os.path.join(
-            warcprox_.options.crawl_log_dir, 'test_crawl_log_4.log')):
+        if os.path.exists(file) and os.stat(file).st_size > 0:
             break
         time.sleep(0.5)
 
-    crawl_log_4 = open(os.path.join(
-        warcprox_.options.crawl_log_dir, 'test_crawl_log_4.log'), 'rb').read()
+    assert os.path.exists(file)
+    crawl_log_4 = open(file, 'rb').read()
 
     assert re.match(b'\A2[^\n]+\n\Z', crawl_log_4)
     assert crawl_log_4[24:31] == b'   204 '
@@ -1571,6 +1660,66 @@ def test_long_warcprox_meta(
         assert record.rec_headers.get_header('warc-target-uri') == url
         with pytest.raises(StopIteration):
             next(rec_iter)
+
+def test_payload_digest(warcprox_, http_daemon):
+    '''
+    Tests that digest is of RFC2616 "entity body"
+    (transfer-decoded but not content-decoded)
+    '''
+    class HalfMockedMitm(warcprox.mitmproxy.MitmProxyHandler):
+        def __init__(self, url):
+            self.path = url
+            self.request_version = 'HTTP/1.1'
+            self.client_address = mock.MagicMock()
+            self.headers = email.message.Message()
+            self.headers.add_header('Host', 'localhost:%s' % http_daemon.server_port)
+            self.server = warcprox_.proxy
+            self.command = 'GET'
+            self.connection = mock.Mock()
+
+    PLAIN_SHA1 = b'sha1:881289333370aa4e3214505f1173423cc5a896b7'
+    GZIP_SHA1 = b'sha1:634e25de71ae01edb5c5d9e2e99c4836bbe94129'
+    GZIP_GZIP_SHA1 = b'sha1:cecbf3a5c4975072f5e4c5e0489f808ef246c2b4'
+
+    # plain
+    mitm = HalfMockedMitm('http://localhost:%s/test_payload_digest-plain' % http_daemon.server_port)
+    req, prox_rec_res = mitm.do_GET()
+    assert warcprox.digest_str(prox_rec_res.payload_digest) == PLAIN_SHA1
+
+    # content-type: application/gzip
+    mitm = HalfMockedMitm('http://localhost:%s/test_payload_digest-gzip' % http_daemon.server_port)
+    req, prox_rec_res = mitm.do_GET()
+    assert warcprox.digest_str(prox_rec_res.payload_digest) == GZIP_SHA1
+
+    # content-encoding: gzip
+    mitm = HalfMockedMitm('http://localhost:%s/test_payload_digest-ce-gzip' % http_daemon.server_port)
+    req, prox_rec_res = mitm.do_GET()
+    assert warcprox.digest_str(prox_rec_res.payload_digest) == GZIP_SHA1
+
+    # content-type: application/gzip && content-encoding: gzip
+    mitm = HalfMockedMitm('http://localhost:%s/test_payload_digest-gzip-ce-gzip' % http_daemon.server_port)
+    req, prox_rec_res = mitm.do_GET()
+    assert warcprox.digest_str(prox_rec_res.payload_digest) == GZIP_GZIP_SHA1
+
+    # chunked plain
+    mitm = HalfMockedMitm('http://localhost:%s/test_payload_digest-te-chunked' % http_daemon.server_port)
+    req, prox_rec_res = mitm.do_GET()
+    assert warcprox.digest_str(prox_rec_res.payload_digest) == PLAIN_SHA1
+
+    # chunked content-type: application/gzip
+    mitm = HalfMockedMitm('http://localhost:%s/test_payload_digest-gzip-te-chunked' % http_daemon.server_port)
+    req, prox_rec_res = mitm.do_GET()
+    assert warcprox.digest_str(prox_rec_res.payload_digest) == GZIP_SHA1
+
+    # chunked content-encoding: gzip
+    mitm = HalfMockedMitm('http://localhost:%s/test_payload_digest-ce-gzip-te-chunked' % http_daemon.server_port)
+    req, prox_rec_res = mitm.do_GET()
+    assert warcprox.digest_str(prox_rec_res.payload_digest) == GZIP_SHA1
+
+    # chunked content-type: application/gzip && content-encoding: gzip
+    mitm = HalfMockedMitm('http://localhost:%s/test_payload_digest-gzip-ce-gzip-te-chunked' % http_daemon.server_port)
+    req, prox_rec_res = mitm.do_GET()
+    assert warcprox.digest_str(prox_rec_res.payload_digest) == GZIP_GZIP_SHA1
 
 if __name__ == '__main__':
     pytest.main()

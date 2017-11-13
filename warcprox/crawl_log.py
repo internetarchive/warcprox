@@ -43,7 +43,7 @@ class CrawlLogger(object):
         if recorded_url.response_recorder:
             content_length = recorded_url.response_recorder.len - recorded_url.response_recorder.payload_offset
             payload_digest = warcprox.digest_str(
-                recorded_url.response_recorder.payload_digest,
+                recorded_url.payload_digest,
                 self.options.base32)
         else:
             # WARCPROX_WRITE_RECORD request
