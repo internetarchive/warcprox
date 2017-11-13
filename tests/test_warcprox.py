@@ -1441,11 +1441,14 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     assert response.status_code == 200
 
     start = time.time()
+    file = os.path.join(warcprox_.options.crawl_log_dir, 'test_crawl_log_1.log')
     while time.time() - start < 10:
-        if os.path.exists(os.path.join(
-            warcprox_.options.crawl_log_dir, 'test_crawl_log_1.log')):
+        if os.path.exists(file) and os.stat(file).st_size > 0:
             break
         time.sleep(0.5)
+    assert os.path.exists(file)
+    assert os.path.exists(os.path.join(
+        warcprox_.options.crawl_log_dir, 'crawl.log'))
 
     crawl_log = open(os.path.join(
         warcprox_.options.crawl_log_dir, 'crawl.log'), 'rb').read()
@@ -1499,14 +1502,14 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     assert response.status_code == 200
 
     start = time.time()
+    file = os.path.join(warcprox_.options.crawl_log_dir, 'test_crawl_log_2.log')
     while time.time() - start < 10:
-        if os.path.exists(os.path.join(
-            warcprox_.options.crawl_log_dir, 'test_crawl_log_2.log')):
+        if os.path.exists(file) and os.stat(file).st_size > 0:
             break
         time.sleep(0.5)
+    assert os.path.exists(file)
 
-    crawl_log_2 = open(os.path.join(
-        warcprox_.options.crawl_log_dir, 'test_crawl_log_2.log'), 'rb').read()
+    crawl_log_2 = open(file, 'rb').read()
 
     assert re.match(b'\A2[^\n]+\n\Z', crawl_log_2)
     assert crawl_log_2[24:31] == b'   200 '
@@ -1533,16 +1536,15 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     headers = {'Warcprox-Meta': json.dumps({'warc-prefix': 'test_crawl_log_3'})}
     response = requests.head(url, proxies=archiving_proxies, headers=headers)
 
+    file = os.path.join(warcprox_.options.crawl_log_dir, 'test_crawl_log_3.log')
     start = time.time()
     while time.time() - start < 10:
-        if os.path.exists(os.path.join(
-            warcprox_.options.crawl_log_dir, 'test_crawl_log_3.log')):
+        if os.path.exists(file) and os.stat(file).st_size > 0:
             break
         time.sleep(0.5)
 
-    crawl_log_3 = open(os.path.join(
-        warcprox_.options.crawl_log_dir, 'test_crawl_log_3.log'), 'rb').read()
-
+    assert os.path.exists(file)
+    crawl_log_3 = open(file, 'rb').read()
     assert re.match(b'\A2[^\n]+\n\Z', crawl_log_3)
     assert crawl_log_3[24:31] == b'   200 '
     assert crawl_log_3[31:42] == b'         0 '
@@ -1575,14 +1577,14 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     assert response.status_code == 204
 
     start = time.time()
+    file = os.path.join(warcprox_.options.crawl_log_dir, 'test_crawl_log_4.log')
     while time.time() - start < 10:
-        if os.path.exists(os.path.join(
-            warcprox_.options.crawl_log_dir, 'test_crawl_log_4.log')):
+        if os.path.exists(file) and os.stat(file).st_size > 0:
             break
         time.sleep(0.5)
 
-    crawl_log_4 = open(os.path.join(
-        warcprox_.options.crawl_log_dir, 'test_crawl_log_4.log'), 'rb').read()
+    assert os.path.exists(file)
+    crawl_log_4 = open(file, 'rb').read()
 
     assert re.match(b'\A2[^\n]+\n\Z', crawl_log_4)
     assert crawl_log_4[24:31] == b'   204 '
