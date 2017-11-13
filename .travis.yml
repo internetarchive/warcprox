@@ -39,7 +39,7 @@ before_install:
 - ping -c2 trough
 
 install:
-- pip install . pytest requests warcio
+- pip install . pytest requests warcio mock
 
 before_script:
 - ps ww -fHe

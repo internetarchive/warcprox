@@ -59,8 +59,8 @@ class TroughClient(object):
         self._promoter_thread = None
         if promotion_interval:
             self._promoter_thread = threading.Thread(
-                    target=self._promotrix, name='TroughClient-promoter',
-                    daemon=True)
+                    target=self._promotrix, name='TroughClient-promoter')
+            self._promoter_thread.setDaemon(True)
             self._promoter_thread.start()
 
     def _promotrix(self):
