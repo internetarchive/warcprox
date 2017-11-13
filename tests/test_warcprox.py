@@ -1721,6 +1721,24 @@ def test_payload_digest(warcprox_, http_daemon):
     req, prox_rec_res = mitm.do_GET()
     assert warcprox.digest_str(prox_rec_res.payload_digest) == GZIP_GZIP_SHA1
 
+def test_trough_segment_promotion(warcprox_):
+    if not warcprox_.options.rethinkdb_trough_db_url:
+        return
+    cli = warcprox.trough.TroughClient(
+            warcprox_.options.rethinkdb_trough_db_url, 3)
+    promoted = []
+    def mock(segment_id):
+        promoted.append(segment_id)
+    cli.promote = mock
+    cli.register_schema('default', 'create table foo (bar varchar(100))')
+    cli.write('my_seg', 'insert into foo (bar) values ("boof")')
+    assert promoted == []
+    time.sleep(3)
+    assert promoted == ['my_seg']
+    promoted = []
+    time.sleep(3)
+    assert promoted == []
+
 if __name__ == '__main__':
     pytest.main()
 

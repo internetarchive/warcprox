@@ -262,7 +262,7 @@ class TroughDedupDb(object):
     def __init__(self, options=warcprox.Options()):
         self.options = options
         self._trough_cli = warcprox.trough.TroughClient(
-                options.rethinkdb_trough_db_url)
+                options.rethinkdb_trough_db_url, promotion_interval=60*60)
 
     def start(self):
         self._trough_cli.register_schema(self.SCHEMA_ID, self.SCHEMA_SQL)
