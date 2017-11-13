@@ -428,7 +428,7 @@ class TroughDedupDb(object):
         if (records[0].get_header(warctools.WarcRecord.TYPE) == warctools.WarcRecord.RESPONSE
                 and recorded_url.response_recorder.payload_size() > 0):
             digest_key = warcprox.digest_str(
-                    recorded_url.response_recorder.payload_digest,
+                    recorded_url.payload_digest,
                     self.options.base32)
             if recorded_url.warcprox_meta and 'captures-bucket' in recorded_url.warcprox_meta:
                 self.save(
