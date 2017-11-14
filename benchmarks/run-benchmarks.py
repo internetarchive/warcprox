@@ -160,90 +160,9 @@ with different options.
 
 Benchmarking code uses asyncio/aiohttp and requires python 3.5 or later.
 '''
-    arg_parser = argparse.ArgumentParser(
-            prog=prog, description=desc,
-            formatter_class=warcprox.main.BetterArgumentDefaultsHelpFormatter)
+    arg_parser = warcprox.main._build_arg_parser()
+    arg_parser.description = desc
 
-    ### these warcprox options are not configurable for the benchmarks
-    # arg_parser.add_argument('-p', '--port', dest='port', default='8000',
-    #         type=int, help='port to listen on')
-    # arg_parser.add_argument('-b', '--address', dest='address',
-    #         default='localhost', help='address to listen on')
-    # arg_parser.add_argument('-c', '--cacert', dest='cacert',
-    #         default='./{0}-warcprox-ca.pem'.format(socket.gethostname()),
-    #         help='CA certificate file; if file does not exist, it will be created')
-    # arg_parser.add_argument('--certs-dir', dest='certs_dir',
-    #         default='./{0}-warcprox-ca'.format(socket.gethostname()),
-    #         help='where to store and load generated certificates')
-    # arg_parser.add_argument('-d', '--dir', dest='directory',
-    #         default='./warcs', help='where to write warcs')
-
-    arg_parser.add_argument('-z', '--gzip', dest='gzip', action='store_true',
-            help='write gzip-compressed warc records')
-    arg_parser.add_argument('-n', '--prefix', dest='prefix',
-            default='WARCPROX', help='WARC filename prefix')
-    arg_parser.add_argument(
-            '-s', '--size', dest='rollover_size', default=1000*1000*1000,
-            type=int, help='WARC file rollover size threshold in bytes')
-    arg_parser.add_argument('--rollover-idle-time',
-            dest='rollover_idle_time', default=None, type=int,
-            help="WARC file rollover idle time threshold in seconds (so that Friday's last open WARC doesn't sit there all weekend waiting for more data)")
-    try:
-        hash_algos = hashlib.algorithms_guaranteed
-    except AttributeError:
-        hash_algos = hashlib.algorithms
-    arg_parser.add_argument('-g', '--digest-algorithm', dest='digest_algorithm',
-            default='sha1', help='digest algorithm, one of {}'.format(', '.join(hash_algos)))
-    arg_parser.add_argument('--base32', dest='base32', action='store_true',
-            default=False, help='write digests in Base32 instead of hex')
-    arg_parser.add_argument('--method-filter', metavar='HTTP_METHOD',
-                            action='append', help='only record requests with the given http method(s) (can be used more than once)')
-    arg_parser.add_argument('--stats-db-file', dest='stats_db_file',
-            default='./warcprox.sqlite', help='persistent statistics database file; empty string or /dev/null disables statistics tracking')
-    arg_parser.add_argument('-P', '--playback-port', dest='playback_port',
-            type=int, default=None, help='port to listen on for instant playback')
-    arg_parser.add_argument('--playback-index-db-file', dest='playback_index_db_file',
-            default='./warcprox-playback-index.db',
-            help='playback index database file (only used if --playback-port is specified)')
-    group = arg_parser.add_mutually_exclusive_group()
-    group.add_argument('-j', '--dedup-db-file', dest='dedup_db_file',
-            default='./warcprox.sqlite', help='persistent deduplication database file; empty string or /dev/null disables deduplication')
-    group.add_argument('--rethinkdb-servers', dest='rethinkdb_servers',
-            help='rethinkdb servers, used for dedup and stats if specified; e.g. db0.foo.org,db0.foo.org:38015,db1.foo.org')
-    arg_parser.add_argument('--rethinkdb-db', dest='rethinkdb_db', default='warcprox',
-            help='rethinkdb database name (ignored unless --rethinkdb-servers is specified)')
-    arg_parser.add_argument('--rethinkdb-big-table',
-            dest='rethinkdb_big_table', action='store_true', default=False,
-            help='use a big rethinkdb table called "captures", instead of a small table called "dedup"; table is suitable for use as index for playback (ignored unless --rethinkdb-servers is specified)')
-    arg_parser.add_argument(
-            '--rethinkdb-big-table-name', dest='rethinkdb_big_table_name',
-            default='captures', help=argparse.SUPPRESS)
-    arg_parser.add_argument('--queue-size', dest='queue_size', type=int,
-            default=500, help=argparse.SUPPRESS)
-    arg_parser.add_argument('--max-threads', dest='max_threads', type=int,
-            help=argparse.SUPPRESS)
-    arg_parser.add_argument('--profile', action='store_true', default=False,
-            help=argparse.SUPPRESS)
-    arg_parser.add_argument(
-            '--onion-tor-socks-proxy', dest='onion_tor_socks_proxy',
-            default=None, help=(
-                'host:port of tor socks proxy, used only to connect to '
-                '.onion sites'))
-    arg_parser.add_argument(
-            '--plugin', metavar='PLUGIN_CLASS', dest='plugins',
-            action='append', help=(
-                'Qualified name of plugin class, e.g. "mypkg.mymod.MyClass". '
-                'May be used multiple times to register multiple plugins. '
-                'Plugin classes are loaded from the regular python module '
-                'search path. They will be instantiated with no arguments and '
-                'must have a method `notify(self, recorded_url, records)` '
-                'which will be called for each url, after warc records have '
-                'been written.'))
-    arg_parser.add_argument('--version', action='version',
-            version="warcprox {}".format(warcprox.__version__))
-    arg_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true')
-    arg_parser.add_argument('--trace', dest='trace', action='store_true')
-    arg_parser.add_argument('-q', '--quiet', dest='quiet', action='store_true')
     arg_parser.add_argument(
             '--requests', dest='requests', type=int, default=200,
             help='number of urls to fetch')
@@ -253,6 +172,15 @@ Benchmarking code uses asyncio/aiohttp and requires python 3.5 or later.
     arg_parser.add_argument(
             '--skip-baseline', dest='skip_baseline', action='store_true',
             help='skip the baseline bechmarks')
+
+    # filter out options that are not configurable for the benchmarks
+    filtered = []
+    for action in arg_parser._action_groups[1]._group_actions:
+        if action.dest not in (
+                'port', 'address', 'cacert', 'certs_dir', 'directory'):
+            filtered.append(action)
+    arg_parser._action_groups[1]._group_actions = filtered
+
     return arg_parser
 
 if __name__ == '__main__':
