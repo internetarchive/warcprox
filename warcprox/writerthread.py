@@ -56,23 +56,15 @@ class WarcWriterThread(threading.Thread):
         self.idle = None
         self.method_filter = set(method.upper() for method in self.options.method_filter or [])
 
-    def run(self):
         if self.options.profile:
             import cProfile
-            import pstats
-            import io
-            profiler = cProfile.Profile()
+            self.profiler = cProfile.Profile()
 
-            profiler.enable()
+    def run(self):
+        if self.options.profile:
+            self.profiler.enable()
             self._run()
-            profiler.disable()
-
-            buf = io.StringIO()
-            stats = pstats.Stats(profiler, stream=buf)
-            stats.sort_stats('cumulative')
-            stats.print_stats(0.1)
-            self.logger.notice(
-                    '%s performance profile:\n%s', self, buf.getvalue())
+            self.profiler.disable()
         else:
             self._run()
 
