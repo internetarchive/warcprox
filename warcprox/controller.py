@@ -254,6 +254,9 @@ class WarcproxController(object):
                 #     last_mem_dbg = datetime.datetime.utcnow()
 
                 time.sleep(0.5)
+
+            if self.options.profile:
+                self._dump_profiling()
         except:
             self.logger.critical(
                     "shutting down in response to fatal exception",
@@ -261,4 +264,24 @@ class WarcproxController(object):
             pass
         finally:
             self.shutdown()
+
+    def _dump_profiling(self):
+        import pstats
+        import tempfile
+        import os
+        import io
+        with tempfile.TemporaryDirectory() as tmpdir:
+            files = []
+            for th_id, profiler in self.proxy.profilers.items():
+                file = os.path.join(tmpdir, '%s.dat' % th_id)
+                profiler.dump_stats(file)
+                files.append(file)
+
+            buf = io.StringIO()
+            stats = pstats.Stats(*files, stream=buf)
+            stats.sort_stats('cumulative')
+            stats.print_stats(0.1)
+            self.logger.notice(
+                    'aggregate performance profile of %s proxy threads:\n%s',
+                    len(files), buf.getvalue())
 

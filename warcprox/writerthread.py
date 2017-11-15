@@ -33,7 +33,6 @@ import time
 from datetime import datetime
 from hanzo import warctools
 import warcprox
-import cProfile
 import sys
 
 class WarcWriterThread(threading.Thread):
@@ -59,7 +58,21 @@ class WarcWriterThread(threading.Thread):
 
     def run(self):
         if self.options.profile:
-            cProfile.runctx('self._run()', globals(), locals(), sort='cumulative')
+            import cProfile
+            import pstats
+            import io
+            profiler = cProfile.Profile()
+
+            profiler.enable()
+            self._run()
+            profiler.disable()
+
+            buf = io.StringIO()
+            stats = pstats.Stats(profiler, stream=buf)
+            stats.sort_stats('cumulative')
+            stats.print_stats(0.1)
+            self.logger.notice(
+                    '%s performance profile:\n%s', self, buf.getvalue())
         else:
             self._run()
 
