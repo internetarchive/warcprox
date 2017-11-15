@@ -283,12 +283,11 @@ class WarcproxController(object):
                     'aggregate performance profile of %s proxy threads:\n%s',
                     len(files), buf.getvalue())
 
-
             # warc writer threads
             files = []
             for wwt in self.warc_writer_threads:
-                file = os.path.join(tmpdir, '%s.dat' % th_id)
-                profiler.dump_stats(file)
+                file = os.path.join(tmpdir, '%s.dat' % wwt.ident)
+                wwt.profiler.dump_stats(file)
                 files.append(file)
 
             buf = io.StringIO()

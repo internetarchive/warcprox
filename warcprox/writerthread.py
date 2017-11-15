@@ -56,12 +56,10 @@ class WarcWriterThread(threading.Thread):
         self.idle = None
         self.method_filter = set(method.upper() for method in self.options.method_filter or [])
 
+    def run(self):
         if self.options.profile:
             import cProfile
             self.profiler = cProfile.Profile()
-
-    def run(self):
-        if self.options.profile:
             self.profiler.enable()
             self._run()
             self.profiler.disable()
