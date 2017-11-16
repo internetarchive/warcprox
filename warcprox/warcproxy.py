@@ -217,8 +217,9 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 client_ip=self.client_address[0],
                 content_type=content_type, method=self.command,
                 timestamp=timestamp, host=self.hostname,
-                duration=datetime.datetime.utcnow() - timestamp,
-                referer=self.headers.get('referer'))
+                duration=datetime.datetime.utcnow()-timestamp,
+                referer=self.headers.get('referer'),
+                payload_digest=prox_rec_res.payload_digest)
         self.server.recorded_url_q.put(recorded_url)
 
         return recorded_url
@@ -293,16 +294,19 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 if raw_warcprox_meta:
                     warcprox_meta = json.loads(raw_warcprox_meta)
 
-                rec_custom = RecordedUrl(url=self.url,
-                                         request_data=request_data,
-                                         response_recorder=None,
-                                         remote_ip=b'',
-                                         warcprox_meta=warcprox_meta,
-                                         content_type=self.headers['Content-Type'],
-                                         custom_type=warc_type or self.headers['WARC-Type'].encode('utf-8'),
-                                         status=204, size=len(request_data),
-                                         client_ip=self.client_address[0],
-                                         method=self.command, timestamp=timestamp)
+                rec_custom = RecordedUrl(
+                        url=self.url,
+                        request_data=request_data,
+                        response_recorder=None,
+                        remote_ip=b'',
+                        warcprox_meta=warcprox_meta,
+                        content_type=self.headers['Content-Type'],
+                        custom_type=warc_type or self.headers['WARC-Type'].encode('utf-8'),
+                        status=204, size=len(request_data),
+                        client_ip=self.client_address[0],
+                        method=self.command,
+                        timestamp=timestamp,
+                        duration=datetime.datetime.utcnow()-timestamp)
 
                 self.server.recorded_url_q.put(rec_custom)
                 self.send_response(204, 'OK')
@@ -325,7 +329,8 @@ class RecordedUrl:
     def __init__(self, url, request_data, response_recorder, remote_ip,
             warcprox_meta=None, content_type=None, custom_type=None,
             status=None, size=None, client_ip=None, method=None,
-            timestamp=None, host=None, duration=None, referer=None):
+            timestamp=None, host=None, duration=None, referer=None,
+            payload_digest=None):
         # XXX should test what happens with non-ascii url (when does
         # url-encoding happen?)
         if type(url) is not bytes:
@@ -363,6 +368,7 @@ class RecordedUrl:
         self.host = host
         self.duration = duration
         self.referer = referer
+        self.payload_digest = payload_digest
 
 # inherit from object so that multiple inheritance from this class works
 # properly in python 2
