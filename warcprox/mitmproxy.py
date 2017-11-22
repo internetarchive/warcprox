@@ -550,12 +550,11 @@ class PooledMitmProxy(PooledMixIn, MitmProxy):
 
     def __init__(self, max_threads, options=warcprox.Options()):
         PooledMixIn.__init__(self, max_threads)
+        self.profilers = {}
 
         if options.profile:
-            self.profilers = {}
             self.process_request_thread = self._profile_process_request_thread
         else:
-            self.profilers
             self.process_request_thread = self._process_request_thread
 
     def _profile_process_request_thread(self, request, client_address):
