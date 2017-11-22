@@ -33,7 +33,6 @@ import time
 from datetime import datetime
 from hanzo import warctools
 import warcprox
-import cProfile
 import sys
 
 class WarcWriterThread(threading.Thread):
@@ -59,7 +58,11 @@ class WarcWriterThread(threading.Thread):
 
     def run(self):
         if self.options.profile:
-            cProfile.runctx('self._run()', globals(), locals(), sort='cumulative')
+            import cProfile
+            self.profiler = cProfile.Profile()
+            self.profiler.enable()
+            self._run()
+            self.profiler.disable()
         else:
             self._run()
 

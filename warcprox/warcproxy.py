@@ -311,7 +311,10 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 self.server.recorded_url_q.put(rec_custom)
                 self.send_response(204, 'OK')
             else:
-                self.send_error(400, 'Bad request')
+                self.send_error(400, message='Bad request', explain=(
+                    'Bad request. WARC-Type, Content-Length, and Content-Type '
+                    'request headers required for WARCPROX_WRITE_RECORD '
+                    'request.'))
 
             self.end_headers()
         except:
@@ -425,7 +428,8 @@ class WarcProxy(SingleThreadedWarcProxy, warcprox.mitmproxy.PooledMitmProxy):
             self.logger.info(
                     "max_threads=%s set by command line option",
                     options.max_threads)
-        warcprox.mitmproxy.PooledMitmProxy.__init__(self, options.max_threads)
+        warcprox.mitmproxy.PooledMitmProxy.__init__(
+                self, options.max_threads, options)
         SingleThreadedWarcProxy.__init__(
                 self, ca, recorded_url_q, stats_db, options)
 

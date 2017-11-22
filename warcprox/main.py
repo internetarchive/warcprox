@@ -148,6 +148,9 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
     arg_parser.add_argument('--profile', action='store_true', default=False,
             help=argparse.SUPPRESS)
     arg_parser.add_argument(
+            '--writer-threads', dest='writer_threads', type=int, default=None,
+            help=argparse.SUPPRESS)
+    arg_parser.add_argument(
             '--onion-tor-socks-proxy', dest='onion_tor_socks_proxy',
             default=None, help=(
                 'host:port of tor socks proxy, used only to connect to '
@@ -273,12 +276,14 @@ def init_controller(args):
     # number of warc writer threads = sqrt(proxy.max_threads)
     # I came up with this out of thin air because it strikes me as reasonable
     # 1=>1 2=>1 5=>2 10=>3 50=>7 100=>10 200=>14 500=>22 1000=>32 2000=>45
+    num_writer_threads = args.writer_threads or int(proxy.max_threads ** 0.5)
+    logging.debug('initializing %d warc writer threads', num_writer_threads)
     warc_writer_threads = [
             warcprox.writerthread.WarcWriterThread(
                 name='WarcWriterThread%03d' % i, recorded_url_q=recorded_url_q,
                 writer_pool=writer_pool, dedup_db=dedup_db,
                 listeners=listeners, options=options)
-            for i in range(int(proxy.max_threads ** 0.5))]
+            for i in range(num_writer_threads)]
 
     if args.rethinkdb_services_url:
         parsed = doublethink.parse_rethinkdb_url(

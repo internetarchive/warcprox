@@ -363,9 +363,12 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
 
         try:
             return self._proxy_request()
-        except:
-            self.logger.error("exception proxying request", exc_info=True)
-            raise
+        except Exception as e:
+            self.logger.error(
+                    'error from remote server(?) %r: %r',
+                    self.requestline, e, exc_info=True)
+            self.send_error(502, str(e))
+            return
 
     def _proxy_request(self, extra_response_headers={}):
         '''
@@ -425,10 +428,6 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 buf = prox_rec_res.read(65536)
 
             self.log_request(prox_rec_res.status, prox_rec_res.recorder.len)
-        except Exception as e:
-            self.logger.error(
-                    "%r proxying %s %s", e, self.command, self.url,
-                    exc_info=True)
         finally:
             # Let's close off the remote end
             if prox_rec_res:
@@ -541,14 +540,32 @@ class PooledMitmProxy(PooledMixIn, MitmProxy):
     # This value is passed as the "backlog" argument to listen(2). The default
     # value from socketserver.TCPServer is 5. Increasing this value is part of
     # the solution to client connections being closed suddenly and this message
-    # appearing in kernel log on linux: "TCP: request_sock_TCP: # Possible SYN
-    # flooding on port 8000. Sending cookies.  Check SNMP # counters." I think
+    # appearing in kernel log on linux: "TCP: request_sock_TCP: Possible SYN
+    # flooding on port 8000. Sending cookies.  Check SNMP counters." I think
     # this comes into play because we don't always accept(2) immediately (see
     # PooledMixIn.get_request()).
     # See also https://blog.dubbelboer.com/2012/04/09/syn-cookies.html
     request_queue_size = 4096
 
-    def process_request_thread(self, request, client_address):
+    def __init__(self, max_threads, options=warcprox.Options()):
+        PooledMixIn.__init__(self, max_threads)
+        self.profilers = {}
+
+        if options.profile:
+            self.process_request_thread = self._profile_process_request_thread
+        else:
+            self.process_request_thread = self._process_request_thread
+
+    def _profile_process_request_thread(self, request, client_address):
+        if not threading.current_thread().ident in self.profilers:
+            import cProfile
+            self.profilers[threading.current_thread().ident] = cProfile.Profile()
+        profiler = self.profilers[threading.current_thread().ident]
+        profiler.enable()
+        self._process_request_thread(request, client_address)
+        profiler.disable()
+
+    def _process_request_thread(self, request, client_address):
         '''
         This an almost verbatim copy/paste of
         socketserver.ThreadingMixIn.process_request_thread.
