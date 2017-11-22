@@ -237,6 +237,9 @@ class _TestHttpRequestHandler(http_server.BaseHTTPRequestHandler):
                 raise Exception('bad path')
             headers = b'HTTP/1.1 200 OK\r\n' + actual_headers +  b'\r\n'
             logging.info('headers=%r payload=%r', headers, payload)
+        elif self.path == '/empty-response':
+            headers = b''
+            payload = b''
         else:
             payload = b'404 Not Found\n'
             headers = (b'HTTP/1.1 404 Not Found\r\n'
@@ -1642,6 +1645,18 @@ def test_long_warcprox_meta(
         assert record.rec_headers.get_header('warc-target-uri') == url
         with pytest.raises(StopIteration):
             next(rec_iter)
+
+def test_empty_response(
+        warcprox_, http_daemon, https_daemon, archiving_proxies,
+        playback_proxies):
+
+    url = 'http://localhost:%s/empty-response' % http_daemon.server_port
+    response = requests.get(url, proxies=archiving_proxies, verify=False)
+    assert response.status_code == 500
+
+    url = 'https://localhost:%s/empty-response' % http_daemon.server_port
+    response = requests.get(url, proxies=archiving_proxies, verify=False)
+    assert response.status_code == 500
 
 def test_payload_digest(warcprox_, http_daemon):
     '''
