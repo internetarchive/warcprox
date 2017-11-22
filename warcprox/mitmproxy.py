@@ -363,9 +363,12 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
 
         try:
             return self._proxy_request()
-        except:
-            self.logger.error("exception proxying request", exc_info=True)
-            raise
+        except Exception as e:
+            self.logger.error(
+                    'error from remote server(?) %r: %r',
+                    self.requestline, e, exc_info=True)
+            self.send_error(502, str(e))
+            return
 
     def _proxy_request(self, extra_response_headers={}):
         '''
@@ -425,10 +428,6 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 buf = prox_rec_res.read(65536)
 
             self.log_request(prox_rec_res.status, prox_rec_res.recorder.len)
-        except Exception as e:
-            self.logger.error(
-                    "%r proxying %s %s", e, self.command, self.url,
-                    exc_info=True)
         finally:
             # Let's close off the remote end
             if prox_rec_res:
