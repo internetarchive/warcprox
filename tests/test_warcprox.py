@@ -1653,12 +1653,12 @@ def test_empty_response(
     url = 'http://localhost:%s/empty-response' % http_daemon.server_port
     response = requests.get(url, proxies=archiving_proxies, verify=False)
     assert response.status_code == 502
-    assert response.reason == 'Remote end closed connection without response'
+    # this is the reason in python >= 3.5 but not in 3.4 and 2.7
+    # assert response.reason == 'Remote end closed connection without response'
 
     url = 'https://localhost:%s/empty-response' % https_daemon.server_port
     response = requests.get(url, proxies=archiving_proxies, verify=False)
     assert response.status_code == 502
-    assert response.reason == 'Remote end closed connection without response'
 
 def test_payload_digest(warcprox_, http_daemon):
     '''
