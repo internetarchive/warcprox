@@ -70,7 +70,8 @@ class TroughClient(object):
                 with self._dirty_segments_lock:
                     dirty_segments = list(self._dirty_segments)
                     self._dirty_segments.clear()
-                logging.info('promoting %s trough segments')
+                logging.info(
+                        'promoting %s trough segments', len(dirty_segments))
                 for segment in dirty_segments:
                     try:
                         self.promote(segment)
