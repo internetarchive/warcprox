@@ -39,8 +39,9 @@ deps = [
     'certauth==1.1.6',
     'warctools',
     'urlcanon>=0.1.dev16',
+    'doublethink>=0.2.0.dev87',
     'urllib3',
-    'doublethink>=0.2.0.dev81',
+    'requests>=2.0.1',
     'PySocks',
     'cryptography!=2.1.1', # 2.1.1 installation is failing on ubuntu
 ]
@@ -60,7 +61,7 @@ setuptools.setup(
         license='GPL',
         packages=['warcprox'],
         install_requires=deps,
-        tests_require=['requests>=2.0.1', 'mock', 'pytest', 'warcio'],  # >=2.0.1 for https://github.com/kennethreitz/requests/pull/1636
+        tests_require=['mock', 'pytest', 'warcio'],
         cmdclass = {'test': PyTest},
         test_suite='warcprox.tests',
         entry_points={

@@ -88,6 +88,7 @@ def _send(self, data):
 # http_client.HTTPConnection.send = _send
 
 logging.basicConfig(
+        # stream=sys.stdout, level=logging.DEBUG, # level=warcprox.TRACE,
         stream=sys.stdout, level=warcprox.TRACE,
         format='%(asctime)s %(process)d %(levelname)s %(threadName)s '
         '%(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s')
@@ -332,7 +333,7 @@ def https_daemon(request, cert):
     return https_daemon
 
 @pytest.fixture(scope="module")
-def warcprox_(request, rethinkdb_servers, rethinkdb_big_table):
+def warcprox_(request):
     orig_dir = os.getcwd()
     work_dir = tempfile.mkdtemp()
     logging.info('changing to working directory %r', work_dir)
@@ -345,12 +346,15 @@ def warcprox_(request, rethinkdb_servers, rethinkdb_big_table):
             '--playback-port=0',
             '--onion-tor-socks-proxy=localhost:9050',
             '--crawl-log-dir=crawl-logs']
-    if rethinkdb_servers:
-        rethinkdb_db = 'warcprox_test_%s' % ''.join(random.sample("abcdefghijklmnopqrstuvwxyz0123456789_",8))
-        argv.append('--rethinkdb-servers=%s' % rethinkdb_servers)
-        argv.append('--rethinkdb-db=%s' % rethinkdb_db)
-    if rethinkdb_big_table:
-        argv.append('--rethinkdb-big-table')
+    if request.config.getoption('--rethinkdb-dedup-url'):
+        argv.append('--rethinkdb-dedup-url=%s' % request.config.getoption('--rethinkdb-dedup-url'))
+        # test these here only
+        argv.append('--rethinkdb-stats-url=rethinkdb://localhost/test0/stats')
+        argv.append('--rethinkdb-services-url=rethinkdb://localhost/test0/services')
+    elif request.config.getoption('--rethinkdb-big-table-url'):
+        argv.append('--rethinkdb-big-table-url=%s' % request.config.getoption('--rethinkdb-big-table-url'))
+    elif request.config.getoption('--rethinkdb-trough-db-url'):
+        argv.append('--rethinkdb-trough-db-url=%s' % request.config.getoption('--rethinkdb-trough-db-url'))
 
     args = warcprox.main.parse_args(argv)
     warcprox_ = warcprox.main.init_controller(args)
@@ -363,10 +367,22 @@ def warcprox_(request, rethinkdb_servers, rethinkdb_big_table):
     def fin():
         warcprox_.stop.set()
         warcprox_thread.join()
-        if rethinkdb_servers:
-            logging.info('dropping rethinkdb database %r', rethinkdb_db)
-            rr = doublethink.Rethinker(rethinkdb_servers)
-            result = rr.db_drop(rethinkdb_db).run()
+        for rethinkdb_url in (
+                warcprox_.options.rethinkdb_big_table_url,
+                warcprox_.options.rethinkdb_dedup_url,
+                warcprox_.options.rethinkdb_services_url,
+                warcprox_.options.rethinkdb_stats_url):
+            if not rethinkdb_url:
+                continue
+            parsed = doublethink.parse_rethinkdb_url(rethinkdb_url)
+            rr = doublethink.Rethinker(servers=parsed.hosts)
+            try:
+                logging.info('dropping rethinkdb database %r', parsed.database)
+                rr.db_drop(parsed.database).run()
+            except Exception as e:
+                logging.warn(
+                        'problem deleting rethinkdb database %r: %s',
+                        parsed.database, e)
         logging.info('deleting working directory %r', work_dir)
         os.chdir(orig_dir)
         shutil.rmtree(work_dir)
@@ -500,6 +516,7 @@ def test_dedup_http(http_daemon, warcprox_, archiving_proxies, playback_proxies)
     # {u'id': u'<urn:uuid:e691dc0f-4bb9-4ad8-9afb-2af836aa05e4>', u'url': u'https://localhost:62841/c/d', u'date': u'2013-11-22T00:14:37Z'}
     dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
             b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
+    assert dedup_lookup
     assert dedup_lookup['url'] == url.encode('ascii')
     assert re.match(br'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$', dedup_lookup['id'])
     assert re.match(br'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$', dedup_lookup['date'])
@@ -573,6 +590,7 @@ def test_dedup_https(https_daemon, warcprox_, archiving_proxies, playback_proxie
     # {u'id': u'<urn:uuid:e691dc0f-4bb9-4ad8-9afb-2af836aa05e4>', u'url': u'https://localhost:62841/c/d', u'date': u'2013-11-22T00:14:37Z'}
     dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
             b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
+    assert dedup_lookup
     assert dedup_lookup['url'] == url.encode('ascii')
     assert re.match(br'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$', dedup_lookup['id'])
     assert re.match(br'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$', dedup_lookup['date'])
@@ -1719,6 +1737,24 @@ def test_payload_digest(warcprox_, http_daemon):
     mitm = HalfMockedMitm('http://localhost:%s/test_payload_digest-gzip-ce-gzip-te-chunked' % http_daemon.server_port)
     req, prox_rec_res = mitm.do_GET()
     assert warcprox.digest_str(prox_rec_res.payload_digest) == GZIP_GZIP_SHA1
+
+def test_trough_segment_promotion(warcprox_):
+    if not warcprox_.options.rethinkdb_trough_db_url:
+        return
+    cli = warcprox.trough.TroughClient(
+            warcprox_.options.rethinkdb_trough_db_url, 3)
+    promoted = []
+    def mock(segment_id):
+        promoted.append(segment_id)
+    cli.promote = mock
+    cli.register_schema('default', 'create table foo (bar varchar(100))')
+    cli.write('my_seg', 'insert into foo (bar) values ("boof")')
+    assert promoted == []
+    time.sleep(3)
+    assert promoted == ['my_seg']
+    promoted = []
+    time.sleep(3)
+    assert promoted == []
 
 if __name__ == '__main__':
     pytest.main()

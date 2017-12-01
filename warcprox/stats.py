@@ -32,6 +32,7 @@ import datetime
 import urlcanon
 import sqlite3
 import copy
+import doublethink
 
 def _empty_bucket(bucket):
     return {
@@ -190,11 +191,12 @@ class RethinkStatsDb(StatsDb):
     """Updates database in batch every 2.0 seconds"""
     logger = logging.getLogger("warcprox.stats.RethinkStatsDb")
 
-    def __init__(self, rethinker, table="stats", shards=None, replicas=None, options=warcprox.Options()):
-        self.rr = rethinker
-        self.table = table
-        self.shards = shards or 1  # 1 shard by default because it's probably a small table
-        self.replicas = replicas or min(3, len(self.rr.servers))
+    def __init__(self, options=warcprox.Options()):
+        parsed = doublethink.parse_rethinkdb_url(options.rethinkdb_stats_url)
+        self.rr = doublethink.Rethinker(
+                servers=parsed.hosts, db=parsed.database)
+        self.table = parsed.table
+        self.replicas = min(3, len(self.rr.servers))
         self._ensure_db_table()
         self.options = options
 
@@ -272,10 +274,10 @@ class RethinkStatsDb(StatsDb):
         if not self.table in tables:
             self.logger.info(
                     "creating rethinkdb table %r in database %r shards=%r "
-                    "replicas=%r", self.table, self.rr.dbname, self.shards,
+                    "replicas=%r", self.table, self.rr.dbname, 1,
                     self.replicas)
             self.rr.table_create(
-                    self.table, primary_key="bucket", shards=self.shards,
+                    self.table, primary_key="bucket", shards=1,
                     replicas=self.replicas).run()
 
     def close(self):

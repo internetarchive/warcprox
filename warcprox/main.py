@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# vim: set fileencoding=utf-8:
 '''
 warcprox/main.py - entrypoint for warcprox executable, parses command line
 arguments, initializes components, starts controller, handles signals
@@ -58,9 +59,9 @@ class BetterArgumentDefaultsHelpFormatter(
         if isinstance(action, argparse._StoreConstAction):
             return action.help
         else:
-            return super()._get_help_string(action)
+            return argparse.ArgumentDefaultsHelpFormatter._get_help_string(self, action)
 
-def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
+def _build_arg_parser(prog):
     arg_parser = argparse.ArgumentParser(prog=prog,
             description='warcprox - WARC writing MITM HTTP/S proxy',
             formatter_class=BetterArgumentDefaultsHelpFormatter)
@@ -98,8 +99,18 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
             default=False, help='write digests in Base32 instead of hex')
     arg_parser.add_argument('--method-filter', metavar='HTTP_METHOD',
                             action='append', help='only record requests with the given http method(s) (can be used more than once)')
-    arg_parser.add_argument('--stats-db-file', dest='stats_db_file',
-            default='./warcprox.sqlite', help='persistent statistics database file; empty string or /dev/null disables statistics tracking')
+
+    group = arg_parser.add_mutually_exclusive_group()
+    group.add_argument(
+            '--stats-db-file', dest='stats_db_file',
+            default='./warcprox.sqlite', help=(
+                'persistent statistics database file; empty string or '
+                '/dev/null disables statistics tracking'))
+    group.add_argument(
+            '--rethinkdb-stats-url', dest='rethinkdb_stats_url', help=(
+                'rethinkdb stats table url, e.g. rethinkdb://db0.foo.org,'
+                'db1.foo.org:38015/my_warcprox_db/my_stats_table'))
+
     arg_parser.add_argument('-P', '--playback-port', dest='playback_port',
             type=int, default=None, help='port to listen on for instant playback')
     arg_parser.add_argument('--playback-index-db-file', dest='playback_index_db_file',
@@ -108,18 +119,27 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
     group = arg_parser.add_mutually_exclusive_group()
     group.add_argument('-j', '--dedup-db-file', dest='dedup_db_file',
             default='./warcprox.sqlite', help='persistent deduplication database file; empty string or /dev/null disables deduplication')
+    group.add_argument(
+            '--rethinkdb-dedup-url', dest='rethinkdb_dedup_url', help=(
+                'rethinkdb dedup url, e.g. rethinkdb://db0.foo.org,'
+                'db1.foo.org:38015/my_warcprox_db/my_dedup_table'))
+    group.add_argument(
+            '--rethinkdb-big-table-url', dest='rethinkdb_big_table_url', help=(
+                'rethinkdb big table url (table will be populated with '
+                'various capture information and is suitable for use as '
+                'index for playback), e.g. rethinkdb://db0.foo.org,'
+                'db1.foo.org:38015/my_warcprox_db/captures'))
+    group.add_argument(
+            '--rethinkdb-trough-db-url', dest='rethinkdb_trough_db_url', help=(
+                '🐷   url pointing to trough configuration rethinkdb database, '
+                'e.g. rethinkdb://db0.foo.org,db1.foo.org:38015'
+                '/trough_configuration'))
     group.add_argument('--cdxserver-dedup', dest='cdxserver_dedup',
             help='use a CDX Server URL for deduplication; e.g. https://web.archive.org/cdx/search')
-    group.add_argument('--rethinkdb-servers', dest='rethinkdb_servers',
-            help='rethinkdb servers, used for dedup and stats if specified; e.g. db0.foo.org,db0.foo.org:38015,db1.foo.org')
-    arg_parser.add_argument('--rethinkdb-db', dest='rethinkdb_db', default='warcprox',
-            help='rethinkdb database name (ignored unless --rethinkdb-servers is specified)')
-    arg_parser.add_argument('--rethinkdb-big-table',
-            dest='rethinkdb_big_table', action='store_true', default=False,
-            help='use a big rethinkdb table called "captures", instead of a small table called "dedup"; table is suitable for use as index for playback (ignored unless --rethinkdb-servers is specified)')
     arg_parser.add_argument(
-            '--rethinkdb-big-table-name', dest='rethinkdb_big_table_name',
-            default='captures', help=argparse.SUPPRESS)
+            '--rethinkdb-services-url', dest='rethinkdb_services_url', help=(
+                'rethinkdb service registry table url; if provided, warcprox '
+                'will create and heartbeat entry for itself'))
     arg_parser.add_argument('--queue-size', dest='queue_size', type=int,
             default=500, help=argparse.SUPPRESS)
     arg_parser.add_argument('--max-threads', dest='max_threads', type=int,
@@ -189,30 +209,25 @@ def init_controller(args):
         exit(1)
 
     listeners = []
-    if args.rethinkdb_servers:
-        rr = doublethink.Rethinker(
-                args.rethinkdb_servers.split(","), args.rethinkdb_db)
-        if args.rethinkdb_big_table:
-            captures_db = warcprox.bigtable.RethinkCaptures(
-                    rr, table=args.rethinkdb_big_table_name, options=options)
-            dedup_db = warcprox.bigtable.RethinkCapturesDedup(
-                    captures_db, options=options)
-            listeners.append(captures_db)
-        else:
-            dedup_db = warcprox.dedup.RethinkDedupDb(rr, options=options)
-            listeners.append(dedup_db)
+
+    if args.rethinkdb_dedup_url:
+        dedup_db = warcprox.dedup.RethinkDedupDb(options=options)
+    elif args.rethinkdb_big_table_url:
+        dedup_db = warcprox.bigtable.RethinkCapturesDedup(options=options)
+    elif args.rethinkdb_trough_db_url:
+        dedup_db = warcprox.dedup.TroughDedupDb(options)
     elif args.cdxserver_dedup:
         dedup_db = warcprox.dedup.CdxServerDedup(cdx_url=args.cdxserver_dedup)
-        listeners.append(dedup_db)
     elif args.dedup_db_file in (None, '', '/dev/null'):
         logging.info('deduplication disabled')
         dedup_db = None
     else:
         dedup_db = warcprox.dedup.DedupDb(args.dedup_db_file, options=options)
+    if dedup_db:
         listeners.append(dedup_db)
 
-    if args.rethinkdb_servers:
-        stats_db = warcprox.stats.RethinkStatsDb(rr, options=options)
+    if args.rethinkdb_stats_url:
+        stats_db = warcprox.stats.RethinkStatsDb(options=options)
         listeners.append(stats_db)
     elif args.stats_db_file in (None, '', '/dev/null'):
         logging.info('statistics tracking disabled')
@@ -269,8 +284,11 @@ def init_controller(args):
                 listeners=listeners, options=options)
             for i in range(num_writer_threads)]
 
-    if args.rethinkdb_servers:
-        svcreg = doublethink.ServiceRegistry(rr)
+    if args.rethinkdb_services_url:
+        parsed = doublethink.parse_rethinkdb_url(
+                options.rethinkdb_services_url)
+        rr = doublethink.Rethinker(servers=parsed.hosts, db=parsed.database)
+        svcreg = doublethink.ServiceRegistry(rr, table=parsed.table)
     else:
         svcreg = None
 
@@ -280,7 +298,7 @@ def init_controller(args):
 
     return controller
 
-def parse_args(argv=sys.argv):
+def parse_args(argv):
     '''
     Parses command line arguments with argparse.
     '''
@@ -288,11 +306,11 @@ def parse_args(argv=sys.argv):
     args = arg_parser.parse_args(args=argv[1:])
     return args
 
-def main(argv=sys.argv):
+def main(argv=None):
     '''
     Main method, entry point of warcprox command.
     '''
-    args = parse_args(argv)
+    args = parse_args(argv or sys.argv)
 
     if args.trace:
         loglevel = warcprox.TRACE
@@ -304,8 +322,7 @@ def main(argv=sys.argv):
         loglevel = logging.INFO
 
     logging.basicConfig(
-            stream=sys.stdout, level=loglevel,
-            format=(
+            stream=sys.stdout, level=loglevel, format=(
                 '%(asctime)s %(process)d %(levelname)s %(threadName)s '
                 '%(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s'))
 
@@ -324,7 +341,7 @@ def main(argv=sys.argv):
 
     controller.run_until_shutdown()
 
-def ensure_rethinkdb_tables():
+def ensure_rethinkdb_tables(argv=None):
     '''
     Creates rethinkdb tables if they don't already exist. Warcprox normally
     creates the tables it needs on demand at startup, but if multiple instances
@@ -332,40 +349,74 @@ def ensure_rethinkdb_tables():
     tables. So it's a good idea to use this utility at an early step when
     spinning up a cluster.
     '''
+    argv = argv or sys.argv
     arg_parser = argparse.ArgumentParser(
-            prog=os.path.basename(sys.argv[0]),
+            prog=os.path.basename(argv[0]),
             formatter_class=BetterArgumentDefaultsHelpFormatter)
     arg_parser.add_argument(
-            '--rethinkdb-servers', dest='rethinkdb_servers', default='localhost',
-            help='rethinkdb servers e.g. db0.foo.org,db0.foo.org:38015,db1.foo.org')
+            '--rethinkdb-stats-url', dest='rethinkdb_stats_url', help=(
+                'rethinkdb stats table url, e.g. rethinkdb://db0.foo.org,'
+                'db1.foo.org:38015/my_warcprox_db/my_stats_table'))
+    group = arg_parser.add_mutually_exclusive_group()
+    group.add_argument(
+            '--rethinkdb-dedup-url', dest='rethinkdb_dedup_url', help=(
+                'rethinkdb dedup url, e.g. rethinkdb://db0.foo.org,'
+                'db1.foo.org:38015/my_warcprox_db/my_dedup_table'))
+    group.add_argument(
+            '--rethinkdb-big-table-url', dest='rethinkdb_big_table_url', help=(
+                'rethinkdb big table url (table will be populated with '
+                'various capture information and is suitable for use as '
+                'index for playback), e.g. rethinkdb://db0.foo.org,'
+                'db1.foo.org:38015/my_warcprox_db/captures'))
+    group.add_argument(
+            '--rethinkdb-trough-db-url', dest='rethinkdb_trough_db_url', help=(
+                '🐷   url pointing to trough configuration rethinkdb database, '
+                'e.g. rethinkdb://db0.foo.org,db1.foo.org:38015'
+                '/trough_configuration'))
     arg_parser.add_argument(
-            '--rethinkdb-db', dest='rethinkdb_db', default='warcprox',
-            help='rethinkdb database name')
+            '--rethinkdb-services-url', dest='rethinkdb_services_url', help=(
+                'rethinkdb service registry table url; if provided, warcprox '
+                'will create and heartbeat entry for itself'))
     arg_parser.add_argument(
             '-q', '--quiet', dest='log_level',
             action='store_const', default=logging.INFO, const=logging.WARN)
     arg_parser.add_argument(
             '-v', '--verbose', dest='log_level',
             action='store_const', default=logging.INFO, const=logging.DEBUG)
-    args = arg_parser.parse_args(args=sys.argv[1:])
+    args = arg_parser.parse_args(args=argv[1:])
 
     logging.basicConfig(
-            stream=sys.stdout, level=args.log_level,
-            format=(
+            stream=sys.stdout, level=args.log_level, format=(
                 '%(asctime)s %(levelname)s %(name)s.%(funcName)s'
                 '(%(filename)s:%(lineno)d) %(message)s'))
 
-    rr = doublethink.Rethinker(
-            args.rethinkdb_servers.split(','), args.rethinkdb_db)
+    options = warcprox.Options(**vars(args))
 
-    # services table
-    doublethink.ServiceRegistry(rr)
+    did_something = False
+    if args.rethinkdb_services_url:
+        parsed = doublethink.parse_rethinkdb_url(
+                options.rethinkdb_services_url)
+        rr = doublethink.Rethinker(servers=parsed.hosts, db=parsed.database)
+        svcreg = doublethink.ServiceRegistry(rr, table=parsed.table)
+        did_something = True
+    if args.rethinkdb_stats_url:
+        stats_db = warcprox.stats.RethinkStatsDb(options=options)
+        did_something = True
+    if args.rethinkdb_dedup_url:
+        dedup_db = warcprox.dedup.RethinkDedupDb(options=options)
+        did_something = True
+    if args.rethinkdb_big_table_url:
+        dedup_db = warcprox.bigtable.RethinkCapturesDedup(options=options)
+        did_something = True
+    if args.rethinkdb_trough_db_url:
+        dedup_db = warcprox.dedup.TroughDedupDb(options)
+        logging.warn(
+                'trough it responsible for creating most of the rethinkdb '
+                'tables that it uses')
+        did_something = True
 
-    # stats table
-    warcprox.stats.RethinkStatsDb(rr)
-
-    # captures table
-    warcprox.bigtable.RethinkCaptures(rr)
+    if not did_something:
+        logging.error('nothing to do, no --rethinkdb-* options supplied')
 
 if __name__ == '__main__':
     main()

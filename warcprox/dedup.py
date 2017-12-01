@@ -21,13 +21,15 @@ USA.
 
 from __future__ import absolute_import
 
-from datetime import datetime
 import logging
 import os
 import json
 from hanzo import warctools
 import warcprox
+import warcprox.trough
 import sqlite3
+import doublethink
+import datetime
 import urllib3
 from urllib3.exceptions import HTTPError
 
@@ -120,11 +122,11 @@ def decorate_with_dedup_info(dedup_db, recorded_url, base32=False):
 class RethinkDedupDb:
     logger = logging.getLogger("warcprox.dedup.RethinkDedupDb")
 
-    def __init__(self, rr, table="dedup", shards=None, replicas=None, options=warcprox.Options()):
-        self.rr = rr
-        self.table = table
-        self.shards = shards or len(rr.servers)
-        self.replicas = replicas or min(3, len(rr.servers))
+    def __init__(self, options=warcprox.Options()):
+        parsed = doublethink.parse_rethinkdb_url(options.rethinkdb_dedup_url)
+        self.rr = doublethink.Rethinker(
+                servers=parsed.hosts, db=parsed.database)
+        self.table = parsed.table
         self._ensure_db_table()
         self.options = options
 
@@ -137,12 +139,11 @@ class RethinkDedupDb:
         if not self.table in tables:
             self.logger.info(
                     "creating rethinkdb table %r in database %r shards=%r "
-                    "replicas=%r", self.table, self.rr.dbname, self.shards,
-                    self.replicas)
+                    "replicas=%r", self.table, self.rr.dbname,
+                    len(self.rr.servers), min(3, len(self.rr.servers)))
             self.rr.table_create(
-                    self.table, primary_key="key", shards=self.shards,
-                    replicas=self.replicas).run()
-
+                    self.table, primary_key="key", shards=len(self.rr.servers),
+                    replicas=min(3, len(self.rr.servers))).run()
 
     def start(self):
         pass
@@ -179,7 +180,6 @@ class RethinkDedupDb:
                 self.save(digest_key, records[0], bucket=recorded_url.warcprox_meta["captures-bucket"])
             else:
                 self.save(digest_key, records[0])
-
 
 class CdxServerDedup(object):
     """Query a CDX server to perform deduplication.
@@ -230,8 +230,8 @@ class CdxServerDedup(object):
             if line:
                 (cdx_ts, cdx_digest) = line.split(b' ')
                 if cdx_digest == dkey:
-                    dt = datetime.strptime(cdx_ts.decode('ascii'),
-                                            '%Y%m%d%H%M%S')
+                    dt = datetime.datetime.strptime(
+                            cdx_ts.decode('ascii'), '%Y%m%d%H%M%S')
                     date = dt.strftime('%Y-%m-%dT%H:%M:%SZ').encode('utf-8')
                     return dict(url=url, date=date)
         except (HTTPError, AssertionError, ValueError) as exc:
@@ -243,3 +243,62 @@ class CdxServerDedup(object):
         """Since we don't save anything to CDX server, this does not apply.
         """
         pass
+
+class TroughDedupDb(object):
+    '''
+    https://github.com/internetarchive/trough
+    '''
+    logger = logging.getLogger("warcprox.dedup.TroughDedupDb")
+
+    SCHEMA_ID = 'warcprox-dedup-v1'
+    SCHEMA_SQL = ('create table dedup (\n'
+                  '    digest_key varchar(100) primary key,\n'
+                  '    url varchar(2100) not null,\n'
+                  '    date datetime not null,\n'
+                  '    id varchar(100));\n') # warc record id
+    WRITE_SQL_TMPL = ('insert into dedup (digest_key, url, date, id) '
+                      'values (%s, %s, %s, %s);')
+
+    def __init__(self, options=warcprox.Options()):
+        self.options = options
+        self._trough_cli = warcprox.trough.TroughClient(
+                options.rethinkdb_trough_db_url, promotion_interval=60*60)
+
+    def start(self):
+        self._trough_cli.register_schema(self.SCHEMA_ID, self.SCHEMA_SQL)
+
+    def save(self, digest_key, response_record, bucket='__unspecified__'):
+        record_id = response_record.get_header(warctools.WarcRecord.ID)
+        url = response_record.get_header(warctools.WarcRecord.URL)
+        warc_date = response_record.get_header(warctools.WarcRecord.DATE)
+        self._trough_cli.write(
+               bucket, self.WRITE_SQL_TMPL,
+               (digest_key, url, warc_date, record_id), self.SCHEMA_ID)
+
+    def lookup(self, digest_key, bucket='__unspecified__', url=None):
+        results = self._trough_cli.read(
+                bucket, 'select * from dedup where digest_key=%s;',
+                (digest_key,))
+        if results:
+            assert len(results) == 1 # sanity check (digest_key is primary key)
+            result = results[0]
+            result['id'] = result['id'].encode('ascii')
+            result['url'] = result['url'].encode('ascii')
+            result['date'] = result['date'].encode('ascii')
+            self.logger.debug(
+                    'trough lookup of key=%r returning %r', digest_key, result)
+            return result
+        else:
+            return None
+
+    def notify(self, recorded_url, records):
+        if (records and records[0].type == b'response'
+                and recorded_url.response_recorder.payload_size() > 0):
+            digest_key = warcprox.digest_str(
+                    recorded_url.payload_digest, self.options.base32)
+            if recorded_url.warcprox_meta and 'captures-bucket' in recorded_url.warcprox_meta:
+                self.save(
+                        digest_key, records[0],
+                        bucket=recorded_url.warcprox_meta['captures-bucket'])
+            else:
+                self.save(digest_key, records[0])

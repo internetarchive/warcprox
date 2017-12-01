@@ -1,4 +1,4 @@
-group: deprecated-2017Q2
+sudo: required
 
 language: python
 python:
@@ -13,8 +13,6 @@ python:
 
 matrix:
   allow_failures:
-  - python: pypy
-  - python: pypy3
   - python: nightly
   - python: 3.7-dev
 
@@ -28,15 +26,38 @@ services:
 
 before_install:
 - sudo service docker restart ; sleep 10  # https://github.com/travis-ci/travis-ci/issues/4778
-- docker run -d --publish=28015:28015 rethinkdb
+- docker network create --driver=bridge trough
+- docker run --detach --network=trough --hostname=rethinkdb --name=rethinkdb --publish=28015:28015 rethinkdb
+- docker run --detach --network=trough --hostname=hadoop --name=hadoop chalimartines/cdh5-pseudo-distributed
+- docker run --detach --network=trough --hostname=trough --volume="$PWD/tests/run-trough.sh:/run-trough.sh" --publish=6111:6111 --publish=6112:6112 --publish=6222:6222 --publish=6444:6444 python:3 bash /run-trough.sh
+- cat /etc/hosts
+- echo | sudo tee -a /etc/hosts # travis-ci default doesn't end with a newline 🙄
+- echo 127.0.0.1 rethinkdb | sudo tee -a /etc/hosts
+- echo 127.0.0.1 hadoop | sudo tee -a /etc/hosts
+- echo 127.0.0.1 trough | sudo tee -a /etc/hosts
+- cat /etc/hosts
+- ping -c2 trough
+
+install:
+- pip install . pytest requests warcio mock
 
 before_script:
-- pip install . pytest requests warcio
+- ps ww -fHe
 
 script:
 - py.test -v tests
-- py.test -v --rethinkdb-servers=localhost tests
-- py.test -v --rethinkdb-servers=localhost --rethinkdb-big-table tests
+- py.test -v --rethinkdb-dedup-url=rethinkdb://localhost/test1/dedup tests
+- py.test -v --rethinkdb-big-table-url=rethinkdb://localhost/test2/captures tests
+- py.test -v --rethinkdb-trough-db-url=rethinkdb://localhost/trough_configuration tests
+
+after_script:
+- ps ww -fHe
+- docker exec trough cat /tmp/trough-write.out
+- docker exec trough cat /tmp/trough-write-provisioner-server.out
+- docker exec trough cat /tmp/trough-write-provisioner-local.out
+- docker exec trough cat /tmp/trough-sync-server.out
+- docker exec trough cat /tmp/trough-sync-local.out
+- docker exec trough cat /tmp/trough-read.out
 
 notifications:
   slack:
