@@ -72,12 +72,13 @@ class TroughClient(object):
                     self._dirty_segments.clear()
                 logging.info(
                         'promoting %s trough segments', len(dirty_segments))
-                for segment in dirty_segments:
+                for segment_id in dirty_segments:
                     try:
-                        self.promote(segment)
+                        self.promote(segment_id)
                     except:
                         logging.error(
-                                'problem promoting segment %s', exc_info=True)
+                                'problem promoting segment %s', segment_id,
+                                exc_info=True)
             except:
                 logging.error(
                         'caught exception doing segment promotion',
