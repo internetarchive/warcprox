@@ -179,13 +179,13 @@ class TroughClient(object):
                 with self._dirty_segments_lock:
                     self._dirty_segments.add(segment_id)
         except:
-            del self._write_url_cache[segment_id]
+            self._write_url_cache.pop(segment_id, None)
             self.logger.error(
                     'problem with trough write url %r', write_url,
                     exc_info=True)
             return
         if response.status_code != 200:
-            del self._write_url_cache[segment_id]
+            self._write_url_cache.pop(segment_id, None)
             self.logger.warn(
                     'unexpected response %r %r %r from %r to sql=%r',
                     response.status_code, response.reason, response.text,
@@ -201,12 +201,12 @@ class TroughClient(object):
         try:
             response = requests.post(read_url, sql)
         except:
-            del self._read_url_cache[segment_id]
+            self._read_url_cache.pop(segment_id, None)
             self.logger.error(
                     'problem with trough read url %r', read_url, exc_info=True)
             return None
         if response.status_code != 200:
-            del self._read_url_cache[segment_id]
+            self._read_url_cache.pop(segment_id, None)
             self.logger.warn(
                     'unexpected response %r %r %r from %r to sql=%r',
                     response.status_code, response.reason, response.text,
