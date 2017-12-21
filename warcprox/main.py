@@ -155,6 +155,11 @@ def _build_arg_parser(prog):
                 'host:port of tor socks proxy, used only to connect to '
                 '.onion sites'))
     arg_parser.add_argument(
+            '--global-socks-proxy', dest='global_socks_proxy',
+            default=None, help=(
+                'host:port of socks proxy, used to connect to '
+                'all sites (overrides --onion-tor-socks-proxy)'))
+    arg_parser.add_argument(
             '--crawl-log-dir', dest='crawl_log_dir', default=None, help=(
                 'if specified, write crawl log files in the specified '
                 'directory; one crawl log is written per warc filename '

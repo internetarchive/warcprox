@@ -232,7 +232,16 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
 
     def _connect_to_remote_server(self):
         # Connect to destination
-        if self.onion_tor_socks_proxy_host and self.hostname.endswith('.onion'):
+        if self.global_socks_proxy_host:
+            self.logger.info(
+                    "using socks proxy at %s:%s to connect to %s",
+                    self.global_socks_proxy_host,
+                    self.global_socks_proxy_port or 1080, self.hostname)
+            self._remote_server_sock = socks.socksocket()
+            self._remote_server_sock.set_proxy(
+                    socks.SOCKS5, addr=self.global_socks_proxy_host,
+                    port=self.global_socks_proxy_port, rdns=True)
+        elif self.onion_tor_socks_proxy_host and self.hostname.endswith('.onion'):
             self.logger.info(
                     "using tor socks proxy at %s:%s to connect to %s",
                     self.onion_tor_socks_proxy_host,

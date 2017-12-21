@@ -395,6 +395,15 @@ class SingleThreadedWarcProxy(http_server.HTTPServer, object):
                 WarcProxyHandler.onion_tor_socks_proxy_host = options.onion_tor_socks_proxy
                 WarcProxyHandler.onion_tor_socks_proxy_port = None
 
+        if options.global_socks_proxy:
+            try:
+                host, port = options.global_socks_proxy.split(':')
+                WarcProxyHandler.global_socks_proxy_host = host
+                WarcProxyHandler.global_socks_proxy_port = int(port)
+            except ValueError:
+                WarcProxyHandler.global_socks_proxy_host = options.global_socks_proxy
+                WarcProxyHandler.global_socks_proxy_port = None
+
         http_server.HTTPServer.__init__(
                 self, server_address, WarcProxyHandler, bind_and_activate=True)
 
