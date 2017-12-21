@@ -39,9 +39,8 @@ class WarcWriterThread(threading.Thread):
     logger = logging.getLogger("warcprox.warcproxwriter.WarcWriterThread")
 
     def __init__(
-            self, name='WarcWriterThread', recorded_url_q=None,
-            writer_pool=None, dedup_db=None, listeners=[],
-            options=warcprox.Options()):
+            self, recorded_url_q, name='WarcWriterThread', writer_pool=None,
+            dedup_db=None, listeners=[], options=warcprox.Options()):
         """recorded_url_q is a queue.Queue of warcprox.warcprox.RecordedUrl."""
         threading.Thread.__init__(self, name=name)
         self.recorded_url_q = recorded_url_q
@@ -73,6 +72,15 @@ class WarcWriterThread(threading.Thread):
         meth = recorded_url.method.upper()
         return meth in self._ALWAYS_ACCEPT or meth in self.method_filter
 
+    # XXX optimize handling of urls not to be archived throughout warcprox
+    def _should_archive(self, recorded_url):
+        prefix = (recorded_url.warcprox_meta['warc-prefix']
+                  if recorded_url.warcprox_meta
+                     and 'warc-prefix' in recorded_url.warcprox_meta
+                  else self.options.prefix)
+        # special warc name prefix '-' means "don't archive"
+        return prefix != '-' and self._filter_accepts(recorded_url)
+
     def _run(self):
         self.name = '%s(tid=%s)'% (self.name, warcprox.gettid())
         while not self.stop.is_set():
@@ -87,7 +95,7 @@ class WarcWriterThread(threading.Thread):
                         recorded_url = self.recorded_url_q.get(block=True, timeout=0.5)
                         records = []
                         self.idle = None
-                        if self._filter_accepts(recorded_url):
+                        if self._should_archive(recorded_url):
                             if self.dedup_db:
                                 warcprox.dedup.decorate_with_dedup_info(self.dedup_db,
                                         recorded_url, base32=self.options.base32)

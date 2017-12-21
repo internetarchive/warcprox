@@ -79,7 +79,7 @@ class ProxyingRecorder(object):
         self.block_digest = hashlib.new(digest_algorithm)
         self.payload_offset = None
         self.proxy_client = proxy_client
-        self._proxy_client_conn_open = True
+        self._proxy_client_conn_open = bool(self.proxy_client)
         self.len = 0
         self.url = url
 

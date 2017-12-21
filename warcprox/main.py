@@ -81,8 +81,11 @@ def _build_arg_parser(prog):
             help='write gzip-compressed warc records')
     arg_parser.add_argument('--no-warc-open-suffix', dest='no_warc_open_suffix',
             default=False, action='store_true', help=argparse.SUPPRESS)
-    arg_parser.add_argument('-n', '--prefix', dest='prefix',
-            default='WARCPROX', help='WARC filename prefix')
+    # not mentioned in --help: special value for '-' for --prefix means don't
+    # archive the capture, unless prefix set in warcprox-meta header
+    arg_parser.add_argument(
+            '-n', '--prefix', dest='prefix', default='WARCPROX',
+            help='default WARC filename prefix')
     arg_parser.add_argument(
             '-s', '--size', dest='rollover_size', default=1000*1000*1000,
             type=int, help='WARC file rollover size threshold in bytes')
