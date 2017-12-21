@@ -227,6 +227,7 @@ class WarcproxController(object):
         self.start()
 
         last_mem_dbg = datetime.datetime.utcfromtimestamp(0)
+        last_profile_dump = datetime.datetime.utcnow()
 
         try:
             utc = datetime.timezone.utc
@@ -252,6 +253,12 @@ class WarcproxController(object):
                 #         ).total_seconds() > 60:
                 #     self.debug_mem()
                 #     last_mem_dbg = datetime.datetime.utcnow()
+
+                if (self.options.profile and
+                        (datetime.datetime.utcnow() - last_profile_dump
+                            ).total_seconds() > 60*10):
+                    self._dump_profiling()
+                    last_profile_dump = datetime.datetime.utcnow()
 
                 time.sleep(0.5)
 
