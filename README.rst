@@ -9,7 +9,7 @@ https://github.com/allfro/pymiproxy
 Install
 ~~~~~~~
 
-Warcprox runs on python 2.7 or 3.4+.
+Warcprox runs on python 3.4+.
 
 To install latest release run:
 
@@ -41,16 +41,18 @@ Usage
 
     usage: warcprox [-h] [-p PORT] [-b ADDRESS] [-c CACERT]
                     [--certs-dir CERTS_DIR] [-d DIRECTORY] [-z] [-n PREFIX]
-                    [-s SIZE] [--rollover-idle-time ROLLOVER_IDLE_TIME]
+                    [-s ROLLOVER_SIZE]
+                    [--rollover-idle-time ROLLOVER_IDLE_TIME]
                     [-g DIGEST_ALGORITHM] [--base32]
                     [--method-filter HTTP_METHOD]
-                    [--stats-db-file STATS_DB_FILE] [-P PLAYBACK_PORT]
+                    [--stats-db-file STATS_DB_FILE | --rethinkdb-stats-url RETHINKDB_STATS_URL]
+                    [-P PLAYBACK_PORT]
                     [--playback-index-db-file PLAYBACK_INDEX_DB_FILE]
-                    [-j DEDUP_DB_FILE | --rethinkdb-servers RETHINKDB_SERVERS]
-                    [--cdxserver-dedup CDX_SERVER_URL]
-                    [--rethinkdb-db RETHINKDB_DB] [--rethinkdb-big-table]
+                    [-j DEDUP_DB_FILE | --rethinkdb-dedup-url RETHINKDB_DEDUP_URL | --rethinkdb-big-table-url RETHINKDB_BIG_TABLE_URL | --rethinkdb-trough-db-url RETHINKDB_TROUGH_DB_URL | --cdxserver-dedup CDXSERVER_DEDUP]
+                    [--rethinkdb-services-url RETHINKDB_SERVICES_URL]
                     [--onion-tor-socks-proxy ONION_TOR_SOCKS_PROXY]
-                    [--plugin PLUGIN_CLASS] [--version] [-v] [--trace] [-q]
+                    [--crawl-log-dir CRAWL_LOG_DIR] [--plugin PLUGIN_CLASS]
+                    [--version] [-v] [--trace] [-q]
 
     warcprox - WARC writing MITM HTTP/S proxy
 
@@ -61,35 +63,38 @@ Usage
                             address to listen on (default: localhost)
       -c CACERT, --cacert CACERT
                             CA certificate file; if file does not exist, it
-                            will be created (default:
-                            ./ayutla.monkeybrains.net-warcprox-ca.pem)
+                            will be created (default: ./ayutla.local-warcprox-
+                            ca.pem)
       --certs-dir CERTS_DIR
                             where to store and load generated certificates
-                            (default: ./ayutla.monkeybrains.net-warcprox-ca)
+                            (default: ./ayutla.local-warcprox-ca)
       -d DIRECTORY, --dir DIRECTORY
                             where to write warcs (default: ./warcs)
       -z, --gzip            write gzip-compressed warc records
       -n PREFIX, --prefix PREFIX
-                            WARC filename prefix (default: WARCPROX)
-      -s SIZE, --size SIZE  WARC file rollover size threshold in bytes
+                            default WARC filename prefix (default: WARCPROX)
+      -s ROLLOVER_SIZE, --size ROLLOVER_SIZE
+                            WARC file rollover size threshold in bytes
                             (default: 1000000000)
       --rollover-idle-time ROLLOVER_IDLE_TIME
                             WARC file rollover idle time threshold in seconds
-                            (so that Friday's last open WARC doesn't sit
-                            there all weekend waiting for more data)
-                            (default: None)
+                            (so that Friday's last open WARC doesn't sit there
+                            all weekend waiting for more data) (default: None)
       -g DIGEST_ALGORITHM, --digest-algorithm DIGEST_ALGORITHM
-                            digest algorithm, one of sha1, sha384, sha512,
-                            md5, sha224, sha256 (default: sha1)
+                            digest algorithm, one of sha256, sha224, sha512,
+                            sha384, md5, sha1 (default: sha1)
       --base32              write digests in Base32 instead of hex
       --method-filter HTTP_METHOD
-                            only record requests with the given http
-                            method(s) (can be used more than once) (default:
-                            None)
+                            only record requests with the given http method(s)
+                            (can be used more than once) (default: None)
       --stats-db-file STATS_DB_FILE
                             persistent statistics database file; empty string
                             or /dev/null disables statistics tracking
                             (default: ./warcprox.sqlite)
+      --rethinkdb-stats-url RETHINKDB_STATS_URL
+                            rethinkdb stats table url, e.g. rethinkdb://db0.fo
+                            o.org,db1.foo.org:38015/my_warcprox_db/my_stats_ta
+                            ble (default: None)
       -P PLAYBACK_PORT, --playback-port PLAYBACK_PORT
                             port to listen on for instant playback (default:
                             None)
@@ -101,36 +106,44 @@ Usage
                             persistent deduplication database file; empty
                             string or /dev/null disables deduplication
                             (default: ./warcprox.sqlite)
-      --cdxserver-dedup CDX_SERVER_URL
-                            use a CDX server for deduplication
+      --rethinkdb-dedup-url RETHINKDB_DEDUP_URL
+                            rethinkdb dedup url, e.g. rethinkdb://db0.foo.org,
+                            db1.foo.org:38015/my_warcprox_db/my_dedup_table
                             (default: None)
-      --rethinkdb-servers RETHINKDB_SERVERS
-                            rethinkdb servers, used for dedup and stats if
-                            specified; e.g.
-                            db0.foo.org,db0.foo.org:38015,db1.foo.org
-                            (default: None)
-      --rethinkdb-db RETHINKDB_DB
-                            rethinkdb database name (ignored unless
-                            --rethinkdb-servers is specified) (default:
-                            warcprox)
-      --rethinkdb-big-table
-                            use a big rethinkdb table called "captures",
-                            instead of a small table called "dedup"; table is
-                            suitable for use as index for playback (ignored
-                            unless --rethinkdb-servers is specified)
+      --rethinkdb-big-table-url RETHINKDB_BIG_TABLE_URL
+                            rethinkdb big table url (table will be populated
+                            with various capture information and is suitable
+                            for use as index for playback), e.g. rethinkdb://d
+                            b0.foo.org,db1.foo.org:38015/my_warcprox_db/captur
+                            es (default: None)
+      --rethinkdb-trough-db-url RETHINKDB_TROUGH_DB_URL
+                            🐷 url pointing to trough configuration rethinkdb
+                            database, e.g. rethinkdb://db0.foo.org,db1.foo.org
+                            :38015/trough_configuration (default: None)
+      --cdxserver-dedup CDXSERVER_DEDUP
+                            use a CDX Server URL for deduplication; e.g.
+                            https://web.archive.org/cdx/search (default: None)
+      --rethinkdb-services-url RETHINKDB_SERVICES_URL
+                            rethinkdb service registry table url; if provided,
+                            warcprox will create and heartbeat entry for
+                            itself (default: None)
       --onion-tor-socks-proxy ONION_TOR_SOCKS_PROXY
-                            host:port of tor socks proxy, used only to
-                            connect to .onion sites (default: None)
+                            host:port of tor socks proxy, used only to connect
+                            to .onion sites (default: None)
+      --crawl-log-dir CRAWL_LOG_DIR
+                            if specified, write crawl log files in the
+                            specified directory; one crawl log is written per
+                            warc filename prefix; crawl log format mimics
+                            heritrix (default: None)
       --plugin PLUGIN_CLASS
                             Qualified name of plugin class, e.g.
                             "mypkg.mymod.MyClass". May be used multiple times
                             to register multiple plugins. Plugin classes are
-                            loaded from the regular python module search
-                            path. They will be instantiated with no arguments
-                            and must have a method `notify(self,
-                            recorded_url, records)` which will be called for
-                            each url, after warc records have been written.
-                            (default: None)
+                            loaded from the regular python module search path.
+                            They will be instantiated with no arguments and
+                            must have a method `notify(self, recorded_url,
+                            records)` which will be called for each url, after
+                            warc records have been written. (default: None)
       --version             show program's version number and exit
       -v, --verbose
       --trace

@@ -183,9 +183,9 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
     def _proxy_request(self):
         warcprox_meta = None
         raw_warcprox_meta = self.headers.get('Warcprox-Meta')
-        self.logger.log(
-                warcprox.TRACE, 'request for %s Warcprox-Meta header: %s',
-                self.url, repr(raw_warcprox_meta))
+        self.logger.trace(
+                'request for %s Warcprox-Meta header: %s', self.url,
+                raw_warcprox_meta)
         if raw_warcprox_meta:
             warcprox_meta = json.loads(raw_warcprox_meta)
             del self.headers['Warcprox-Meta']
