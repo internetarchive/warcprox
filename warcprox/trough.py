@@ -87,7 +87,7 @@ class TroughClient(object):
     def promote(self, segment_id):
         url = os.path.join(self.segment_manager_url(), 'promote')
         payload_dict = {'segment': segment_id}
-        response = requests.post(url, json=payload_dict)
+        response = requests.post(url, json=payload_dict, timeout=21600)
         if response.status_code != 200:
             raise Exception(
                     'Received %s: %r in response to POST %s with data %s' % (
@@ -129,7 +129,7 @@ class TroughClient(object):
     def write_url_nocache(self, segment_id, schema_id='default'):
         provision_url = os.path.join(self.segment_manager_url(), 'provision')
         payload_dict = {'segment': segment_id, 'schema': schema_id}
-        response = requests.post(provision_url, json=payload_dict)
+        response = requests.post(provision_url, json=payload_dict, timeout=600)
         if response.status_code != 200:
             raise Exception(
                     'Received %s: %r in response to POST %s with data %s' % (
@@ -175,7 +175,7 @@ class TroughClient(object):
         sql = sql_tmpl % tuple(self.sql_value(v) for v in values)
 
         try:
-            response = requests.post(write_url, sql)
+            response = requests.post(write_url, sql, timeout=600)
             if segment_id not in self._dirty_segments:
                 with self._dirty_segments_lock:
                     self._dirty_segments.add(segment_id)
@@ -200,7 +200,7 @@ class TroughClient(object):
             return None
         sql = sql_tmpl % tuple(self.sql_value(v) for v in values)
         try:
-            response = requests.post(read_url, sql)
+            response = requests.post(read_url, sql, timeout=600)
         except:
             self._read_url_cache.pop(segment_id, None)
             self.logger.error(
@@ -221,7 +221,7 @@ class TroughClient(object):
 
     def schema_exists(self, schema_id):
         url = os.path.join(self.segment_manager_url(), 'schema', schema_id)
-        response = requests.get(url)
+        response = requests.get(url, timeout=60)
         if response.status_code == 200:
             return True
         elif response.status_code == 404:
@@ -232,7 +232,7 @@ class TroughClient(object):
     def register_schema(self, schema_id, sql):
         url = os.path.join(
                 self.segment_manager_url(), 'schema', schema_id, 'sql')
-        response = requests.put(url, sql)
+        response = requests.put(url, sql, timeout=600)
         if response.status_code not in (201, 204):
             raise Exception(
                     'Received %s: %r in response to PUT %r with data %r' % (
