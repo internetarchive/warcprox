@@ -212,6 +212,8 @@ def init_controller(args):
         exit(1)
 
     listeners = []
+    running_stats = warcprox.stats.RunningStats()
+    listeners.append(running_stats)
 
     if args.rethinkdb_dedup_url:
         dedup_db = warcprox.dedup.RethinkDedupDb(options=options)
@@ -245,8 +247,9 @@ def init_controller(args):
     ca = certauth.certauth.CertificateAuthority(args.cacert, args.certs_dir,
                                                 ca_name=ca_name)
 
-    proxy = warcprox.warcproxy.WarcProxy(ca=ca, recorded_url_q=recorded_url_q,
-            stats_db=stats_db, options=options)
+    proxy = warcprox.warcproxy.WarcProxy(
+            ca=ca, recorded_url_q=recorded_url_q, stats_db=stats_db,
+            running_stats=running_stats, options=options)
 
     if args.playback_port is not None:
         playback_index_db = warcprox.playback.PlaybackIndexDb(

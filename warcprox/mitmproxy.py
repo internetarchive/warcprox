@@ -451,6 +451,7 @@ class PooledMixIn(socketserver.ThreadingMixIn):
         on system resource limits.
         '''
         self.active_requests = set()
+        self.unaccepted_requests = 0
         if not max_threads:
             # man getrlimit: "RLIMIT_NPROC The maximum number of processes (or,
             # more precisely on Linux, threads) that can be created for the
@@ -474,6 +475,17 @@ class PooledMixIn(socketserver.ThreadingMixIn):
                 self.logger.info("max_threads=%s", max_threads)
         self.max_threads = max_threads
         self.pool = concurrent.futures.ThreadPoolExecutor(max_threads)
+
+    def status(self):
+        if hasattr(super(), 'status'):
+            result = super().status()
+        else:
+            result = {}
+        result.update({
+            'threads': self.pool._max_workers,
+            'active_requests': len(self.active_requests),
+            'unaccepted_requests': self.unaccepted_requests})
+        return result
 
     def process_request(self, request, client_address):
         self.active_requests.add(request)
@@ -503,12 +515,14 @@ class PooledMixIn(socketserver.ThreadingMixIn):
         self.logger.trace(
                 'someone is connecting active_requests=%s',
                 len(self.active_requests))
+        self.unaccepted_requests += 1
         while len(self.active_requests) > self.max_threads:
             time.sleep(0.05)
         res = self.socket.accept()
         self.logger.trace(
                 'accepted after %.1f sec active_requests=%s socket=%s',
                 time.time() - start, len(self.active_requests), res[0])
+        self.unaccepted_requests -= 1
         return res
 
 class MitmProxy(http_server.HTTPServer):

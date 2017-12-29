@@ -149,12 +149,7 @@ class WarcproxController(object):
                 'ttl': self.HEARTBEAT_INTERVAL * 3,
                 'port': self.proxy.server_port,
             }
-        status_info['load'] = 1.0 * self.proxy.recorded_url_q.qsize() / (
-                self.proxy.recorded_url_q.maxsize or 100)
-        status_info['queued_urls'] = self.proxy.recorded_url_q.qsize()
-        status_info['queue_max_size'] = self.proxy.recorded_url_q.maxsize
-        status_info['seconds_behind'] = self.proxy.recorded_url_q.seconds_behind()
-        status_info['threads'] = self.proxy.pool._max_workers
+        status_info.update(self.proxy.status())
 
         self.status_info = self.service_registry.heartbeat(status_info)
         self.logger.log(
@@ -241,6 +236,9 @@ class WarcproxController(object):
 
         try:
             while not self.stop.is_set():
+                if self.proxy.running_stats:
+                    self.proxy.running_stats.snap()
+
                 if self.service_registry and (
                         not hasattr(self, "status_info") or (
                             datetime.datetime.now(utc)

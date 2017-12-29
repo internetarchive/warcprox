@@ -52,7 +52,7 @@ except:
 
 setuptools.setup(
         name='warcprox',
-        version='2.3.1b4.dev132',
+        version='2.3.1b4.dev133',
         description='WARC writing MITM HTTP/S proxy',
         url='https://github.com/internetarchive/warcprox',
         author='Noah Levitt',

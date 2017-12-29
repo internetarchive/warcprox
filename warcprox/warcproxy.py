@@ -232,14 +232,9 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 'host': socket.gethostname(),
                 'address': self.connection.getsockname()[0],
                 'port': self.connection.getsockname()[1],
-                'load': 1.0 * self.server.recorded_url_q.qsize() / (
-                    self.server.recorded_url_q.maxsize or 100),
-                'queued_urls': self.server.recorded_url_q.qsize(),
-                'queue_max_size': self.server.recorded_url_q.maxsize,
-                'seconds_behind': self.server.recorded_url_q.seconds_behind(),
                 'pid': os.getpid(),
-                'threads': self.server.pool._max_workers,
             }
+            status_info.update(self.server.status())
             payload = json.dumps(
                     status_info, indent=2).encode('utf-8') + b'\n'
             self.send_response(200, 'OK')
@@ -381,7 +376,7 @@ class SingleThreadedWarcProxy(http_server.HTTPServer, object):
 
     def __init__(
             self, ca=None, recorded_url_q=None, stats_db=None,
-            options=warcprox.Options()):
+            running_stats=None, options=warcprox.Options()):
         server_address = (
                 options.address or 'localhost',
                 options.port if options.port is not None else 8000)
@@ -415,15 +410,47 @@ class SingleThreadedWarcProxy(http_server.HTTPServer, object):
                     maxsize=options.queue_size or 1000)
 
         self.stats_db = stats_db
-
+        self.running_stats = running_stats
         self.options = options
+
+    def status(self):
+        if hasattr(super(), 'status'):
+            result = super().status()
+        else:
+            result = {}
+        result.update({
+            'load': 1.0 * self.recorded_url_q.qsize() / (
+                self.recorded_url_q.maxsize or 100),
+            'queued_urls': self.recorded_url_q.qsize(),
+            'queue_max_size': self.recorded_url_q.maxsize,
+            'seconds_behind': self.recorded_url_q.seconds_behind(),
+        })
+        elapsed, urls_per_sec, warc_bytes_per_sec = self.running_stats.current_rates(1)
+        result['rates_1min'] = {
+            'actual_elapsed': elapsed,
+            'urls_per_sec': urls_per_sec,
+            'warc_bytes_per_sec': warc_bytes_per_sec,
+        }
+        elapsed, urls_per_sec, warc_bytes_per_sec = self.running_stats.current_rates(5)
+        result['rates_5min'] = {
+            'actual_elapsed': elapsed,
+            'urls_per_sec': urls_per_sec,
+            'warc_bytes_per_sec': warc_bytes_per_sec,
+        }
+        elapsed, urls_per_sec, warc_bytes_per_sec = self.running_stats.current_rates(15)
+        result['rates_15min'] = {
+            'actual_elapsed': elapsed,
+            'urls_per_sec': urls_per_sec,
+            'warc_bytes_per_sec': warc_bytes_per_sec,
+        }
+        return result
 
 class WarcProxy(SingleThreadedWarcProxy, warcprox.mitmproxy.PooledMitmProxy):
     logger = logging.getLogger("warcprox.warcproxy.WarcProxy")
 
     def __init__(
             self, ca=None, recorded_url_q=None, stats_db=None,
-            options=warcprox.Options()):
+            running_stats=None, options=warcprox.Options()):
         if options.max_threads:
             self.logger.info(
                     "max_threads=%s set by command line option",
@@ -431,7 +458,7 @@ class WarcProxy(SingleThreadedWarcProxy, warcprox.mitmproxy.PooledMitmProxy):
         warcprox.mitmproxy.PooledMitmProxy.__init__(
                 self, options.max_threads, options)
         SingleThreadedWarcProxy.__init__(
-                self, ca, recorded_url_q, stats_db, options)
+                self, ca, recorded_url_q, stats_db, running_stats, options)
 
     def server_activate(self):
         http_server.HTTPServer.server_activate(self)

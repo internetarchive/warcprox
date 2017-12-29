@@ -21,18 +21,20 @@ USA.
 
 from __future__ import absolute_import
 
+from hanzo import warctools
+import collections
+import copy
+import datetime
+import doublethink
+import json
 import logging
 import os
-import json
-from hanzo import warctools
-import warcprox
-import threading
 import rethinkdb as r
-import datetime
-import urlcanon
 import sqlite3
-import copy
-import doublethink
+import threading
+import time
+import urlcanon
+import warcprox
 
 def _empty_bucket(bucket):
     return {
@@ -337,4 +339,84 @@ class RethinkStatsDb(StatsDb):
 
     def notify(self, recorded_url, records):
         self.tally(recorded_url, records)
+
+class RunningStats:
+    '''
+    In-memory stats for measuring overall warcprox performance.
+    '''
+    def __init__(self):
+        self.urls = 0
+        self.warc_bytes = 0
+        self._lock = threading.RLock()
+        self.first_snap_time = time.time()
+        # snapshot every minute since the beginning of time
+        self.minute_snaps = [(self.first_snap_time, 0, 0)]
+        # snapshot every 10 seconds for the last 2 minutes (fill with zeroes)
+        self.ten_sec_snaps = collections.deque()
+        for i in range(0, 13):
+            self.ten_sec_snaps.append(
+                    (self.first_snap_time - 120 + i * 10, 0, 0))
+
+    def notify(self, recorded_url, records):
+        with self._lock:
+            self.urls += 1
+            if records:
+                self.warc_bytes += records[-1].offset + records[-1].length - records[0].offset
+
+    def snap(self):
+        now = time.time()
+        last_snap_time = self.minute_snaps[-1][0]
+        need_minute_snap = (now - self.first_snap_time) // 60 > (self.minute_snaps[-1][0] - self.first_snap_time) // 60
+        need_ten_sec_snap = (now - self.ten_sec_snaps[0][0]) // 10 > (self.ten_sec_snaps[-1][0] - self.ten_sec_snaps[0][0]) // 10
+        if need_minute_snap:
+            self.minute_snaps.append((now, self.urls, self.warc_bytes))
+            logging.debug('added minute snap %r', self.minute_snaps[-1])
+        if need_ten_sec_snap:
+            self.ten_sec_snaps.popleft()
+            self.ten_sec_snaps.append((now, self.urls, self.warc_bytes))
+            logging.trace('rotated in ten second snap %r', self.ten_sec_snaps[-1])
+
+    def _closest_ten_sec_snap(self, t):
+        # it's a deque so iterating over it is faster than indexed lookup
+        closest_snap = (0, 0, 0)
+        for snap in self.ten_sec_snaps:
+            if abs(t - snap[0]) < abs(t - closest_snap[0]):
+                closest_snap = snap
+        return closest_snap
+
+    def _closest_minute_snap(self, t):
+        minutes_ago = int((time.time() - t) / 60)
+        # jump to approximately where we expect the closest snap
+        i = max(0, len(self.minute_snaps) - minutes_ago)
+        # move back to the last one earlier than `t`
+        while self.minute_snaps[i][0] > t and i > 0:
+            i -= 1
+        closest_snap = self.minute_snaps[i]
+        # move forward until we start getting farther away from `t`
+        while i < len(self.minute_snaps):
+            if abs(t - self.minute_snaps[i][0]) <= abs(t - closest_snap[0]):
+                closest_snap = self.minute_snaps[i]
+            else:
+                break
+            i += 1
+        return closest_snap
+
+    def current_rates(self, time_period_minutes):
+        assert time_period_minutes > 0
+        with self._lock:
+            now = time.time()
+            urls = self.urls
+            warc_bytes = self.warc_bytes
+
+        t = now - time_period_minutes * 60
+        if time_period_minutes <= 2:
+            start_snap = self._closest_ten_sec_snap(t)
+        else:
+            start_snap = self._closest_minute_snap(t)
+
+        elapsed = now - start_snap[0]
+        logging.trace(
+                'elapsed=%0.1fs urls=%s warc_bytes=%s', elapsed,
+                urls - start_snap[1], warc_bytes - start_snap[2])
+        return elapsed, (urls - start_snap[1]) / elapsed, (warc_bytes - start_snap[2]) / elapsed
 
