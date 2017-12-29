@@ -62,7 +62,7 @@ class WarcproxController(object):
                     warcprox.writerthread.WarcWriterThread(
                         name='WarcWriterThread%03d' % i,
                         recorded_url_q=self.proxy.recorded_url_q,
-                        options=options)
+                        listeners=[self.proxy.running_stats], options=options)
                     for i in range(int(self.proxy.max_threads ** 0.5))]
 
         self.proxy_thread = None

@@ -376,7 +376,7 @@ class SingleThreadedWarcProxy(http_server.HTTPServer, object):
 
     def __init__(
             self, ca=None, recorded_url_q=None, stats_db=None,
-            running_stats=None, options=warcprox.Options()):
+            options=warcprox.Options()):
         server_address = (
                 options.address or 'localhost',
                 options.port if options.port is not None else 8000)
@@ -410,8 +410,9 @@ class SingleThreadedWarcProxy(http_server.HTTPServer, object):
                     maxsize=options.queue_size or 1000)
 
         self.stats_db = stats_db
-        self.running_stats = running_stats
         self.options = options
+
+        self.running_stats = warcprox.stats.RunningStats()
 
     def status(self):
         if hasattr(super(), 'status'):
@@ -458,7 +459,7 @@ class WarcProxy(SingleThreadedWarcProxy, warcprox.mitmproxy.PooledMitmProxy):
         warcprox.mitmproxy.PooledMitmProxy.__init__(
                 self, options.max_threads, options)
         SingleThreadedWarcProxy.__init__(
-                self, ca, recorded_url_q, stats_db, running_stats, options)
+                self, ca, recorded_url_q, stats_db, options)
 
     def server_activate(self):
         http_server.HTTPServer.server_activate(self)

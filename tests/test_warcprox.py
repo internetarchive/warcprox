@@ -1308,7 +1308,9 @@ def test_status_api(warcprox_):
     status = json.loads(response.content.decode('ascii'))
     assert set(status.keys()) == {
             'role', 'version', 'host', 'address', 'port', 'pid', 'load',
-            'queued_urls', 'queue_max_size', 'seconds_behind', 'threads'}
+            'queued_urls', 'queue_max_size', 'seconds_behind', 'threads',
+            'rates_5min', 'rates_1min', 'unaccepted_requests', 'rates_15min',
+            'active_requests',}
     assert status['role'] == 'warcprox'
     assert status['version'] == warcprox.__version__
     assert status['port'] == warcprox_.proxy.server_port
@@ -1361,6 +1363,7 @@ def test_controller_with_defaults():
     assert controller.proxy.recorded_url_q
     assert controller.proxy.server_address == ('127.0.0.1', 8000)
     assert controller.proxy.server_port == 8000
+    assert controller.proxy.running_stats
     for wwt in controller.warc_writer_threads:
         assert wwt
         assert wwt.recorded_url_q
