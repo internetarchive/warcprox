@@ -1329,7 +1329,9 @@ def test_svcreg_status(warcprox_):
         assert set(status.keys()) == {
                 'id', 'role', 'version', 'host', 'port', 'pid', 'load',
                 'queued_urls', 'queue_max_size', 'seconds_behind',
-                'first_heartbeat', 'ttl', 'last_heartbeat', 'threads'}
+                'first_heartbeat', 'ttl', 'last_heartbeat', 'threads',
+                'rates_5min', 'rates_1min', 'unaccepted_requests',
+                'rates_15min', 'active_requests',}
         assert status['role'] == 'warcprox'
         assert status['version'] == warcprox.__version__
         assert status['port'] == warcprox_.proxy.server_port
