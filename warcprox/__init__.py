@@ -95,24 +95,20 @@ class RequestBlockedByRule(Exception):
 # monkey-patch log levels TRACE and NOTICE
 TRACE = 5
 import logging
-def _logging_trace(msg, *args, **kwargs):
-    logging.root.trace(msg, *args, **kwargs)
 def _logger_trace(self, msg, *args, **kwargs):
     if self.isEnabledFor(TRACE):
         self._log(TRACE, msg, args, **kwargs)
-logging.trace = _logging_trace
 logging.Logger.trace = _logger_trace
+logging.trace = logging.root.trace
 logging.addLevelName(TRACE, 'TRACE')
 
 NOTICE = (logging.INFO + logging.WARN) // 2
 import logging
-def _logging_notice(msg, *args, **kwargs):
-    logging.root.notice(msg, *args, **kwargs)
 def _logger_notice(self, msg, *args, **kwargs):
     if self.isEnabledFor(NOTICE):
         self._log(NOTICE, msg, args, **kwargs)
-logging.notice = _logging_notice
 logging.Logger.notice = _logger_notice
+logging.notice = logging.root.notice
 logging.addLevelName(NOTICE, 'NOTICE')
 
 import warcprox.controller as controller
