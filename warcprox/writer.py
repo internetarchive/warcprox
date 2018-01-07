@@ -28,6 +28,7 @@ import fcntl
 import time
 import warcprox
 import os
+import socket
 import string
 import random
 import threading
@@ -87,7 +88,7 @@ class WarcWriter:
                 self._f = None
 
     # h3 default <!-- <property name="template" value="${prefix}-${timestamp17}-${serialno}-${heritrix.pid}~${heritrix.hostname}~${heritrix.port}" /> -->
-    # ${prefix}-${timestamp17}-${randomtoken}-${serialno}.warc.gz"
+    # ${prefix}-${timestamp17}-${shorthostname}-${randomtoken}-${serialno}.warc.gz"
     def _writer(self):
         with self._lock:
             if self._fpath and os.path.getsize(
@@ -95,9 +96,11 @@ class WarcWriter:
                 self.close_writer()
 
             if self._f == None:
-                self._f_finalname = '{}-{}-{:05d}-{}.warc{}'.format(
-                        self.prefix, self.timestamp17(), self._serial,
-                        self._randomtoken, '.gz' if self.gzip else '')
+                short_hostname = socket.getfqdn().split(".")[0]
+                self._f_finalname = '{}-{}-{}-{:05d}-{}.warc{}'.format(
+                        self.prefix, self.timestamp17(), short_hostname,
+                        self._serial, self._randomtoken,
+                        '.gz' if self.gzip else '')
                 self._fpath = os.path.sep.join([
                     self.directory, self._f_finalname + self._f_open_suffix])
 
