@@ -88,7 +88,7 @@ class WarcWriter:
                 self._f = None
 
     # h3 default <!-- <property name="template" value="${prefix}-${timestamp17}-${serialno}-${heritrix.pid}~${heritrix.hostname}~${heritrix.port}" /> -->
-    # ${prefix}-${timestamp17}-${shorthostname}-${randomtoken}-${serialno}.warc.gz"
+    # ${prefix}-${timestamp17}-${shorthostname}-${serialno}-${randomtoken}.warc.gz"
     def _writer(self):
         with self._lock:
             if self._fpath and os.path.getsize(
