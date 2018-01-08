@@ -28,6 +28,7 @@ import fcntl
 import time
 import warcprox
 import os
+import socket
 import string
 import random
 import threading
@@ -42,6 +43,8 @@ class WarcWriter:
         self._last_activity = time.time()
 
         self.gzip = options.gzip or False
+        self.warc_filename = options.warc_filename or \
+            '{prefix}-{timestamp17}-{randomtoken}-{serialno}.warc'
         digest_algorithm = options.digest_algorithm or 'sha1'
         base32 = options.base32
         self.record_builder = warcprox.warc.WarcRecordBuilder(
@@ -68,6 +71,10 @@ class WarcWriter:
         now = datetime.utcnow()
         return '{:%Y%m%d%H%M%S}{:03d}'.format(now, now.microsecond//1000)
 
+    def timestamp14(self):
+        now = datetime.utcnow()
+        return '{:%Y%m%d%H%M%S}'.format(now)
+
     def close_writer(self):
         with self._lock:
             if self._fpath:
@@ -86,8 +93,32 @@ class WarcWriter:
                 self._fpath = None
                 self._f = None
 
+    def serial(self):
+        return '{:05d}'.format(self._serial)
+
     # h3 default <!-- <property name="template" value="${prefix}-${timestamp17}-${serialno}-${heritrix.pid}~${heritrix.hostname}~${heritrix.port}" /> -->
-    # ${prefix}-${timestamp17}-${randomtoken}-${serialno}.warc.gz"
+    def _warc_filename(self):
+        """WARC filename is configurable with CLI parameter --warc-filename.
+        Default: '{prefix}-{timestamp17}-{serialno}-{randomtoken}'
+        Available variables are: prefix, timestamp14, timestamp17, serialno,
+        randomtoken, hostname, shorthostname.
+        Extension ``.warc`` or ``.warc.gz`` is appended automatically.
+        """
+        hostname = socket.getfqdn()
+        shorthostname = hostname.split(',')[0]
+        fname = self.warc_filename.format(prefix=self.prefix,
+                                          timestamp14=self.timestamp14(),
+                                          timestamp17=self.timestamp17(),
+                                          serialno=self.serial(),
+                                          randomtoken=self._randomtoken,
+                                          hostname=hostname,
+                                          shorthostname=shorthostname)
+        if self.gzip:
+            fname = fname + '.warc.gz'
+        else:
+            fname = fname + '.warc'
+        return fname
+
     def _writer(self):
         with self._lock:
             if self._fpath and os.path.getsize(
@@ -95,9 +126,7 @@ class WarcWriter:
                 self.close_writer()
 
             if self._f == None:
-                self._f_finalname = '{}-{}-{:05d}-{}.warc{}'.format(
-                        self.prefix, self.timestamp17(), self._serial,
-                        self._randomtoken, '.gz' if self.gzip else '')
+                self._f_finalname = self._warc_filename()
                 self._fpath = os.path.sep.join([
                     self.directory, self._f_finalname + self._f_open_suffix])
 
