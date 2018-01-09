@@ -105,7 +105,7 @@ class WarcWriter:
         Extension ``.warc`` or ``.warc.gz`` is appended automatically.
         """
         hostname = socket.getfqdn()
-        shorthostname = hostname.split(',')[0]
+        shorthostname = hostname.split('.')[0]
         fname = self.warc_filename.format(prefix=self.prefix,
                                           timestamp14=self.timestamp14(),
                                           timestamp17=self.timestamp17(),

@@ -163,3 +163,27 @@ def test_special_dont_write_prefix():
             wwt.stop.set()
             wwt.join()
 
+
+def test_warc_writer_filename(tmpdir):
+    """Test if WarcWriter is writing WARC files with custom filenames.
+    """
+    recorder = ProxyingRecorder(None, None, 'sha1', url='http://example.com')
+    recorded_url = RecordedUrl(
+            url='http://example.com', content_type='text/plain', status=200,
+            client_ip='127.0.0.2', request_data=b'abc',
+            response_recorder=recorder, remote_ip='127.0.0.3',
+            timestamp=datetime.utcnow())
+
+    dirname = os.path.dirname(str(tmpdir.mkdir('test-warc-writer')))
+    wwriter = WarcWriter(Options(directory=dirname, prefix='foo',
+        warc_filename='{timestamp17}-{prefix}-{timestamp14}-{serialno}'))
+    wwriter.write_records(recorded_url)
+    warcs = [fn for fn in os.listdir(dirname)]
+    assert warcs
+    target_warc = os.path.join(dirname, warcs[0])
+    assert target_warc
+    parts = warcs[0].split('-')
+    assert len(parts[0]) == 17
+    assert parts[1] == 'foo'
+    assert len(parts[2]) == 14
+    assert parts[3] == '00000.warc.open'
