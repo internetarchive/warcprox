@@ -44,7 +44,7 @@ class WarcWriter:
 
         self.gzip = options.gzip or False
         self.warc_filename = options.warc_filename or \
-            '{prefix}-{timestamp17}-{randomtoken}-{serialno}.warc'
+            '{prefix}-{timestamp17}-{randomtoken}-{serialno}'
         digest_algorithm = options.digest_algorithm or 'sha1'
         base32 = options.base32
         self.record_builder = warcprox.warc.WarcRecordBuilder(
