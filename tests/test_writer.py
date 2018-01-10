@@ -176,13 +176,13 @@ def test_warc_writer_filename(tmpdir):
 
     dirname = os.path.dirname(str(tmpdir.mkdir('test-warc-writer')))
     wwriter = WarcWriter(Options(directory=dirname, prefix='foo',
-        warc_filename='{timestamp17}_{prefix}_{timestamp14}_{serialno}'))
+        warc_filename='{timestamp17}-{prefix}-{timestamp14}-{serialno}'))
     wwriter.write_records(recorded_url)
     warcs = [fn for fn in os.listdir(dirname)]
     assert warcs
     target_warc = os.path.join(dirname, warcs[0])
     assert target_warc
-    parts = warcs[0].split('_')
+    parts = os.path.basename(warcs[0]).split('-')
     assert len(parts[0]) == 17
     assert parts[1] == 'foo'
     assert len(parts[2]) == 14
