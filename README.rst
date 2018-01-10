@@ -117,7 +117,7 @@ Usage
                             b0.foo.org,db1.foo.org:38015/my_warcprox_db/captur
                             es (default: None)
       --rethinkdb-trough-db-url RETHINKDB_TROUGH_DB_URL
-                            🐷 url pointing to trough configuration rethinkdb
+                            url pointing to trough configuration rethinkdb
                             database, e.g. rethinkdb://db0.foo.org,db1.foo.org
                             :38015/trough_configuration (default: None)
       --cdxserver-dedup CDXSERVER_DEDUP
