@@ -24,6 +24,7 @@ import fcntl
 from multiprocessing import Process, Queue
 from datetime import datetime
 import pytest
+import re
 from warcprox.mitmproxy import ProxyingRecorder
 from warcprox.warcproxy import RecordedUrl
 from warcprox.writer import WarcWriter
@@ -180,10 +181,4 @@ def test_warc_writer_filename(tmpdir):
     wwriter.write_records(recorded_url)
     warcs = [fn for fn in os.listdir(dirname)]
     assert warcs
-    target_warc = os.path.join(dirname, warcs[0])
-    assert target_warc
-    parts = os.path.basename(warcs[0]).split('_')
-    assert len(parts[0]) == 17
-    assert parts[1] == 'foo'
-    assert len(parts[2]) == 14
-    assert parts[3] == '00000.warc.open'
+    assert re.match('\d{17}_foo_\d{14}_00000.warc.open', warcs[0])
