@@ -4,7 +4,7 @@ starting up and shutting down the various components of warcprox, and for
 sending heartbeats to the service registry if configured to do so; also has
 some memory profiling capabilities
 
-Copyright (C) 2013-2017 Internet Archive
+Copyright (C) 2013-2018 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -27,55 +27,186 @@ from __future__ import absolute_import
 import logging
 import threading
 import time
-import warcprox
 import sys
 import gc
 import datetime
+import warcprox
+import certauth
+
+class Factory:
+    @staticmethod
+    def dedup_db(options):
+        if options.rethinkdb_dedup_url:
+            dedup_db = warcprox.dedup.RethinkDedupDb(options=options)
+        elif options.rethinkdb_big_table_url:
+            dedup_db = warcprox.bigtable.RethinkCapturesDedup(options=options)
+        elif options.rethinkdb_trough_db_url:
+            dedup_db = warcprox.dedup.TroughDedupDb(options)
+        elif options.cdxserver_dedup:
+            dedup_db = warcprox.dedup.CdxServerDedup(
+                cdx_url=options.cdxserver_dedup)
+        elif options.dedup_db_file in (None, '', '/dev/null'):
+            logging.info('deduplication disabled')
+            dedup_db = None
+        else:
+            dedup_db = warcprox.dedup.DedupDb(options.dedup_db_file, options=options)
+        return dedup_db
+
+    @staticmethod
+    def stats_db(options):
+        if options.rethinkdb_stats_url:
+            stats_db = warcprox.stats.RethinkStatsDb(options=options)
+        elif options.stats_db_file in (None, '', '/dev/null'):
+            logging.info('statistics tracking disabled')
+            stats_db = None
+        else:
+            stats_db = warcprox.stats.StatsDb(options.stats_db_file, options=options)
+        return stats_db
+
+    # @staticmethod
+    # def certauth(options):
+    #     ca_name = 'Warcprox CA on {}'.format(socket.gethostname())[:64]
+    #     ca = certauth.certauth.CertificateAuthority(
+    #             options.cacert, args.certs_dir, ca_name=ca_name)
+    #     return ca
+
+    @staticmethod
+    def playback_proxy(options):
+        if options.playback_port is not None:
+            playback_index_db = warcprox.playback.PlaybackIndexDb(
+                    options.playback_index_db_file, options=options)
+            playback_proxy = warcprox.playback.PlaybackProxy(
+                    ca=ca, playback_index_db=playback_index_db, options=options)
+        else:
+            playback_index_db = None
+            playback_proxy = None
+        return playback_proxy
+
+    @staticmethod
+    def crawl_logger(options):
+        if options.crawl_log_dir:
+            return warcprox.crawl_log.CrawlLogger(
+                options.crawl_log_dir, options=options))
+        else:
+            return None
+
+    @staticmethod
+    def plugin(qualname, inq, outq):
+        try:
+            (module_name, class_name) = qualname.rsplit('.', 1)
+            module_ = importlib.import_module(module_name)
+            class_ = getattr(module_, class_name)
+            instance = class_()
+            plugin.notify  # make sure it has this method
+            return instance
+        except Exception as e:
+            logging.fatal('problem with plugin class %r: %s', qualname, e)
+            sys.exit(1)
+
+    # @staticmethod
+    # def plugins(options):
+    #     plugins = []
+    #     for qualname in options.plugins or []:
+    #         try:
+    #             (module_name, class_name) = qualname.rsplit('.', 1)
+    #             module_ = importlib.import_module(module_name)
+    #             class_ = getattr(module_, class_name)
+    #             plugin = class_()
+    #             plugin.notify  # make sure it has this method
+    #             plugins.append(plugin)
+    #         except Exception as e:
+    #             logging.fatal('problem with plugin class %r: %s', qualname, e)
+    #             sys.exit(1)
+    #     return plugins
+
+    # @staticmethod
+    # def service_registry(options):
+    #     if options.rethinkdb_services_url:
+    #         parsed = doublethink.parse_rethinkdb_url(
+    #                 options.rethinkdb_services_url)
+    #         rr = doublethink.Rethinker(servers=parsed.hosts, db=parsed.database)
+    #         return doublethink.ServiceRegistry(rr, table=parsed.table)
+    #     else:
+    #         return None
 
 class WarcproxController(object):
     logger = logging.getLogger("warcprox.controller.WarcproxController")
 
     HEARTBEAT_INTERVAL = 20.0
 
-    def __init__(
-            self, proxy=None, warc_writer_threads=None, playback_proxy=None,
-            service_registry=None, options=warcprox.Options()):
+    def __init__(self, options=warcprox.Options()):
         """
-        Create warcprox controller.
-
-        If supplied, `proxy` should be an instance of WarcProxy, and
-        `warc_writer_threads` should be a list of WarcWriterThread instances.
-        If not supplied, they are created with default values.
-
-        If supplied, playback_proxy should be an instance of PlaybackProxy. If
-        not supplied, no playback proxy will run.
+        Create warcprox controller based on `options`.
         """
-        if proxy is not None:
-            self.proxy = proxy
-        else:
-            self.proxy = warcprox.warcproxy.WarcProxy(options=options)
-
-        if warc_writer_threads is not None:
-            self.warc_writer_threads = warc_writer_threads
-        else:
-            self.warc_writer_threads = [
-                    warcprox.writerthread.WarcWriterThread(
-                        name='WarcWriterThread%03d' % i,
-                        recorded_url_q=self.proxy.recorded_url_q,
-                        listeners=[self.proxy.running_stats], options=options)
-                    for i in range(int(self.proxy.max_threads ** 0.5))]
+        self.options = options
 
         self.proxy_thread = None
         self.playback_proxy_thread = None
-        self.playback_proxy = playback_proxy
-        self.service_registry = service_registry
-        self.options = options
-
         self._last_rss = None
-
         self.stop = threading.Event()
         self._start_stop_lock = threading.Lock()
 
+        self.proxy = warcprox.warcproxy.WarcProxy(options=options)
+
+        self.build_postfetch_chain(proxy.recorded_url_q)
+
+        # if warc_writer_threads is not None:
+        #     self.warc_writer_threads = warc_writer_threads
+        # else:
+        #     self.warc_writer_threads = [
+        #             warcprox.writerthread.WarcWriterThread(
+        #                 name='WarcWriterThread%03d' % i,
+        #                 recorded_url_q=self.proxy.recorded_url_q,
+        #                 listeners=[self.proxy.running_stats], options=options)
+        #             for i in range(int(self.proxy.max_threads ** 0.5))]
+        # self.playback_proxy = playback_proxy
+        # self.service_registry = service_registry
+
+    def build_postfetch_chain(self, inq):
+        outq = warcprox.TimestampedQueue(maxsize=self.options.queue_size)
+
+        def maybe_add_to_chain(processor_init):
+            processor = processor_init(inq, outq, self.options)
+            if processor:
+                self._postfetch_chain.append(processor)
+                inq = outq
+                outq = warcprox.TimestampedQueue(maxsize=self.options.queue_size)
+
+        self.dedup_db = Factory.dedup_db(options)
+
+        # dedup loader
+        if self.dedup_db:
+            maybe_add_to_chain(self.dedup_db.loader)
+
+        # warc writer
+        maybe_add_to_chain(Factory.warc_writer)
+
+        # dedup storer
+        if self.dedup_db:
+            maybe_add_to_chain(self.dedup_db.storer)
+
+        # playback index storer
+        # XXX XXX XXX FIXME
+        # self.playback_proxy = Factory.playback_proxy(options)
+        # if self.playback_proxy:
+        #     maybe_add_to_chain()
+        #     outq = warcprox.TimestampedQueue(maxsize=self.options.queue_size)
+        #     processor = self.playback_proxy.playback_index_db(inq, outq)
+        #     self._postfetch_chain.append(processor)
+        #     inq = outq
+
+        # stats db
+        maybe_add_to_chain(Factory.stats_db)
+
+        # crawl logger
+        maybe_add_to_chain(Factory.crawl_logger)
+
+        for qualname in self.options.plugins:
+            maybe_add_to_chain(
+                lambda inq, outq, options: Factory.plugin(qualname, inq, outq))
+        # self.plugins = Factory.plugins(options)
+
+        
     def debug_mem(self):
         self.logger.info("self.proxy.recorded_url_q.qsize()=%s", self.proxy.recorded_url_q.qsize())
         with open("/proc/self/status") as f:

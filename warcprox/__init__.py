@@ -1,7 +1,7 @@
 """
 warcprox/__init__.py - warcprox package main file, contains some utility code
 
-Copyright (C) 2013-2017 Internet Archive
+Copyright (C) 2013-2018 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -19,6 +19,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
 USA.
 """
 
+import datetime
+import threading
 from argparse import Namespace as _Namespace
 from pkg_resources import get_distribution as _get_distribution
 __version__ = _get_distribution('warcprox').version
@@ -26,8 +28,6 @@ try:
     import queue
 except ImportError:
     import Queue as queue
-import datetime
-
 def digest_str(hash_obj, base32=False):
     import base64
     return hash_obj.name.encode('utf-8') + b':' + (
@@ -91,6 +91,100 @@ class RequestBlockedByRule(Exception):
         self.msg = msg
     def __str__(self):
         return "%s: %s" % (self.__class__.__name__, self.msg)
+
+class BasePostfetchProcessor(threading.Thread):
+    def __init__(self, inq, outq, profile=False):
+        threading.Thread.__init__(self, name='???')
+        self.inq = inq
+        self.outq = outq
+        self.stop = threading.Event()
+        self.profile = profile
+
+    def run(self):
+        if self.profile:
+            import cProfile
+            self.profiler = cProfile.Profile()
+            self.profiler.enable()
+            self._run()
+            self.profiler.disable()
+        else:
+            self._run()
+
+    def _get_process_put(self):
+        '''
+        Get url(s) from `self.inq`, process url(s), queue to `self.outq`.
+
+        Subclasses must implement this.
+
+        May raise queue.Empty.
+        '''
+        raise Exception('not implemented')
+
+    def _run(self):
+        while not self.stop.is_set():
+            try:
+                while True:
+                    try:
+                        self._get_process_put()
+                    except queue.Empty:
+                        if self.stop.is_set():
+                            break
+                self._shutdown()
+            except Exception as e:
+                if isinstance(e, OSError) and e.errno == 28:
+                    # OSError: [Errno 28] No space left on device
+                    self.logger.critical(
+                            'shutting down due to fatal problem: %s: %s',
+                            e.__class__.__name__, e)
+                    self._shutdown()
+                    sys.exit(1)
+
+                self.logger.critical(
+                    '%s will try to continue after unexpected error',
+                    self.name, exc_info=True)
+                time.sleep(0.5)
+
+    def _shutdown(self):
+        pass
+
+class BaseStandardPostfetchProcessor(BasePostfetchProcessor):
+    def _get_process_put(self):
+        recorded_url = self.inq.get(block=True, timeout=0.5)
+        self._process_url(recorded_url)
+        if self.outq:
+            self.outq.put(recorded_url)
+
+    def _process_url(self, recorded_url):
+        raise Exception('not implemented')
+
+class BaseBatchPostfetchProcessor(BasePostfetchProcessor):
+    MAX_BATCH_SIZE = 500
+
+    def _get_process_put(self):
+        batch = []
+        batch.append(self.inq.get(block=True, timeout=0.5))
+        try:
+            while len(batch) < self.MAX_BATCH_SIZE:
+                batch.append(self.inq.get(block=False))
+        except queue.Empty:
+            pass
+
+        self._process_batch(batch)
+
+        if self.outq:
+            for recorded_url in batch:
+                self.outq.put(recorded_url)
+
+    def _process_batch(self, batch):
+        raise Exception('not implemented')
+
+class ListenerPostfetchProcessor(BaseStandardPostfetchProcessor):
+    def __init__(self, listener, inq, outq, profile=False):
+        BaseStandardPostfetchProcessor.__init__(self, inq, outq, profile)
+        self.listener = listener
+
+    def _process_url(self, recorded_url):
+        return self.listener.notify(recorded_url, recorded_url.warc_records)
 
 # monkey-patch log levels TRACE and NOTICE
 TRACE = 5

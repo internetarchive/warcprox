@@ -2,7 +2,7 @@
 warcprox/warcproxy.py - recording proxy, extends mitmproxy to record traffic,
 enqueue info on the recorded url queue
 
-Copyright (C) 2013-2016 Internet Archive
+Copyright (C) 2013-2018 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
