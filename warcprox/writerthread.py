@@ -106,12 +106,12 @@ class WarcWriterThread(threading.Thread):
                         # try to release resources in a timely fashion
                         if recorded_url.response_recorder and recorded_url.response_recorder.tempfile:
                             recorded_url.response_recorder.tempfile.close()
-
-                        self.writer_pool.maybe_idle_rollover()
                     except queue.Empty:
                         if self.stop.is_set():
                             break
                         self.idle = time.time()
+                    finally:
+                        self.writer_pool.maybe_idle_rollover()
 
                 self.logger.info('WarcWriterThread shutting down')
                 self._shutdown()
