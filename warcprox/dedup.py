@@ -35,6 +35,14 @@ from urllib3.exceptions import HTTPError
 
 urllib3.disable_warnings()
 
+class DedupLoader(warcprox.BaseStandardPostfetchProcessor):
+    def __init__(self, dedup_db, inq, outq, base32=False, profile=False):
+        warcprox.BaseStandardPostfetchProcessor.__init__(self, inq, outq, profile)
+        self.dedup_db = dedup_db
+        self.base32 = base32
+    def _process_url(self, recorded_url):
+        decorate_with_dedup_info(self.dedup_db, recorded_url, self.base32)
+
 class DedupDb(object):
     logger = logging.getLogger("warcprox.dedup.DedupDb")
 
@@ -60,6 +68,12 @@ class DedupDb(object):
                 ');')
         conn.commit()
         conn.close()
+
+    def loader(self, inq, outq, profile=False):
+        return DedupLoader(self, inq, outq, self.options.base32, profile)
+
+    def storer(self, inq, outq, profile=False):
+        return warcprox.ListenerPostfetchProcessor(self, inq, outq, profile)
 
     def save(self, digest_key, response_record, bucket=""):
         record_id = response_record.get_header(warctools.WarcRecord.ID).decode('latin1')
@@ -106,20 +120,20 @@ class DedupDb(object):
             else:
                 self.save(digest_key, records[0])
 
-
 def decorate_with_dedup_info(dedup_db, recorded_url, base32=False):
     if (recorded_url.response_recorder
             and recorded_url.payload_digest
             and recorded_url.response_recorder.payload_size() > 0):
         digest_key = warcprox.digest_str(recorded_url.payload_digest, base32)
         if recorded_url.warcprox_meta and "captures-bucket" in recorded_url.warcprox_meta:
-            recorded_url.dedup_info = dedup_db.lookup(digest_key, recorded_url.warcprox_meta["captures-bucket"],
-                                                      recorded_url.url)
+            recorded_url.dedup_info = dedup_db.lookup(
+                digest_key, recorded_url.warcprox_meta["captures-bucket"],
+                recorded_url.url)
         else:
-            recorded_url.dedup_info = dedup_db.lookup(digest_key,
-                                                      url=recorded_url.url)
+            recorded_url.dedup_info = dedup_db.lookup(
+                digest_key, url=recorded_url.url)
 
-class RethinkDedupDb:
+class RethinkDedupDb(DedupDb):
     logger = logging.getLogger("warcprox.dedup.RethinkDedupDb")
 
     def __init__(self, options=warcprox.Options()):
@@ -181,7 +195,7 @@ class RethinkDedupDb:
             else:
                 self.save(digest_key, records[0])
 
-class CdxServerDedup(object):
+class CdxServerDedup(DedupDb):
     """Query a CDX server to perform deduplication.
     """
     logger = logging.getLogger("warcprox.dedup.CdxServerDedup")
@@ -244,7 +258,7 @@ class CdxServerDedup(object):
         """
         pass
 
-class TroughDedupDb(object):
+class TroughDedupDb(DedupDb):
     '''
     https://github.com/internetarchive/trough
     '''

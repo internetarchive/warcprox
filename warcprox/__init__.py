@@ -19,8 +19,11 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
 USA.
 """
 
+import sys
 import datetime
 import threading
+import time
+import logging
 from argparse import Namespace as _Namespace
 from pkg_resources import get_distribution as _get_distribution
 __version__ = _get_distribution('warcprox').version
@@ -28,6 +31,7 @@ try:
     import queue
 except ImportError:
     import Queue as queue
+
 def digest_str(hash_obj, base32=False):
     import base64
     return hash_obj.name.encode('utf-8') + b':' + (
@@ -93,15 +97,17 @@ class RequestBlockedByRule(Exception):
         return "%s: %s" % (self.__class__.__name__, self.msg)
 
 class BasePostfetchProcessor(threading.Thread):
-    def __init__(self, inq, outq, profile=False):
+    logger = logging.getLogger("warcprox.BasePostfetchProcessor")
+
+    def __init__(self, inq, outq, options=Options()):
         threading.Thread.__init__(self, name='???')
         self.inq = inq
         self.outq = outq
+        self.options = options
         self.stop = threading.Event()
-        self.profile = profile
 
     def run(self):
-        if self.profile:
+        if self.options.profile:
             import cProfile
             self.profiler = cProfile.Profile()
             self.profiler.enable()
@@ -186,9 +192,15 @@ class ListenerPostfetchProcessor(BaseStandardPostfetchProcessor):
     def _process_url(self, recorded_url):
         return self.listener.notify(recorded_url, recorded_url.warc_records)
 
+    # @classmethod
+    # def wrap(cls, listener, inq, outq, profile=False):
+    #     if listener:
+    #         return cls(listener, inq, outq, profile)
+    #     else:
+    #         return None
+
 # monkey-patch log levels TRACE and NOTICE
 TRACE = 5
-import logging
 def _logger_trace(self, msg, *args, **kwargs):
     if self.isEnabledFor(TRACE):
         self._log(TRACE, msg, args, **kwargs)
@@ -197,7 +209,6 @@ logging.trace = logging.root.trace
 logging.addLevelName(TRACE, 'TRACE')
 
 NOTICE = (logging.INFO + logging.WARN) // 2
-import logging
 def _logger_notice(self, msg, *args, **kwargs):
     if self.isEnabledFor(NOTICE):
         self._log(NOTICE, msg, args, **kwargs)

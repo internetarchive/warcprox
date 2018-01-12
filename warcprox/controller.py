@@ -32,6 +32,7 @@ import gc
 import datetime
 import warcprox
 import certauth
+import functools
 
 class Factory:
     @staticmethod
@@ -60,7 +61,8 @@ class Factory:
             logging.info('statistics tracking disabled')
             stats_db = None
         else:
-            stats_db = warcprox.stats.StatsDb(options.stats_db_file, options=options)
+            stats_db = warcprox.stats.StatsDb(
+                options.stats_db_file, options=options)
         return stats_db
 
     # @staticmethod
@@ -69,6 +71,10 @@ class Factory:
     #     ca = certauth.certauth.CertificateAuthority(
     #             options.cacert, args.certs_dir, ca_name=ca_name)
     #     return ca
+
+    @staticmethod
+    def warc_writer(inq, outq, options):
+        return warcprox.writerthread.WarcWriterThread(inq, outq, options)
 
     @staticmethod
     def playback_proxy(options):
@@ -86,48 +92,32 @@ class Factory:
     def crawl_logger(options):
         if options.crawl_log_dir:
             return warcprox.crawl_log.CrawlLogger(
-                options.crawl_log_dir, options=options))
+                options.crawl_log_dir, options=options)
         else:
             return None
 
     @staticmethod
-    def plugin(qualname, inq, outq):
+    def plugin(qualname):
         try:
             (module_name, class_name) = qualname.rsplit('.', 1)
             module_ = importlib.import_module(module_name)
             class_ = getattr(module_, class_name)
-            instance = class_()
+            listener = class_()
             plugin.notify  # make sure it has this method
-            return instance
+            return plugin
         except Exception as e:
             logging.fatal('problem with plugin class %r: %s', qualname, e)
             sys.exit(1)
 
-    # @staticmethod
-    # def plugins(options):
-    #     plugins = []
-    #     for qualname in options.plugins or []:
-    #         try:
-    #             (module_name, class_name) = qualname.rsplit('.', 1)
-    #             module_ = importlib.import_module(module_name)
-    #             class_ = getattr(module_, class_name)
-    #             plugin = class_()
-    #             plugin.notify  # make sure it has this method
-    #             plugins.append(plugin)
-    #         except Exception as e:
-    #             logging.fatal('problem with plugin class %r: %s', qualname, e)
-    #             sys.exit(1)
-    #     return plugins
-
-    # @staticmethod
-    # def service_registry(options):
-    #     if options.rethinkdb_services_url:
-    #         parsed = doublethink.parse_rethinkdb_url(
-    #                 options.rethinkdb_services_url)
-    #         rr = doublethink.Rethinker(servers=parsed.hosts, db=parsed.database)
-    #         return doublethink.ServiceRegistry(rr, table=parsed.table)
-    #     else:
-    #         return None
+    @staticmethod
+    def service_registry(options):
+        if options.rethinkdb_services_url:
+            parsed = doublethink.parse_rethinkdb_url(
+                    options.rethinkdb_services_url)
+            rr = doublethink.Rethinker(servers=parsed.hosts, db=parsed.database)
+            return doublethink.ServiceRegistry(rr, table=parsed.table)
+        else:
+            return None
 
 class WarcproxController(object):
     logger = logging.getLogger("warcprox.controller.WarcproxController")
@@ -148,65 +138,55 @@ class WarcproxController(object):
 
         self.proxy = warcprox.warcproxy.WarcProxy(options=options)
 
-        self.build_postfetch_chain(proxy.recorded_url_q)
+        self.build_postfetch_chain(self.proxy.recorded_url_q)
 
-        # if warc_writer_threads is not None:
-        #     self.warc_writer_threads = warc_writer_threads
-        # else:
-        #     self.warc_writer_threads = [
-        #             warcprox.writerthread.WarcWriterThread(
-        #                 name='WarcWriterThread%03d' % i,
-        #                 recorded_url_q=self.proxy.recorded_url_q,
-        #                 listeners=[self.proxy.running_stats], options=options)
-        #             for i in range(int(self.proxy.max_threads ** 0.5))]
-        # self.playback_proxy = playback_proxy
-        # self.service_registry = service_registry
+        self.service_registry = Factory.service_registry(options)
 
     def build_postfetch_chain(self, inq):
-        outq = warcprox.TimestampedQueue(maxsize=self.options.queue_size)
+        constructors = []
 
-        def maybe_add_to_chain(processor_init):
-            processor = processor_init(inq, outq, self.options)
-            if processor:
-                self._postfetch_chain.append(processor)
-                inq = outq
-                outq = warcprox.TimestampedQueue(maxsize=self.options.queue_size)
+        self.dedup_db = Factory.dedup_db(self.options)
 
-        self.dedup_db = Factory.dedup_db(options)
-
-        # dedup loader
         if self.dedup_db:
-            maybe_add_to_chain(self.dedup_db.loader)
+            constructors.append(self.dedup_db.loader)
 
-        # warc writer
-        maybe_add_to_chain(Factory.warc_writer)
+        constructors.append(Factory.warc_writer)
 
-        # dedup storer
         if self.dedup_db:
-            maybe_add_to_chain(self.dedup_db.storer)
+            constructors.append(self.dedup_db.storer)
 
-        # playback index storer
-        # XXX XXX XXX FIXME
-        # self.playback_proxy = Factory.playback_proxy(options)
-        # if self.playback_proxy:
-        #     maybe_add_to_chain()
-        #     outq = warcprox.TimestampedQueue(maxsize=self.options.queue_size)
-        #     processor = self.playback_proxy.playback_index_db(inq, outq)
-        #     self._postfetch_chain.append(processor)
-        #     inq = outq
+        stats_db = Factory.stats_db(self.options)
+        if stats_db:
+            constructors.append(functools.partial(
+                warcprox.ListenerPostfetchProcessor, stats_db))
 
-        # stats db
-        maybe_add_to_chain(Factory.stats_db)
+        self.playback_proxy = Factory.playback_proxy(self.options)
+        if self.playback_proxy:
+            constructors.append(functools.partial(
+                warcprox.ListenerPostfetchProcessor,
+                self.playback_proxy.playback_index_db))
 
-        # crawl logger
-        maybe_add_to_chain(Factory.crawl_logger)
+        crawl_logger = Factory.crawl_logger(self.options)
+        if crawl_logger:
+            constructors.append(functools.partial(
+                warcprox.ListenerPostfetchProcessor, crawl_logger))
 
-        for qualname in self.options.plugins:
-            maybe_add_to_chain(
-                lambda inq, outq, options: Factory.plugin(qualname, inq, outq))
-        # self.plugins = Factory.plugins(options)
-
+        for qualname in self.options.plugins or []:
+            plugin = Factory.plugin(qualname)
+            constructors.append(functools.partial(
+                warcprox.ListenerPostfetchProcessor, plugin))
         
+        self._postfetch_chain = []
+        for i, constructor in enumerate(constructors):
+            if i != len(constructors) - 1:
+                outq = warcprox.TimestampedQueue(
+                    maxsize=self.options.queue_size)
+            else:
+                outq = None
+            processor = constructor(inq, outq, self.options)
+            self._postfetch_chain.append(processor)
+            inq = outq
+
     def debug_mem(self):
         self.logger.info("self.proxy.recorded_url_q.qsize()=%s", self.proxy.recorded_url_q.qsize())
         with open("/proc/self/status") as f:
@@ -293,26 +273,14 @@ class WarcproxController(object):
                 self.logger.info('warcprox is already running')
                 return
 
-            if self.proxy.stats_db:
-                self.proxy.stats_db.start()
             self.proxy_thread = threading.Thread(
                     target=self.proxy.serve_forever, name='ProxyThread')
             self.proxy_thread.start()
 
-            assert(all(
-                wwt.dedup_db is self.warc_writer_threads[0].dedup_db
-                for wwt in self.warc_writer_threads))
-            if any((t.dedup_db for t in self.warc_writer_threads)):
-                self.warc_writer_threads[0].dedup_db.start()
-
-            for wwt in self.warc_writer_threads:
-                wwt.start()
-
-            if self.playback_proxy is not None:
-                self.playback_proxy_thread = threading.Thread(
-                        target=self.playback_proxy.serve_forever,
-                        name='PlaybackProxyThread')
-                self.playback_proxy_thread.start()
+            for processor in self._postfetch_chain:
+                # logging.info('starting postfetch processor %r', processor)
+                processor.start()
+                logging.info('started postfetch processor %r', processor)
 
     def shutdown(self):
         with self._start_stop_lock:
@@ -320,30 +288,34 @@ class WarcproxController(object):
                 self.logger.info('warcprox is not running')
                 return
 
-            for wwt in self.warc_writer_threads:
-                wwt.stop.set()
+            # for wwt in self.warc_writer_threads:
+            #     wwt.stop.set()
+            for processor in self._postfetch_chain:
+                processor.stop.set()
             self.proxy.shutdown()
             self.proxy.server_close()
 
-            if self.playback_proxy is not None:
-                self.playback_proxy.shutdown()
-                self.playback_proxy.server_close()
-                if self.playback_proxy.playback_index_db is not None:
-                    self.playback_proxy.playback_index_db.close()
+            for processor in self._postfetch_chain:
+                processor.join()
+            # if self.playback_proxy is not None:
+            #     self.playback_proxy.shutdown()
+            #     self.playback_proxy.server_close()
+            #     if self.playback_proxy.playback_index_db is not None:
+            #         self.playback_proxy.playback_index_db.close()
 
-            # wait for threads to finish
-            for wwt in self.warc_writer_threads:
-                wwt.join()
+            # # wait for threads to finish
+            # for wwt in self.warc_writer_threads:
+            #     wwt.join()
 
-            if self.proxy.stats_db:
-                self.proxy.stats_db.stop()
+            # if self.proxy.stats_db:
+            #     self.proxy.stats_db.stop()
 
-            self.proxy_thread.join()
-            if self.playback_proxy is not None:
-                self.playback_proxy_thread.join()
+            # self.proxy_thread.join()
+            # if self.playback_proxy is not None:
+            #     self.playback_proxy_thread.join()
 
-            if self.service_registry and hasattr(self, "status_info"):
-                self.service_registry.unregister(self.status_info["id"])
+            # if self.service_registry and hasattr(self, "status_info"):
+            #     self.service_registry.unregister(self.status_info["id"])
 
     def run_until_shutdown(self):
         """

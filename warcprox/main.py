@@ -198,12 +198,12 @@ def dump_state(signum=None, frame=None):
             'dumping state (caught signal %s)\n%s',
             signum, '\n'.join(state_strs))
 
-def init_controller(args):
+def parse_args(argv):
     '''
-    Creates a warcprox.controller.WarcproxController configured according to
-    the supplied arguments (normally the result of parse_args(sys.argv)).
+    Parses command line arguments with argparse.
     '''
-    options = warcprox.Options(**vars(args))
+    arg_parser = _build_arg_parser(prog=os.path.basename(argv[0]))
+    args = arg_parser.parse_args(args=argv[1:])
 
     try:
         hashlib.new(args.digest_algorithm)
@@ -211,19 +211,6 @@ def init_controller(args):
         logging.fatal(e)
         exit(1)
 
-
-    controller = warcprox.controller.WarcproxController(
-            proxy, warc_writer_threads, playback_proxy,
-            service_registry=svcreg, options=options)
-
-    return controller
-
-def parse_args(argv):
-    '''
-    Parses command line arguments with argparse.
-    '''
-    arg_parser = _build_arg_parser(prog=os.path.basename(argv[0]))
-    args = arg_parser.parse_args(args=argv[1:])
     return args
 
 def main(argv=None):
@@ -249,7 +236,8 @@ def main(argv=None):
     # see https://github.com/pyca/cryptography/issues/2911
     cryptography.hazmat.backends.openssl.backend.activate_builtin_random()
 
-    controller = init_controller(args)
+    options = warcprox.Options(**vars(args))
+    controller = warcprox.controller.WarcproxController(options)
 
     signal.signal(signal.SIGTERM, lambda a,b: controller.stop.set())
     signal.signal(signal.SIGINT, lambda a,b: controller.stop.set())
