@@ -181,4 +181,4 @@ def test_warc_writer_filename(tmpdir):
     wwriter.write_records(recorded_url)
     warcs = [fn for fn in os.listdir(dirname)]
     assert warcs
-    assert re.search('\d{17}_foo_\d{14}_00000.warc.open', warcs[0])
+    assert re.search('\d{17}_foo_\d{14}_00000.warc.open', wwriter._fpath)
