@@ -185,12 +185,12 @@ class CdxServerDedup(object):
     """Query a CDX server to perform deduplication.
     """
     logger = logging.getLogger("warcprox.dedup.CdxServerDedup")
-    http_pool = urllib3.PoolManager()
 
     def __init__(self, cdx_url="https://web.archive.org/cdx/search",
-                 options=warcprox.Options()):
+                 maxsize=200, options=warcprox.Options()):
         self.cdx_url = cdx_url
         self.options = options
+        self.http_pool = urllib3.PoolManager(maxsize=maxsize)
 
     def start(self):
         pass
