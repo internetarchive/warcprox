@@ -562,7 +562,12 @@ class PooledMitmProxy(PooledMixIn, MitmProxy):
     request_queue_size = 4096
 
     def __init__(self, max_threads, options=warcprox.Options()):
-        PooledMixIn.__init__(self, max_threads)
+        if options.max_threads:
+            self.logger.info(
+                    "max_threads=%s set by command line option",
+                    options.max_threads)
+
+        PooledMixIn.__init__(self, options.max_threads)
         self.profilers = {}
 
         if options.profile:

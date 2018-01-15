@@ -116,9 +116,9 @@ def _build_arg_parser(prog):
 
     arg_parser.add_argument('-P', '--playback-port', dest='playback_port',
             type=int, default=None, help='port to listen on for instant playback')
-    arg_parser.add_argument('--playback-index-db-file', dest='playback_index_db_file',
-            default='./warcprox-playback-index.db',
-            help='playback index database file (only used if --playback-port is specified)')
+    # arg_parser.add_argument('--playback-index-db-file', dest='playback_index_db_file',
+    #         default='./warcprox-playback-index.db',
+    #         help='playback index database file (only used if --playback-port is specified)')
     group = arg_parser.add_mutually_exclusive_group()
     group.add_argument('-j', '--dedup-db-file', dest='dedup_db_file',
             default='./warcprox.sqlite', help='persistent deduplication database file; empty string or /dev/null disables deduplication')

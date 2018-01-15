@@ -357,7 +357,9 @@ def warcprox_(request):
         argv.append('--rethinkdb-trough-db-url=%s' % request.config.getoption('--rethinkdb-trough-db-url'))
 
     args = warcprox.main.parse_args(argv)
-    warcprox_ = warcprox.main.init_controller(args)
+
+    options = warcprox.Options(**vars(args))
+    warcprox_ = warcprox.controller.WarcproxController(options)
 
     logging.info('starting warcprox')
     warcprox_thread = threading.Thread(
@@ -490,8 +492,8 @@ def test_dedup_http(http_daemon, warcprox_, archiving_proxies, playback_proxies)
     assert response.content == b'404 Not in Archive\n'
 
     # check not in dedup db
-    dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
-            b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
+    dedup_lookup = warcprox_.dedup_db.lookup(
+        b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
     assert dedup_lookup is None
 
     # archive
@@ -508,13 +510,13 @@ def test_dedup_http(http_daemon, warcprox_, archiving_proxies, playback_proxies)
 
     # wait for writer thread to process
     time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
+    while warcprox_.postfetch_chain_busy():
         time.sleep(0.5)
     time.sleep(0.5)
 
     # check in dedup db
     # {u'id': u'<urn:uuid:e691dc0f-4bb9-4ad8-9afb-2af836aa05e4>', u'url': u'https://localhost:62841/c/d', u'date': u'2013-11-22T00:14:37Z'}
-    dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
+    dedup_lookup = warcprox_.dedup_db.lookup(
             b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
     assert dedup_lookup
     assert dedup_lookup['url'] == url.encode('ascii')
@@ -535,12 +537,12 @@ def test_dedup_http(http_daemon, warcprox_, archiving_proxies, playback_proxies)
 
     # wait for writer thread to process
     time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
+    while warcprox_.postfetch_chain_busy():
         time.sleep(0.5)
     time.sleep(0.5)
 
     # check in dedup db (no change from prev)
-    dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
+    dedup_lookup = warcprox_.dedup_db.lookup(
             b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
     assert dedup_lookup['url'] == url.encode('ascii')
     assert dedup_lookup['id'] == record_id
@@ -564,7 +566,7 @@ def test_dedup_https(https_daemon, warcprox_, archiving_proxies, playback_proxie
     assert response.content == b'404 Not in Archive\n'
 
     # check not in dedup db
-    dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
+    dedup_lookup = warcprox_.dedup_db.lookup(
             b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
     assert dedup_lookup is None
 
@@ -582,13 +584,13 @@ def test_dedup_https(https_daemon, warcprox_, archiving_proxies, playback_proxie
 
     # wait for writer thread to process
     time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
+    while warcprox_.postfetch_chain_busy():
         time.sleep(0.5)
     time.sleep(0.5)
 
     # check in dedup db
     # {u'id': u'<urn:uuid:e691dc0f-4bb9-4ad8-9afb-2af836aa05e4>', u'url': u'https://localhost:62841/c/d', u'date': u'2013-11-22T00:14:37Z'}
-    dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
+    dedup_lookup = warcprox_.dedup_db.lookup(
             b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
     assert dedup_lookup
     assert dedup_lookup['url'] == url.encode('ascii')
@@ -609,12 +611,12 @@ def test_dedup_https(https_daemon, warcprox_, archiving_proxies, playback_proxie
 
     # wait for writer thread to process
     time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
+    while warcprox_.postfetch_chain_busy():
         time.sleep(0.5)
     time.sleep(0.5)
 
     # check in dedup db (no change from prev)
-    dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
+    dedup_lookup = warcprox_.dedup_db.lookup(
             b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
     assert dedup_lookup['url'] == url.encode('ascii')
     assert dedup_lookup['id'] == record_id
@@ -640,7 +642,7 @@ def test_limits(http_daemon, warcprox_, archiving_proxies):
 
     # wait for writer thread to process
     time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
+    while warcprox_.postfetch_chain_busy():
         time.sleep(0.5)
     time.sleep(0.5)
 
@@ -652,7 +654,7 @@ def test_limits(http_daemon, warcprox_, archiving_proxies):
 
     # wait for writer thread to process
     time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
+    while warcprox_.postfetch_chain_busy():
         time.sleep(0.5)
     time.sleep(2.5)
 
@@ -693,12 +695,12 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
 
     # wait for writer thread to process
     time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
+    while warcprox_.postfetch_chain_busy():
         time.sleep(0.5)
     time.sleep(0.5)
 
     # check url1 in dedup db bucket_a
-    dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
+    dedup_lookup = warcprox_.dedup_db.lookup(
             b'sha1:bc3fac8847c9412f49d955e626fb58a76befbf81', bucket="bucket_a")
     assert dedup_lookup['url'] == url1.encode('ascii')
     assert re.match(br'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$', dedup_lookup['id'])
@@ -707,7 +709,7 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
     dedup_date = dedup_lookup['date']
 
     # check url1 not in dedup db bucket_b
-    dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
+    dedup_lookup = warcprox_.dedup_db.lookup(
             b'sha1:bc3fac8847c9412f49d955e626fb58a76befbf81', bucket="bucket_b")
     assert dedup_lookup is None
 
@@ -720,12 +722,12 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
 
     # wait for writer thread to process
     time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
+    while warcprox_.postfetch_chain_busy():
         time.sleep(0.5)
     time.sleep(0.5)
 
     # check url2 in dedup db bucket_b
-    dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
+    dedup_lookup = warcprox_.dedup_db.lookup(
             b'sha1:bc3fac8847c9412f49d955e626fb58a76befbf81', bucket="bucket_b")
     assert dedup_lookup['url'] == url2.encode('ascii')
     assert re.match(br'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$', dedup_lookup['id'])
@@ -742,7 +744,7 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
 
     # wait for writer thread to process
     time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
+    while warcprox_.postfetch_chain_busy():
         time.sleep(0.5)
     time.sleep(0.5)
 
@@ -755,15 +757,15 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
 
     # wait for writer thread to process
     time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
+    while warcprox_.postfetch_chain_busy():
         time.sleep(0.5)
     time.sleep(0.5)
 
     # close the warc
-    assert warcprox_.warc_writer_threads[0].writer_pool.warc_writers["test_dedup_buckets"]
-    writer = warcprox_.warc_writer_threads[0].writer_pool.warc_writers["test_dedup_buckets"]
+    assert warcprox_.warc_writer_thread.writer_pool.warc_writers["test_dedup_buckets"]
+    writer = warcprox_.warc_writer_thread.writer_pool.warc_writers["test_dedup_buckets"]
     warc_path = os.path.join(writer.directory, writer._f_finalname)
-    warcprox_.warc_writer_threads[0].writer_pool.warc_writers["test_dedup_buckets"].close_writer()
+    warcprox_.warc_writer_thread.writer_pool.warc_writers["test_dedup_buckets"].close_writer()
     assert os.path.exists(warc_path)
 
     # read the warc
@@ -948,7 +950,7 @@ def test_domain_doc_soft_limit(
 
     # wait for writer thread to process
     time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
+    while warcprox_.postfetch_chain_busy():
         time.sleep(0.5)
     time.sleep(0.5)
 
@@ -963,7 +965,7 @@ def test_domain_doc_soft_limit(
 
     # wait for writer thread to process
     time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
+    while warcprox_.postfetch_chain_busy():
         time.sleep(0.5)
     # rethinkdb stats db update cycle is 2 seconds (at the moment anyway)
     time.sleep(2.0)
@@ -990,7 +992,7 @@ def test_domain_doc_soft_limit(
 
     # wait for writer thread to process
     time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
+    while warcprox_.postfetch_chain_busy():
         time.sleep(0.5)
     # rethinkdb stats db update cycle is 2 seconds (at the moment anyway)
     time.sleep(2.0)
@@ -1005,7 +1007,7 @@ def test_domain_doc_soft_limit(
 
     # wait for writer thread to process
     time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
+    while warcprox_.postfetch_chain_busy():
         time.sleep(0.5)
     # rethinkdb stats db update cycle is 2 seconds (at the moment anyway)
     time.sleep(2.0)
@@ -1073,7 +1075,7 @@ def test_domain_data_soft_limit(
 
     # wait for writer thread to process
     time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
+    while warcprox_.postfetch_chain_busy():
         time.sleep(0.5)
     # rethinkdb stats db update cycle is 2 seconds (at the moment anyway)
     time.sleep(2.0)
@@ -1089,7 +1091,7 @@ def test_domain_data_soft_limit(
 
     # wait for writer thread to process
     time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
+    while warcprox_.postfetch_chain_busy():
         time.sleep(0.5)
     # rethinkdb stats db update cycle is 2 seconds (at the moment anyway)
     time.sleep(2.0)
@@ -1105,7 +1107,7 @@ def test_domain_data_soft_limit(
 
     # wait for writer thread to process
     time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
+    while warcprox_.postfetch_chain_busy():
         time.sleep(0.5)
     # rethinkdb stats db update cycle is 2 seconds (at the moment anyway)
     time.sleep(2.0)
@@ -1238,7 +1240,7 @@ def test_dedup_ok_flag(
     url = 'http://localhost:{}/z/b'.format(http_daemon.server_port)
 
     # check not in dedup db
-    dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
+    dedup_lookup = warcprox_.dedup_db.lookup(
             b'sha1:2d7f13181b90a256ce5e5ebfd6e9c9826ece9079',
             bucket='test_dedup_ok_flag')
     assert dedup_lookup is None
@@ -1253,12 +1255,12 @@ def test_dedup_ok_flag(
     assert response.content == b'I am the warcprox test payload! bbbbbbbbbb!\n'
 
     time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
+    while warcprox_.postfetch_chain_busy():
         time.sleep(0.5)
     time.sleep(0.5)
 
     # check that dedup db doesn't give us anything for this
-    dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
+    dedup_lookup = warcprox_.dedup_db.lookup(
             b'sha1:2d7f13181b90a256ce5e5ebfd6e9c9826ece9079',
             bucket='test_dedup_ok_flag')
     assert dedup_lookup is None
@@ -1274,18 +1276,18 @@ def test_dedup_ok_flag(
     assert response.content == b'I am the warcprox test payload! bbbbbbbbbb!\n'
 
     time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
+    while warcprox_.postfetch_chain_busy():
         time.sleep(0.5)
     time.sleep(0.5)
 
     # check that dedup db gives us something for this
-    dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
+    dedup_lookup = warcprox_.dedup_db.lookup(
             b'sha1:2d7f13181b90a256ce5e5ebfd6e9c9826ece9079',
             bucket='test_dedup_ok_flag')
     assert dedup_lookup
 
     # inspect what's in rethinkdb more closely
-    rethink_captures = warcprox_.warc_writer_threads[0].dedup_db.captures_db
+    rethink_captures = warcprox_.dedup_db.captures_db
     results_iter = rethink_captures.rr.table(rethink_captures.table).get_all(
                 ['FV7RGGA3SCRFNTS6L275N2OJQJXM5EDZ', 'response',
                     'test_dedup_ok_flag'], index='sha1_warc_type').order_by(
@@ -1366,26 +1368,28 @@ def test_controller_with_defaults():
     assert controller.proxy.server_address == ('127.0.0.1', 8000)
     assert controller.proxy.server_port == 8000
     assert controller.proxy.running_stats
-    for wwt in controller.warc_writer_threads:
-        assert wwt
-        assert wwt.recorded_url_q
-        assert wwt.recorded_url_q is controller.proxy.recorded_url_q
-        assert wwt.writer_pool
-        assert wwt.writer_pool.default_warc_writer
-        assert wwt.writer_pool.default_warc_writer.directory == './warcs'
-        assert wwt.writer_pool.default_warc_writer.rollover_idle_time is None
-        assert wwt.writer_pool.default_warc_writer.rollover_size == 1000000000
-        assert wwt.writer_pool.default_warc_writer.prefix == 'warcprox'
-        assert wwt.writer_pool.default_warc_writer.gzip is False
-        assert wwt.writer_pool.default_warc_writer.record_builder
-        assert not wwt.writer_pool.default_warc_writer.record_builder.base32
-        assert wwt.writer_pool.default_warc_writer.record_builder.digest_algorithm == 'sha1'
+    assert not controller.proxy.stats_db
+    wwt = controller.warc_writer_thread
+    assert wwt
+    assert wwt.inq
+    assert not wwt.outq
+    assert wwt.writer_pool
+    assert wwt.writer_pool.default_warc_writer
+    assert wwt.writer_pool.default_warc_writer.directory == './warcs'
+    assert wwt.writer_pool.default_warc_writer.rollover_idle_time is None
+    assert wwt.writer_pool.default_warc_writer.rollover_size == 1000000000
+    assert wwt.writer_pool.default_warc_writer.prefix == 'warcprox'
+    assert wwt.writer_pool.default_warc_writer.gzip is False
+    assert wwt.writer_pool.default_warc_writer.record_builder
+    assert not wwt.writer_pool.default_warc_writer.record_builder.base32
+    assert wwt.writer_pool.default_warc_writer.record_builder.digest_algorithm == 'sha1'
 
 def test_choose_a_port_for_me(warcprox_):
     options = warcprox.Options()
     options.port = 0
-    controller = warcprox.controller.WarcproxController(
-            service_registry=warcprox_.service_registry, options=options)
+    if warcprox_.service_registry:
+        options.rethinkdb_services_url = 'rethinkdb://localhost/test0/services'
+    controller = warcprox.controller.WarcproxController(options)
     assert controller.proxy.server_port != 0
     assert controller.proxy.server_port != 8000
     assert controller.proxy.server_address == (
@@ -1426,7 +1430,7 @@ def test_via_response_header(warcprox_, http_daemon, archiving_proxies, playback
     assert response.status_code == 200
     assert not 'via' in playback_response
 
-    warc = warcprox_.warc_writer_threads[0].writer_pool.default_warc_writer._fpath
+    warc = warcprox_.warc_writer_thread.writer_pool.default_warc_writer._fpath
     with open(warc, 'rb') as f:
         for record in warcio.archiveiterator.ArchiveIterator(f):
             if record.rec_headers.get_header('warc-target-uri') == url:
@@ -1644,15 +1648,15 @@ def test_long_warcprox_meta(
 
     # wait for writer thread to process
     time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
+    while warcprox_.postfetch_chain_busy():
         time.sleep(0.5)
     time.sleep(0.5)
 
     # check that warcprox-meta was parsed and honored ("warc-prefix" param)
-    assert warcprox_.warc_writer_threads[0].writer_pool.warc_writers["test_long_warcprox_meta"]
-    writer = warcprox_.warc_writer_threads[0].writer_pool.warc_writers["test_long_warcprox_meta"]
+    assert warcprox_.warc_writer_thread.writer_pool.warc_writers["test_long_warcprox_meta"]
+    writer = warcprox_.warc_writer_thread.writer_pool.warc_writers["test_long_warcprox_meta"]
     warc_path = os.path.join(writer.directory, writer._f_finalname)
-    warcprox_.warc_writer_threads[0].writer_pool.warc_writers["test_long_warcprox_meta"].close_writer()
+    warcprox_.warc_writer_thread.writer_pool.warc_writers["test_long_warcprox_meta"].close_writer()
     assert os.path.exists(warc_path)
 
     # read the warc

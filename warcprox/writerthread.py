@@ -34,6 +34,8 @@ import warcprox
 class WarcWriterThread(warcprox.BaseStandardPostfetchProcessor):
     logger = logging.getLogger("warcprox.writerthread.WarcWriterThread")
 
+    _ALWAYS_ACCEPT = {'WARCPROX_WRITE_RECORD'}
+
     def __init__(self, inq, outq, options=warcprox.Options()):
         warcprox.BaseStandardPostfetchProcessor.__init__(
             self, inq, outq, options=options)
@@ -48,6 +50,7 @@ class WarcWriterThread(warcprox.BaseStandardPostfetchProcessor):
             self.writer_pool.maybe_idle_rollover()
 
     def _process_url(self, recorded_url):
+        records = []
         if self._should_archive(recorded_url):
             records = self.writer_pool.write_records(recorded_url)
         recorded_url.warc_records = records

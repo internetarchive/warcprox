@@ -37,7 +37,8 @@ urllib3.disable_warnings()
 
 class DedupLoader(warcprox.BaseStandardPostfetchProcessor):
     def __init__(self, dedup_db, inq, outq, base32=False, profile=False):
-        warcprox.BaseStandardPostfetchProcessor.__init__(self, inq, outq, profile)
+        warcprox.BaseStandardPostfetchProcessor.__init__(
+                self, inq, outq, profile)
         self.dedup_db = dedup_db
         self.base32 = base32
     def _process_url(self, recorded_url):

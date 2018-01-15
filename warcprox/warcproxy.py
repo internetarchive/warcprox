@@ -92,6 +92,8 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                                 self.url, rule))
 
     def _enforce_limit(self, limit_key, limit_value, soft=False):
+        if not self.server.stats_db:
+            return
         bucket0, bucket1, bucket2 = limit_key.rsplit("/", 2)
         _limit_key = limit_key
 
@@ -328,7 +330,7 @@ class RecordedUrl:
             warcprox_meta=None, content_type=None, custom_type=None,
             status=None, size=None, client_ip=None, method=None,
             timestamp=None, host=None, duration=None, referer=None,
-            payload_digest=None):
+            payload_digest=None, warc_records=None):
         # XXX should test what happens with non-ascii url (when does
         # url-encoding happen?)
         if type(url) is not bytes:
@@ -367,6 +369,7 @@ class RecordedUrl:
         self.duration = duration
         self.referer = referer
         self.payload_digest = payload_digest
+        self.warc_records = warc_records
 
 # inherit from object so that multiple inheritance from this class works
 # properly in python 2
@@ -374,9 +377,9 @@ class RecordedUrl:
 class SingleThreadedWarcProxy(http_server.HTTPServer, object):
     logger = logging.getLogger("warcprox.warcproxy.WarcProxy")
 
-    def __init__(
-            self, ca=None, recorded_url_q=None, stats_db=None,
-            options=warcprox.Options()):
+    def __init__(self, stats_db=None, options=warcprox.Options()):
+        self.options = options
+
         server_address = (
                 options.address or 'localhost',
                 options.port if options.port is not None else 8000)
@@ -395,22 +398,15 @@ class SingleThreadedWarcProxy(http_server.HTTPServer, object):
 
         self.digest_algorithm = options.digest_algorithm or 'sha1'
 
-        if ca is not None:
-            self.ca = ca
-        else:
-            ca_name = 'Warcprox CA on {}'.format(socket.gethostname())[:64]
-            self.ca = CertificateAuthority(ca_file='warcprox-ca.pem',
-                                           certs_dir='./warcprox-ca',
-                                           ca_name=ca_name)
+        ca_name = ('Warcprox CA on %s' % socket.gethostname())[:64]
+        self.ca = CertificateAuthority(
+                ca_file='warcprox-ca.pem', certs_dir='./warcprox-ca',
+                ca_name=ca_name)
 
-        if recorded_url_q is not None:
-            self.recorded_url_q = recorded_url_q
-        else:
-            self.recorded_url_q = warcprox.TimestampedQueue(
-                    maxsize=options.queue_size or 1000)
+        self.recorded_url_q = warcprox.TimestampedQueue(
+                maxsize=options.queue_size or 1000)
 
         self.stats_db = stats_db
-        self.options = options
 
         self.running_stats = warcprox.stats.RunningStats()
 
@@ -449,17 +445,9 @@ class SingleThreadedWarcProxy(http_server.HTTPServer, object):
 class WarcProxy(SingleThreadedWarcProxy, warcprox.mitmproxy.PooledMitmProxy):
     logger = logging.getLogger("warcprox.warcproxy.WarcProxy")
 
-    def __init__(
-            self, ca=None, recorded_url_q=None, stats_db=None,
-            running_stats=None, options=warcprox.Options()):
-        if options.max_threads:
-            self.logger.info(
-                    "max_threads=%s set by command line option",
-                    options.max_threads)
-        warcprox.mitmproxy.PooledMitmProxy.__init__(
-                self, options.max_threads, options)
-        SingleThreadedWarcProxy.__init__(
-                self, ca, recorded_url_q, stats_db, options)
+    def __init__(self, stats_db=None, options=warcprox.Options()):
+        warcprox.mitmproxy.PooledMitmProxy.__init__(self, options)
+        SingleThreadedWarcProxy.__init__(self, stats_db, options)
 
     def server_activate(self):
         http_server.HTTPServer.server_activate(self)

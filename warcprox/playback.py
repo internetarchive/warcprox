@@ -121,9 +121,6 @@ class PlaybackProxyHandler(MitmProxyHandler):
 
     def _send_headers_and_refd_payload(
             self, headers, refers_to_target_uri, refers_to_date, payload_digest):
-        """Parameters:
-
-        """
         location = self.server.playback_index_db.lookup_exact(
                 refers_to_target_uri, refers_to_date, payload_digest)
         self.logger.debug('loading http payload from {}'.format(location))
@@ -133,11 +130,13 @@ class PlaybackProxyHandler(MitmProxyHandler):
             for (offset, record, errors) in fh.read_records(limit=1, offsets=True):
                 pass
 
+            if not record:
+                raise Exception('failed to read record at offset %s from %s' % (offset, warcfilename))
+
             if errors:
                 raise Exception('warc errors at {}:{} -- {}'.format(location['f'], offset, errors))
 
-            warc_type = record.get_header(warctools.WarcRecord.TYPE)
-            if warc_type != warctools.WarcRecord.RESPONSE:
+            if record.type != warctools.WarcRecord.RESPONSE:
                 raise Exception('invalid attempt to retrieve http payload of "{}" record'.format(warc_type))
 
             # find end of headers
@@ -158,12 +157,13 @@ class PlaybackProxyHandler(MitmProxyHandler):
             for (offset, record, errors) in fh.read_records(limit=1, offsets=True):
                 pass
 
+            if not record:
+                raise Exception('failed to read record at offset %s from %s' % (offset, warcfilename))
+
             if errors:
                 raise Exception('warc errors at {}:{} -- {}'.format(warcfilename, offset, errors))
 
-            warc_type = record.get_header(warctools.WarcRecord.TYPE)
-
-            if warc_type == warctools.WarcRecord.RESPONSE:
+            if record.type == warctools.WarcRecord.RESPONSE:
                 headers_buf = bytearray()
                 while True:
                     line = record.content_file.readline()
@@ -173,7 +173,7 @@ class PlaybackProxyHandler(MitmProxyHandler):
 
                 return self._send_response(headers_buf, record.content_file)
 
-            elif warc_type == warctools.WarcRecord.REVISIT:
+            elif record.type == warctools.WarcRecord.REVISIT:
                 # response consists of http headers from revisit record and
                 # payload from the referenced record
                 warc_profile = record.get_header(warctools.WarcRecord.PROFILE)

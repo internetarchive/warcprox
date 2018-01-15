@@ -88,27 +88,20 @@ def wait(callback, timeout):
     raise Exception('timed out waiting for %s to return truthy' % callback)
 
 def test_special_dont_write_prefix():
-    class NotifyMe:
-        def __init__(self):
-            self.the_list = []
-        def notify(self, recorded_url, records):
-            self.the_list.append((recorded_url, records))
-
     with tempfile.TemporaryDirectory() as tmpdir:
         logging.debug('cd %s', tmpdir)
         os.chdir(tmpdir)
 
-        q = warcprox.TimestampedQueue(maxsize=1)
-        listener = NotifyMe()
+        inq = warcprox.TimestampedQueue(maxsize=1)
+        outq = warcprox.TimestampedQueue(maxsize=1)
         wwt = warcprox.writerthread.WarcWriterThread(
-                recorded_url_q=q, options=Options(prefix='-'),
-                listeners=[listener])
+                inq, outq, Options(prefix='-'))
         try:
             wwt.start()
             # not to be written due to default prefix
             recorder = ProxyingRecorder(io.BytesIO(b'some payload'), None)
             recorder.read()
-            q.put(RecordedUrl(
+            inq.put(RecordedUrl(
                 url='http://example.com/no', content_type='text/plain',
                 status=200, client_ip='127.0.0.2', request_data=b'abc',
                 response_recorder=recorder, remote_ip='127.0.0.3',
@@ -117,30 +110,31 @@ def test_special_dont_write_prefix():
             # to be written due to warcprox-meta prefix
             recorder = ProxyingRecorder(io.BytesIO(b'some payload'), None)
             recorder.read()
-            q.put(RecordedUrl(
+            inq.put(RecordedUrl(
                 url='http://example.com/yes', content_type='text/plain',
                 status=200, client_ip='127.0.0.2', request_data=b'abc',
                 response_recorder=recorder, remote_ip='127.0.0.3',
                 timestamp=datetime.utcnow(),
                 payload_digest=recorder.block_digest,
                 warcprox_meta={'warc-prefix': 'normal-warc-prefix'}))
-            wait(lambda: len(listener.the_list) == 2, 10.0)
-            assert not listener.the_list[0][1]
-            assert listener.the_list[1][1]
+            recorded_url = outq.get(timeout=10)
+            assert not recorded_url.warc_records
+            recorded_url = outq.get(timeout=10)
+            assert recorded_url.warc_records
+            assert outq.empty()
         finally:
             wwt.stop.set()
             wwt.join()
 
-        q = warcprox.TimestampedQueue(maxsize=1)
-        listener = NotifyMe()
-        wwt = warcprox.writerthread.WarcWriterThread(
-                recorded_url_q=q, listeners=[listener])
+        inq = warcprox.TimestampedQueue(maxsize=1)
+        outq = warcprox.TimestampedQueue(maxsize=1)
+        wwt = warcprox.writerthread.WarcWriterThread(inq, outq)
         try:
             wwt.start()
             # to be written due to default prefix
             recorder = ProxyingRecorder(io.BytesIO(b'some payload'), None)
             recorder.read()
-            q.put(RecordedUrl(
+            inq.put(RecordedUrl(
                 url='http://example.com/yes', content_type='text/plain',
                 status=200, client_ip='127.0.0.2', request_data=b'abc',
                 response_recorder=recorder, remote_ip='127.0.0.3',
@@ -149,16 +143,18 @@ def test_special_dont_write_prefix():
             # not to be written due to warcprox-meta prefix
             recorder = ProxyingRecorder(io.BytesIO(b'some payload'), None)
             recorder.read()
-            q.put(RecordedUrl(
+            inq.put(RecordedUrl(
                 url='http://example.com/no', content_type='text/plain',
                 status=200, client_ip='127.0.0.2', request_data=b'abc',
                 response_recorder=recorder, remote_ip='127.0.0.3',
                 timestamp=datetime.utcnow(),
                 payload_digest=recorder.block_digest,
                 warcprox_meta={'warc-prefix': '-'}))
-            wait(lambda: len(listener.the_list) == 2, 10.0)
-            assert listener.the_list[0][1]
-            assert not listener.the_list[1][1]
+            recorded_url = outq.get(timeout=10)
+            assert recorded_url.warc_records
+            recorded_url = outq.get(timeout=10)
+            assert not recorded_url.warc_records
+            assert outq.empty()
         finally:
             wwt.stop.set()
             wwt.join()

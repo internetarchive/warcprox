@@ -100,7 +100,7 @@ class BasePostfetchProcessor(threading.Thread):
     logger = logging.getLogger("warcprox.BasePostfetchProcessor")
 
     def __init__(self, inq, outq, options=Options()):
-        threading.Thread.__init__(self, name='???')
+        threading.Thread.__init__(self, name=self.__class__.__name__)
         self.inq = inq
         self.outq = outq
         self.options = options
@@ -120,7 +120,8 @@ class BasePostfetchProcessor(threading.Thread):
         '''
         Get url(s) from `self.inq`, process url(s), queue to `self.outq`.
 
-        Subclasses must implement this.
+        Subclasses must implement this. Implementations may operate on
+        individual urls, or on batches.
 
         May raise queue.Empty.
         '''
@@ -188,16 +189,16 @@ class ListenerPostfetchProcessor(BaseStandardPostfetchProcessor):
     def __init__(self, listener, inq, outq, profile=False):
         BaseStandardPostfetchProcessor.__init__(self, inq, outq, profile)
         self.listener = listener
+        self.name = listener.__class__.__name__
+        logging.info('self.name=%s', self.name)
 
     def _process_url(self, recorded_url):
         return self.listener.notify(recorded_url, recorded_url.warc_records)
 
-    # @classmethod
-    # def wrap(cls, listener, inq, outq, profile=False):
-    #     if listener:
-    #         return cls(listener, inq, outq, profile)
-    #     else:
-    #         return None
+    def start(self):
+        if hasattr(self.listener, 'start'):
+            self.listener.start()
+        BaseStandardPostfetchProcessor.start(self)
 
 # monkey-patch log levels TRACE and NOTICE
 TRACE = 5
