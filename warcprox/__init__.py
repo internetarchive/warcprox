@@ -136,6 +136,7 @@ class BasePostfetchProcessor(threading.Thread):
                     except queue.Empty:
                         if self.stop.is_set():
                             break
+                logging.info('%s shutting down', self)
                 self._shutdown()
             except Exception as e:
                 if isinstance(e, OSError) and e.errno == 28:
@@ -190,7 +191,6 @@ class ListenerPostfetchProcessor(BaseStandardPostfetchProcessor):
         BaseStandardPostfetchProcessor.__init__(self, inq, outq, profile)
         self.listener = listener
         self.name = listener.__class__.__name__
-        logging.info('self.name=%s', self.name)
 
     def _process_url(self, recorded_url):
         return self.listener.notify(recorded_url, recorded_url.warc_records)
@@ -199,6 +199,14 @@ class ListenerPostfetchProcessor(BaseStandardPostfetchProcessor):
         if hasattr(self.listener, 'start'):
             self.listener.start()
         BaseStandardPostfetchProcessor.start(self)
+
+    def _shutdown(self):
+        if hasattr(self.listener, 'stop'):
+            try:
+                self.listener.stop()
+            except:
+                self.logger.error(
+                        '%s raised exception', listener.stop, exc_info=True)
 
 # monkey-patch log levels TRACE and NOTICE
 TRACE = 5
