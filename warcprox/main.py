@@ -225,7 +225,9 @@ def init_controller(args):
     elif args.rethinkdb_trough_db_url:
         dedup_db = warcprox.dedup.TroughDedupDb(options)
     elif args.cdxserver_dedup:
-        dedup_db = warcprox.dedup.CdxServerDedup(cdx_url=args.cdxserver_dedup)
+        cdxserver_maxsize = args.writer_threads or 200
+        dedup_db = warcprox.dedup.CdxServerDedup(cdx_url=args.cdxserver_dedup,
+                                                 maxsize=cdxserver_maxsize)
     elif args.dedup_db_file in (None, '', '/dev/null'):
         logging.info('deduplication disabled')
         dedup_db = None
