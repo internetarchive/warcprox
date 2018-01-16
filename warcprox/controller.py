@@ -291,7 +291,6 @@ class WarcproxController(object):
                 self.playback_proxy_thread.start()
 
             for processor in self._postfetch_chain:
-                # logging.info('starting postfetch processor %r', processor)
                 processor.start()
                 logging.info('started postfetch processor %r', processor)
 
