@@ -398,18 +398,14 @@ class WarcproxController(object):
                     'aggregate performance profile of %s proxy threads:\n%s',
                     len(files), buf.getvalue())
 
-            # warc writer threads
-            files = []
-            for wwt in self.warc_writer_threads:
-                file = os.path.join(tmpdir, '%s.dat' % wwt.ident)
-                wwt.profiler.dump_stats(file)
-                files.append(file)
-
-            buf = io.StringIO()
-            stats = pstats.Stats(*files, stream=buf)
-            stats.sort_stats('cumulative')
-            stats.print_stats(0.1)
-            self.logger.notice(
-                    'aggregate performance profile of %s warc writer threads:\n%s',
-                    len(self.warc_writer_threads), buf.getvalue())
-
+            # postfetch processors
+            for processor in self._postfetch_chain:
+                file = os.path.join(tmpdir, '%s.dat' % processor.ident)
+                processor.profiler.dump_stats(file)
+                buf = io.StringIO()
+                stats = pstats.Stats(file, stream=buf)
+                stats.sort_stats('cumulative')
+                stats.print_stats(0.1)
+                self.logger.notice(
+                        'performance profile of %s:\n%s', processor,
+                        buf.getvalue())
