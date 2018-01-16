@@ -24,6 +24,7 @@ import fcntl
 from multiprocessing import Process, Queue
 from datetime import datetime
 import pytest
+import re
 from warcprox.mitmproxy import ProxyingRecorder
 from warcprox.warcproxy import RecordedUrl
 from warcprox.writer import WarcWriter
@@ -163,3 +164,21 @@ def test_special_dont_write_prefix():
             wwt.stop.set()
             wwt.join()
 
+
+def test_warc_writer_filename(tmpdir):
+    """Test if WarcWriter is writing WARC files with custom filenames.
+    """
+    recorder = ProxyingRecorder(None, None, 'sha1', url='http://example.com')
+    recorded_url = RecordedUrl(
+            url='http://example.com', content_type='text/plain', status=200,
+            client_ip='127.0.0.2', request_data=b'abc',
+            response_recorder=recorder, remote_ip='127.0.0.3',
+            timestamp=datetime.utcnow())
+
+    dirname = os.path.dirname(str(tmpdir.mkdir('test-warc-writer')))
+    wwriter = WarcWriter(Options(directory=dirname, prefix='foo',
+        warc_filename='{timestamp17}_{prefix}_{timestamp14}_{serialno}'))
+    wwriter.write_records(recorded_url)
+    warcs = [fn for fn in os.listdir(dirname)]
+    assert warcs
+    assert re.search('\d{17}_foo_\d{14}_00000.warc.open', wwriter._fpath)

@@ -77,6 +77,9 @@ def _build_arg_parser(prog):
             help='where to store and load generated certificates')
     arg_parser.add_argument('-d', '--dir', dest='directory',
             default='./warcs', help='where to write warcs')
+    arg_parser.add_argument('--warc-filename', dest='warc_filename',
+            default='{prefix}-{timestamp17}-{serialno}-{randomtoken}',
+            help='define custom WARC filename with variables {prefix}, {timestamp14}, {timestamp17}, {serialno}, {randomtoken}, {hostname}, {shorthostname}')
     arg_parser.add_argument('-z', '--gzip', dest='gzip', action='store_true',
             help='write gzip-compressed warc records')
     arg_parser.add_argument('--no-warc-open-suffix', dest='no_warc_open_suffix',
