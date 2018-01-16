@@ -215,9 +215,9 @@ if __name__ == '__main__':
         args.cacert = os.path.join(tmpdir, 'benchmark-warcprox-ca.pem')
         args.certs_dir = os.path.join(tmpdir, 'benchmark-warcprox-ca')
         args.directory = os.path.join(tmpdir, 'warcs')
-        if args.rethinkdb_servers:
-            args.rethinkdb_db = 'benchmarks_{:%Y%m%d%H%M%S}' % (
-                    datetime.datetime.utcnow())
+        # if args.rethinkdb_servers:
+        #     args.rethinkdb_db = 'benchmarks_{:%Y%m%d%H%M%S}' % (
+        #             datetime.datetime.utcnow())
 
         start_servers()
         logging.info(
@@ -247,7 +247,9 @@ if __name__ == '__main__':
             logging.info('SKIPPED')
         logging.info('===== baseline benchmark finished =====')
 
-        warcprox_controller = warcprox.main.init_controller(args)
+        options = warcprox.Options(**vars(args))
+        warcprox_controller = warcprox.controller.WarcproxController(options)
+
         warcprox_controller_thread = threading.Thread(
                 target=warcprox_controller.run_until_shutdown)
         warcprox_controller_thread.start()

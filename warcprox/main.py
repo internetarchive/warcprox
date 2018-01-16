@@ -61,7 +61,7 @@ class BetterArgumentDefaultsHelpFormatter(
         else:
             return argparse.ArgumentDefaultsHelpFormatter._get_help_string(self, action)
 
-def _build_arg_parser(prog):
+def _build_arg_parser(prog='warcprox'):
     arg_parser = argparse.ArgumentParser(prog=prog,
             description='warcprox - WARC writing MITM HTTP/S proxy',
             formatter_class=BetterArgumentDefaultsHelpFormatter)
