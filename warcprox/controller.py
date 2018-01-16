@@ -173,6 +173,9 @@ class WarcproxController(object):
             constructors.append(functools.partial(
                 warcprox.ListenerPostfetchProcessor, crawl_logger))
 
+        constructors.append(functools.partial(
+            warcprox.ListenerPostfetchProcessor, self.proxy.running_stats))
+
         for qualname in self.options.plugins or []:
             plugin = Factory.plugin(qualname)
             constructors.append(functools.partial(
