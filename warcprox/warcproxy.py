@@ -451,7 +451,7 @@ class WarcProxy(SingleThreadedWarcProxy, warcprox.mitmproxy.PooledMitmProxy):
 
     def __init__(
             self, ca=None, recorded_url_q=None, stats_db=None,
-            running_stats=None, options=warcprox.Options()):
+            options=warcprox.Options()):
         if options.max_threads:
             self.logger.info(
                     "max_threads=%s set by command line option",
