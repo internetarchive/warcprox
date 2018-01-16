@@ -339,6 +339,9 @@ def warcprox_(request):
     logging.info('changing to working directory %r', work_dir)
     os.chdir(work_dir)
 
+    # we can't wait around all day in the tests
+    warcprox.BaseBatchPostfetchProcessor.MAX_BATCH_SEC = 0.5
+
     argv = ['warcprox',
             '--method-filter=GET',
             '--method-filter=POST',
@@ -362,6 +365,7 @@ def warcprox_(request):
     warcprox_ = warcprox.controller.WarcproxController(options)
 
     logging.info('starting warcprox')
+    warcprox_.start()
     warcprox_thread = threading.Thread(
             name='WarcproxThread', target=warcprox_.run_until_shutdown)
     warcprox_thread.start()
@@ -1372,7 +1376,7 @@ def test_controller_with_defaults():
     wwt = controller.warc_writer_thread
     assert wwt
     assert wwt.inq
-    assert not wwt.outq
+    assert wwt.outq
     assert wwt.writer_pool
     assert wwt.writer_pool.default_warc_writer
     assert wwt.writer_pool.default_warc_writer.directory == './warcs'
@@ -1396,6 +1400,7 @@ def test_choose_a_port_for_me(warcprox_):
             '127.0.0.1', controller.proxy.server_port)
 
     th = threading.Thread(target=controller.run_until_shutdown)
+    controller.start()
     th.start()
     try:
         # check that the status api lists the correct port

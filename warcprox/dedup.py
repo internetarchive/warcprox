@@ -39,7 +39,7 @@ urllib3.disable_warnings()
 class DedupLoader(warcprox.BaseStandardPostfetchProcessor):
     def __init__(self, dedup_db, inq, outq, options=warcprox.Options()):
         warcprox.BaseStandardPostfetchProcessor.__init__(
-                self, inq, outq, profile)
+                self, inq, outq, options)
         self.dedup_db = dedup_db
     def _process_url(self, recorded_url):
         decorate_with_dedup_info(
@@ -71,11 +71,12 @@ class DedupDb(object):
         conn.commit()
         conn.close()
 
-    def loader(self, inq, outq, profile=False):
-        return DedupLoader(self, inq, outq, self.options.base32, profile)
+    def loader(self, inq, outq, *args, **kwargs):
+        return DedupLoader(self, inq, outq, self.options)
 
-    def storer(self, inq, outq, profile=False):
-        return warcprox.ListenerPostfetchProcessor(self, inq, outq, profile)
+    def storer(self, inq, outq, *args, **kwargs):
+        return warcprox.ListenerPostfetchProcessor(
+                self, inq, outq, self.options)
 
     def save(self, digest_key, response_record, bucket=""):
         record_id = response_record.get_header(warctools.WarcRecord.ID).decode('latin1')
@@ -297,7 +298,8 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
         buckets = self._filter_and_bucketize(batch)
         for bucket in buckets:
             key_index = self._build_key_index(buckets[bucket])
-            results = self.trough_dedup_db.batch_lookup(key_index.keys(), bucket)
+            results = self.trough_dedup_db.batch_lookup(
+                    key_index.keys(), bucket)
             for result in results:
                 for recorded_url in key_index[result['digest_key']]:
                     recorded_url.dedup_info = result

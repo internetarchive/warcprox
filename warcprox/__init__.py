@@ -167,16 +167,27 @@ class BaseStandardPostfetchProcessor(BasePostfetchProcessor):
 
 class BaseBatchPostfetchProcessor(BasePostfetchProcessor):
     MAX_BATCH_SIZE = 500
+    MAX_BATCH_SEC = 10
 
     def _get_process_put(self):
         batch = []
-        batch.append(self.inq.get(block=True, timeout=0.5))
-        try:
-            while len(batch) < self.MAX_BATCH_SIZE:
-                batch.append(self.inq.get(block=False))
-        except queue.Empty:
-            pass
+        start = time.time()
 
+        while (len(batch) < self.MAX_BATCH_SIZE
+               and time.time() - start < self.MAX_BATCH_SEC):
+            try:
+                batch.append(self.inq.get(block=True, timeout=0.5))
+            except queue.Empty:
+                if self.stop.is_set():
+                    break
+                # else keep adding to the batch
+
+        if not batch:
+            raise queue.Empty
+
+        self.logger.info(
+                'gathered batch of %s in %0.1f sec',
+                len(batch), time.time() - start)
         self._process_batch(batch)
 
         if self.outq:
@@ -187,8 +198,8 @@ class BaseBatchPostfetchProcessor(BasePostfetchProcessor):
         raise Exception('not implemented')
 
 class ListenerPostfetchProcessor(BaseStandardPostfetchProcessor):
-    def __init__(self, listener, inq, outq, profile=False):
-        BaseStandardPostfetchProcessor.__init__(self, inq, outq, profile)
+    def __init__(self, listener, inq, outq, options=Options()):
+        BaseStandardPostfetchProcessor.__init__(self, inq, outq, options)
         self.listener = listener
         self.name = listener.__class__.__name__
 
