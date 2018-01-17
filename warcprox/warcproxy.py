@@ -421,6 +421,9 @@ class SingleThreadedWarcProxy(http_server.HTTPServer, object):
             'queued_urls': self.recorded_url_q.qsize(),
             'queue_max_size': self.recorded_url_q.maxsize,
             'seconds_behind': self.recorded_url_q.seconds_behind(),
+            'urls_processed': self.running_stats.urls,
+            'warc_bytes_written': self.running_stats.warc_bytes,
+            'start_time': self.running_stats.first_snap_time,
         })
         elapsed, urls_per_sec, warc_bytes_per_sec = self.running_stats.current_rates(1)
         result['rates_1min'] = {
