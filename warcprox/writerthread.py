@@ -36,9 +36,8 @@ class WarcWriterThread(warcprox.BaseStandardPostfetchProcessor):
 
     _ALWAYS_ACCEPT = {'WARCPROX_WRITE_RECORD'}
 
-    def __init__(self, inq, outq, options=warcprox.Options()):
-        warcprox.BaseStandardPostfetchProcessor.__init__(
-            self, inq, outq, options=options)
+    def __init__(self, options=warcprox.Options()):
+        warcprox.BaseStandardPostfetchProcessor.__init__(self, options=options)
         self.options = options
         self.writer_pool = warcprox.writer.WarcWriterPool(options)
         self.method_filter = set(method.upper() for method in self.options.method_filter or [])

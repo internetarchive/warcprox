@@ -37,10 +37,10 @@ import collections
 urllib3.disable_warnings()
 
 class DedupLoader(warcprox.BaseStandardPostfetchProcessor):
-    def __init__(self, dedup_db, inq, outq, options=warcprox.Options()):
-        warcprox.BaseStandardPostfetchProcessor.__init__(
-                self, inq, outq, options)
+    def __init__(self, dedup_db, options=warcprox.Options()):
+        warcprox.BaseStandardPostfetchProcessor.__init__(self, options=options)
         self.dedup_db = dedup_db
+
     def _process_url(self, recorded_url):
         decorate_with_dedup_info(
                 self.dedup_db, recorded_url, self.options.base32)
@@ -71,12 +71,11 @@ class DedupDb(object):
         conn.commit()
         conn.close()
 
-    def loader(self, inq, outq, *args, **kwargs):
-        return DedupLoader(self, inq, outq, self.options)
+    def loader(self, *args, **kwargs):
+        return DedupLoader(self, self.options)
 
-    def storer(self, inq, outq, *args, **kwargs):
-        return warcprox.ListenerPostfetchProcessor(
-                self, inq, outq, self.options)
+    def storer(self, *args, **kwargs):
+        return warcprox.ListenerPostfetchProcessor(self, self.options)
 
     def save(self, digest_key, response_record, bucket=""):
         record_id = response_record.get_header(warctools.WarcRecord.ID).decode('latin1')
@@ -262,8 +261,8 @@ class CdxServerDedup(DedupDb):
         pass
 
 class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
-    def __init__(self, trough_dedup_db, inq, outq, options=warcprox.Options()):
-        warcprox.BaseBatchPostfetchProcessor.__init__(self, inq, outq, options)
+    def __init__(self, trough_dedup_db, options=warcprox.Options()):
+        warcprox.BaseBatchPostfetchProcessor.__init__(self, options)
         self.trough_dedup_db = trough_dedup_db
 
     def _filter_and_bucketize(self, batch):
@@ -324,8 +323,8 @@ class TroughDedupDb(DedupDb):
         self._trough_cli = warcprox.trough.TroughClient(
                 options.rethinkdb_trough_db_url, promotion_interval=60*60)
 
-    def loader(self, inq, outq, options=warcprox.Options()):
-        return BatchTroughLoader(self, inq, outq, options)
+    def loader(self, options=warcprox.Options()):
+        return BatchTroughLoader(self, options)
 
     def start(self):
         self._trough_cli.register_schema(self.SCHEMA_ID, self.SCHEMA_SQL)

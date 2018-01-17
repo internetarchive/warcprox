@@ -55,20 +55,20 @@ class Factory:
         return dedup_db
 
     @staticmethod
-    def stats_db(options):
+    def stats_processor(options):
+        # return warcprox.stats.StatsProcessor(options)
         if options.rethinkdb_stats_url:
-            stats_db = warcprox.stats.RethinkStatsDb(options=options)
+            stats_processor = warcprox.stats.RethinkStatsProcessor(options)
         elif options.stats_db_file in (None, '', '/dev/null'):
             logging.info('statistics tracking disabled')
-            stats_db = None
+            stats_processor = None
         else:
-            stats_db = warcprox.stats.StatsDb(
-                options.stats_db_file, options=options)
-        return stats_db
+            stats_processor = warcprox.stats.StatsProcessor(options)
+        return stats_processor
 
     @staticmethod
-    def warc_writer(inq, outq, options):
-        return warcprox.writerthread.WarcWriterThread(inq, outq, options)
+    def warc_writer(options):
+        return warcprox.writerthread.WarcWriterThread(options)
 
     @staticmethod
     def playback_proxy(ca, options):
@@ -130,9 +130,9 @@ class WarcproxController(object):
         self.stop = threading.Event()
         self._start_stop_lock = threading.Lock()
 
-        self.stats_db = Factory.stats_db(self.options)
+        self.stats_processor = Factory.stats_processor(self.options)
 
-        self.proxy = warcprox.warcproxy.WarcProxy(self.stats_db, options)
+        self.proxy = warcprox.warcproxy.WarcProxy(self.stats_processor, options)
         self.playback_proxy = Factory.playback_proxy(
             self.proxy.ca, self.options)
 
@@ -140,59 +140,52 @@ class WarcproxController(object):
 
         self.service_registry = Factory.service_registry(options)
 
-    def postfetch_chain_busy(self):
-        for processor in self._postfetch_chain:
-            if processor.inq.qsize() > 0:
-                return True
-        return False
+    def chain(self, processor0, processor1):
+        assert not processor0.outq
+        assert not processor1.inq
+        q = warcprox.TimestampedQueue(maxsize=self.options.queue_size)
+        processor0.outq = q
+        processor1.inq = q
 
     def build_postfetch_chain(self, inq):
-        constructors = []
+        self._postfetch_chain = []
 
         self.dedup_db = Factory.dedup_db(self.options)
 
         if self.dedup_db:
-            constructors.append(self.dedup_db.loader)
+            self._postfetch_chain.append(self.dedup_db.loader())
 
-        constructors.append(Factory.warc_writer)
+        self.warc_writer_thread = Factory.warc_writer(self.options)
+        self._postfetch_chain.append(self.warc_writer_thread)
 
         if self.dedup_db:
-            constructors.append(self.dedup_db.storer)
+            self._postfetch_chain.append(self.dedup_db.storer())
 
-        if self.stats_db:
-            constructors.append(functools.partial(
-                warcprox.ListenerPostfetchProcessor, self.stats_db))
+        if self.stats_processor:
+            self._postfetch_chain.append(self.stats_processor)
 
         if self.playback_proxy:
-            constructors.append(functools.partial(
-                warcprox.ListenerPostfetchProcessor,
-                self.playback_proxy.playback_index_db))
+            self._postfetch_chain.append(
+                    warcprox.ListenerPostfetchProcessor(
+                        self.playback_proxy.playback_index_db))
 
         crawl_logger = Factory.crawl_logger(self.options)
         if crawl_logger:
-            constructors.append(functools.partial(
-                warcprox.ListenerPostfetchProcessor, crawl_logger))
+            self._postfetch_chain.append(
+                    warcprox.ListenerPostfetchProcessor(crawl_logger))
 
-        constructors.append(functools.partial(
-            warcprox.ListenerPostfetchProcessor, self.proxy.running_stats))
+        self._postfetch_chain.append(
+                warcprox.ListenerPostfetchProcessor(self.proxy.running_stats))
 
         for qualname in self.options.plugins or []:
             plugin = Factory.plugin(qualname)
-            constructors.append(functools.partial(
-                warcprox.ListenerPostfetchProcessor, plugin))
+            self._postfetch_chain.append(
+                    warcprox.ListenerPostfetchProcessor(plugin))
 
-        self._postfetch_chain = []
-        for i, constructor in enumerate(constructors):
-            if i != len(constructors) - 1:
-                outq = warcprox.TimestampedQueue(
-                    maxsize=self.options.queue_size)
-            else:
-                outq = None
-            processor = constructor(inq, outq, self.options)
-            if isinstance(processor, warcprox.writerthread.WarcWriterThread):
-                self.warc_writer_thread = processor  # ugly
-            self._postfetch_chain.append(processor)
-            inq = outq
+        # chain them all up
+        self._postfetch_chain[0].inq = inq
+        for i in range(1, len(self._postfetch_chain)):
+            self.chain(self._postfetch_chain[i-1], self._postfetch_chain[i])
 
     def debug_mem(self):
         self.logger.info("self.proxy.recorded_url_q.qsize()=%s", self.proxy.recorded_url_q.qsize())
@@ -313,9 +306,6 @@ class WarcproxController(object):
 
             for processor in self._postfetch_chain:
                 processor.join()
-
-            if self.stats_db:
-                self.stats_db.stop()
 
             self.proxy_thread.join()
             if self.playback_proxy is not None:

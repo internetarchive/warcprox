@@ -99,12 +99,13 @@ class RequestBlockedByRule(Exception):
 class BasePostfetchProcessor(threading.Thread):
     logger = logging.getLogger("warcprox.BasePostfetchProcessor")
 
-    def __init__(self, inq, outq, options=Options()):
+    def __init__(self, options=Options()):
         threading.Thread.__init__(self, name=self.__class__.__name__)
-        self.inq = inq
-        self.outq = outq
         self.options = options
         self.stop = threading.Event()
+        # these should be set before thread is started
+        self.inq = None
+        self.outq = None
 
     def run(self):
         if self.options.profile:
@@ -128,6 +129,7 @@ class BasePostfetchProcessor(threading.Thread):
         raise Exception('not implemented')
 
     def _run(self):
+        self._startup()
         while not self.stop.is_set():
             try:
                 while True:
@@ -152,6 +154,9 @@ class BasePostfetchProcessor(threading.Thread):
                     self.name, exc_info=True)
                 time.sleep(0.5)
 
+    def _startup(self):
+        pass
+
     def _shutdown(self):
         pass
 
@@ -175,6 +180,13 @@ class BaseBatchPostfetchProcessor(BasePostfetchProcessor):
         start = time.time()
 
         while True:
+            try:
+                batch.append(self.inq.get(block=True, timeout=0.5))
+            except queue.Empty:
+                if self.stop.is_set():
+                    break
+                # else maybe keep adding to the batch
+
             if len(batch) >= self.MAX_BATCH_SIZE:
                 break  # full batch
 
@@ -186,18 +198,11 @@ class BaseBatchPostfetchProcessor(BasePostfetchProcessor):
                     and len(self.outq.queue) == 0):
                 break  # next processor is waiting on us
 
-            try:
-                batch.append(self.inq.get(block=True, timeout=0.5))
-            except queue.Empty:
-                if self.stop.is_set():
-                    break
-                # else keep adding to the batch
-
         if not batch:
             raise queue.Empty
 
         self.logger.info(
-                'gathered batch of %s in %0.1f sec',
+                'gathered batch of %s in %0.2f sec',
                 len(batch), time.time() - start)
         self._process_batch(batch)
 
@@ -209,8 +214,8 @@ class BaseBatchPostfetchProcessor(BasePostfetchProcessor):
         raise Exception('not implemented')
 
 class ListenerPostfetchProcessor(BaseStandardPostfetchProcessor):
-    def __init__(self, listener, inq, outq, options=Options()):
-        BaseStandardPostfetchProcessor.__init__(self, inq, outq, options)
+    def __init__(self, listener, options=Options()):
+        BaseStandardPostfetchProcessor.__init__(self, options)
         self.listener = listener
         self.name = listener.__class__.__name__
 
