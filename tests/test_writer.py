@@ -93,16 +93,15 @@ def test_special_dont_write_prefix():
         logging.debug('cd %s', tmpdir)
         os.chdir(tmpdir)
 
-        inq = warcprox.TimestampedQueue(maxsize=1)
-        outq = warcprox.TimestampedQueue(maxsize=1)
-        wwt = warcprox.writerthread.WarcWriterThread(
-                inq, outq, Options(prefix='-'))
+        wwt = warcprox.writerthread.WarcWriterThread(Options(prefix='-'))
+        wwt.inq = warcprox.TimestampedQueue(maxsize=1)
+        wwt.outq = warcprox.TimestampedQueue(maxsize=1)
         try:
             wwt.start()
             # not to be written due to default prefix
             recorder = ProxyingRecorder(io.BytesIO(b'some payload'), None)
             recorder.read()
-            inq.put(RecordedUrl(
+            wwt.inq.put(RecordedUrl(
                 url='http://example.com/no', content_type='text/plain',
                 status=200, client_ip='127.0.0.2', request_data=b'abc',
                 response_recorder=recorder, remote_ip='127.0.0.3',
@@ -111,31 +110,31 @@ def test_special_dont_write_prefix():
             # to be written due to warcprox-meta prefix
             recorder = ProxyingRecorder(io.BytesIO(b'some payload'), None)
             recorder.read()
-            inq.put(RecordedUrl(
+            wwt.inq.put(RecordedUrl(
                 url='http://example.com/yes', content_type='text/plain',
                 status=200, client_ip='127.0.0.2', request_data=b'abc',
                 response_recorder=recorder, remote_ip='127.0.0.3',
                 timestamp=datetime.utcnow(),
                 payload_digest=recorder.block_digest,
                 warcprox_meta={'warc-prefix': 'normal-warc-prefix'}))
-            recorded_url = outq.get(timeout=10)
+            recorded_url = wwt.outq.get(timeout=10)
             assert not recorded_url.warc_records
-            recorded_url = outq.get(timeout=10)
+            recorded_url = wwt.outq.get(timeout=10)
             assert recorded_url.warc_records
-            assert outq.empty()
+            assert wwt.outq.empty()
         finally:
             wwt.stop.set()
             wwt.join()
 
-        inq = warcprox.TimestampedQueue(maxsize=1)
-        outq = warcprox.TimestampedQueue(maxsize=1)
-        wwt = warcprox.writerthread.WarcWriterThread(inq, outq)
+        wwt = warcprox.writerthread.WarcWriterThread()
+        wwt.inq = warcprox.TimestampedQueue(maxsize=1)
+        wwt.outq = warcprox.TimestampedQueue(maxsize=1)
         try:
             wwt.start()
             # to be written due to default prefix
             recorder = ProxyingRecorder(io.BytesIO(b'some payload'), None)
             recorder.read()
-            inq.put(RecordedUrl(
+            wwt.inq.put(RecordedUrl(
                 url='http://example.com/yes', content_type='text/plain',
                 status=200, client_ip='127.0.0.2', request_data=b'abc',
                 response_recorder=recorder, remote_ip='127.0.0.3',
@@ -144,18 +143,18 @@ def test_special_dont_write_prefix():
             # not to be written due to warcprox-meta prefix
             recorder = ProxyingRecorder(io.BytesIO(b'some payload'), None)
             recorder.read()
-            inq.put(RecordedUrl(
+            wwt.inq.put(RecordedUrl(
                 url='http://example.com/no', content_type='text/plain',
                 status=200, client_ip='127.0.0.2', request_data=b'abc',
                 response_recorder=recorder, remote_ip='127.0.0.3',
                 timestamp=datetime.utcnow(),
                 payload_digest=recorder.block_digest,
                 warcprox_meta={'warc-prefix': '-'}))
-            recorded_url = outq.get(timeout=10)
+            recorded_url = wwt.outq.get(timeout=10)
             assert recorded_url.warc_records
-            recorded_url = outq.get(timeout=10)
+            recorded_url = wwt.outq.get(timeout=10)
             assert not recorded_url.warc_records
-            assert outq.empty()
+            assert wwt.outq.empty()
         finally:
             wwt.stop.set()
             wwt.join()

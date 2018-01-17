@@ -311,7 +311,8 @@ def ensure_rethinkdb_tables(argv=None):
         svcreg = doublethink.ServiceRegistry(rr, table=parsed.table)
         did_something = True
     if args.rethinkdb_stats_url:
-        stats_db = warcprox.stats.RethinkStatsDb(options=options)
+        stats_db = warcprox.stats.RethinkStatsProcessor(options=options)
+        stats_db._ensure_db_table()
         did_something = True
     if args.rethinkdb_dedup_url:
         dedup_db = warcprox.dedup.RethinkDedupDb(options=options)
@@ -322,7 +323,7 @@ def ensure_rethinkdb_tables(argv=None):
     if args.rethinkdb_trough_db_url:
         dedup_db = warcprox.dedup.TroughDedupDb(options)
         logging.warn(
-                'trough it responsible for creating most of the rethinkdb '
+                'trough is responsible for creating most of the rethinkdb '
                 'tables that it uses')
         did_something = True
 
