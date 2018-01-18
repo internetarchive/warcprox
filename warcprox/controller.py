@@ -97,7 +97,7 @@ class Factory:
             (module_name, class_name) = qualname.rsplit('.', 1)
             module_ = importlib.import_module(module_name)
             class_ = getattr(module_, class_name)
-            listener = class_()
+            plugin = class_()
             plugin.notify  # make sure it has this method
             return plugin
         except Exception as e:
