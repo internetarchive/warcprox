@@ -260,10 +260,41 @@ class CdxServerDedup(DedupDb):
         """
         pass
 
+class BatchTroughStorer(warcprox.BaseBatchPostfetchProcessor):
+    def __init__(self, trough_dedup_db, options=warcprox.Options()):
+        warcprox.BaseBatchPostfetchProcessor.__init__(self, options)
+        self.trough_dedup_db = trough_dedup_db
+
+    def _filter_and_bucketize(self, batch):
+        '''
+        Returns `{bucket: [recorded_url, ...]}`, excluding urls that should
+        have dedup info stored.
+        '''
+        buckets = collections.defaultdict(list)
+        for recorded_url in batch:
+            if (recorded_url.warc_records
+                    and recorded_url.warc_records[0].type == b'response'
+                    and recorded_url.response_recorder.payload_size() > 0):
+                if (recorded_url.warcprox_meta
+                        and 'captures-bucket' in recorded_url.warcprox_meta):
+                    bucket = recorded_url.warcprox_meta['captures-bucket']
+                else:
+                    bucket = '__unspecified__'
+                buckets[bucket].append(recorded_url)
+        return buckets
+
+    def _process_batch(self, batch):
+        buckets = self._filter_and_bucketize(batch)
+        for bucket in buckets:
+            self.trough_dedup_db.batch_save(buckets[bucket], bucket)
+
 class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
     def __init__(self, trough_dedup_db, options=warcprox.Options()):
         warcprox.BaseBatchPostfetchProcessor.__init__(self, options)
         self.trough_dedup_db = trough_dedup_db
+
+    def _startup(self):
+        self.trough_dedup_db.start()
 
     def _filter_and_bucketize(self, batch):
         '''
@@ -275,7 +306,8 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
             if (recorded_url.response_recorder
                     and recorded_url.payload_digest
                     and recorded_url.response_recorder.payload_size() > 0):
-                if recorded_url.warcprox_meta and 'captures-bucket' in recorded_url.warcprox_meta:
+                if (recorded_url.warcprox_meta
+                        and 'captures-bucket' in recorded_url.warcprox_meta):
                     bucket = recorded_url.warcprox_meta['captures-bucket']
                 else:
                     bucket = '__unspecified__'
@@ -315,7 +347,8 @@ class TroughDedupDb(DedupDb):
                   '    url varchar(2100) not null,\n'
                   '    date datetime not null,\n'
                   '    id varchar(100));\n') # warc record id
-    WRITE_SQL_TMPL = ('insert into dedup (digest_key, url, date, id) '
+    WRITE_SQL_TMPL = ('insert or ignore into dedup\n'
+                      '(digest_key, url, date, id)\n'
                       'values (%s, %s, %s, %s);')
 
     def __init__(self, options=warcprox.Options()):
@@ -323,8 +356,11 @@ class TroughDedupDb(DedupDb):
         self._trough_cli = warcprox.trough.TroughClient(
                 options.rethinkdb_trough_db_url, promotion_interval=60*60)
 
-    def loader(self, options=warcprox.Options()):
-        return BatchTroughLoader(self, options)
+    def loader(self, *args, **kwargs):
+        return BatchTroughLoader(self, self.options)
+
+    def storer(self, *args, **kwargs):
+        return BatchTroughStorer(self, self.options)
 
     def start(self):
         self._trough_cli.register_schema(self.SCHEMA_ID, self.SCHEMA_SQL)
@@ -336,6 +372,21 @@ class TroughDedupDb(DedupDb):
         self._trough_cli.write(
                bucket, self.WRITE_SQL_TMPL,
                (digest_key, url, warc_date, record_id), self.SCHEMA_ID)
+
+    def batch_save(self, batch, bucket='__unspecified__'):
+        sql_tmpl = ('insert or ignore into dedup\n'
+                      '(digest_key, url, date, id)\n'
+                      'values %s;' % ','.join(
+                          '(%s,%s,%s,%s)' for i in range(len(batch))))
+        values = []
+        for recorded_url in batch:
+            values.extend([
+                warcprox.digest_str(
+                    recorded_url.payload_digest, self.options.base32),
+                recorded_url.url,
+                recorded_url.warc_records[0].date,
+                recorded_url.warc_records[0].id,])
+        self._trough_cli.write(bucket, sql_tmpl, values, self.SCHEMA_ID)
 
     def lookup(self, digest_key, bucket='__unspecified__', url=None):
         results = self._trough_cli.read(

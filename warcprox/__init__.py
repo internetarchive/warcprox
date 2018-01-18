@@ -106,6 +106,7 @@ class BasePostfetchProcessor(threading.Thread):
         # these should be set before thread is started
         self.inq = None
         self.outq = None
+        self.profiler = None
 
     def run(self):
         if self.options.profile:
@@ -129,6 +130,7 @@ class BasePostfetchProcessor(threading.Thread):
         raise Exception('not implemented')
 
     def _run(self):
+        logging.info('%s starting up', self)
         self._startup()
         while not self.stop.is_set():
             try:

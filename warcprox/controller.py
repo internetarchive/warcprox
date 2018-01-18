@@ -167,20 +167,22 @@ class WarcproxController(object):
         if self.playback_proxy:
             self._postfetch_chain.append(
                     warcprox.ListenerPostfetchProcessor(
-                        self.playback_proxy.playback_index_db))
+                        self.playback_proxy.playback_index_db, self.options))
 
         crawl_logger = Factory.crawl_logger(self.options)
         if crawl_logger:
             self._postfetch_chain.append(
-                    warcprox.ListenerPostfetchProcessor(crawl_logger))
+                    warcprox.ListenerPostfetchProcessor(
+                        crawl_logger, self.options))
 
         self._postfetch_chain.append(
-                warcprox.ListenerPostfetchProcessor(self.proxy.running_stats))
+                warcprox.ListenerPostfetchProcessor(
+                    self.proxy.running_stats, self.options))
 
         for qualname in self.options.plugins or []:
             plugin = Factory.plugin(qualname)
             self._postfetch_chain.append(
-                    warcprox.ListenerPostfetchProcessor(plugin))
+                    warcprox.ListenerPostfetchProcessor(plugin, self.options))
 
         # chain them all up
         self._postfetch_chain[0].inq = inq
@@ -285,7 +287,6 @@ class WarcproxController(object):
 
             for processor in self._postfetch_chain:
                 processor.start()
-                logging.info('started postfetch processor %r', processor)
 
     def shutdown(self):
         with self._start_stop_lock:
@@ -390,6 +391,9 @@ class WarcproxController(object):
 
             # postfetch processors
             for processor in self._postfetch_chain:
+                if not processor.profiler:
+                    self.logger.notice('%s has no profiling data', processor)
+                    continue
                 file = os.path.join(tmpdir, '%s.dat' % processor.ident)
                 processor.profiler.dump_stats(file)
                 buf = io.StringIO()
