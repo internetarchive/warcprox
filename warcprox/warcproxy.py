@@ -377,7 +377,11 @@ class RecordedUrl:
 class SingleThreadedWarcProxy(http_server.HTTPServer, object):
     logger = logging.getLogger("warcprox.warcproxy.WarcProxy")
 
-    def __init__(self, stats_db=None, options=warcprox.Options()):
+    def __init__(
+            self, stats_db=None, status_callback=None,
+            options=warcprox.Options()):
+        self.status_callback = status_callback
+        self.stats_db = stats_db
         self.options = options
 
         server_address = (
@@ -405,8 +409,6 @@ class SingleThreadedWarcProxy(http_server.HTTPServer, object):
 
         self.recorded_url_q = warcprox.TimestampedQueue(
                 maxsize=options.queue_size or 1000)
-
-        self.stats_db = stats_db
 
         self.running_stats = warcprox.stats.RunningStats()
 
@@ -443,14 +445,20 @@ class SingleThreadedWarcProxy(http_server.HTTPServer, object):
             'urls_per_sec': urls_per_sec,
             'warc_bytes_per_sec': warc_bytes_per_sec,
         }
+        # gets postfetch chain status from the controller
+        if self.status_callback:
+            result.update(self.status_callback())
         return result
 
 class WarcProxy(SingleThreadedWarcProxy, warcprox.mitmproxy.PooledMitmProxy):
     logger = logging.getLogger("warcprox.warcproxy.WarcProxy")
 
-    def __init__(self, stats_db=None, options=warcprox.Options()):
+    def __init__(
+            self, stats_db=None, status_callback=None,
+            options=warcprox.Options()):
         warcprox.mitmproxy.PooledMitmProxy.__init__(self, options)
-        SingleThreadedWarcProxy.__init__(self, stats_db, options)
+        SingleThreadedWarcProxy.__init__(
+                self, stats_db, status_callback, options)
 
     def server_activate(self):
         http_server.HTTPServer.server_activate(self)

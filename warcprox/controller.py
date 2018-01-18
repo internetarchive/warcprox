@@ -132,7 +132,8 @@ class WarcproxController(object):
 
         self.stats_processor = Factory.stats_processor(self.options)
 
-        self.proxy = warcprox.warcproxy.WarcProxy(self.stats_processor, options)
+        self.proxy = warcprox.warcproxy.WarcProxy(
+                self.stats_processor, self.postfetch_status, options)
         self.playback_proxy = Factory.playback_proxy(
             self.proxy.ca, self.options)
 
@@ -140,7 +141,27 @@ class WarcproxController(object):
 
         self.service_registry = Factory.service_registry(options)
 
+    def postfetch_status(self):
+        result = {'postfetch_chain': []}
+        for processor in self._postfetch_chain:
+            if processor.__class__ == warcprox.ListenerPostfetchProcessor:
+                name = processor.listener.__class__.__name__
+            else:
+                name = processor.__class__.__name__
+
+            queued = len(processor.inq.queue)
+            if hasattr(processor, 'batch'):
+                queued += len(processor.batch)
+
+            result['postfetch_chain'].append({
+                'processor': name,
+                'queued_urls': len(processor.inq.queue)})
+        return result
+
     def chain(self, processor0, processor1):
+        '''
+        Sets `processor0.outq` = `processor1.inq` = `queue.Queue()`
+        '''
         assert not processor0.outq
         assert not processor1.inq
         q = warcprox.TimestampedQueue(maxsize=self.options.queue_size)

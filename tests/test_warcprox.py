@@ -347,6 +347,9 @@ def warcprox_(request):
     logging.info('changing to working directory %r', work_dir)
     os.chdir(work_dir)
 
+    # we can't wait around all day in the tests
+    warcprox.BaseBatchPostfetchProcessor.MAX_BATCH_SEC = 0.5
+
     argv = ['warcprox',
             '--method-filter=GET',
             '--method-filter=POST',
@@ -1319,7 +1322,7 @@ def test_status_api(warcprox_):
             'queued_urls', 'queue_max_size', 'seconds_behind', 'threads',
             'rates_5min', 'rates_1min', 'unaccepted_requests', 'rates_15min',
             'active_requests','start_time','urls_processed',
-            'warc_bytes_written'}
+            'warc_bytes_written','postfetch_chain',}
     assert status['role'] == 'warcprox'
     assert status['version'] == warcprox.__version__
     assert status['port'] == warcprox_.proxy.server_port
@@ -1341,7 +1344,7 @@ def test_svcreg_status(warcprox_):
                 'first_heartbeat', 'ttl', 'last_heartbeat', 'threads',
                 'rates_5min', 'rates_1min', 'unaccepted_requests',
                 'rates_15min', 'active_requests','start_time','urls_processed',
-                'warc_bytes_written',}
+                'warc_bytes_written','postfetch_chain',}
         assert status['role'] == 'warcprox'
         assert status['version'] == warcprox.__version__
         assert status['port'] == warcprox_.proxy.server_port
