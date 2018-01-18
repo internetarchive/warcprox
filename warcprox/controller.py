@@ -34,6 +34,7 @@ import warcprox
 import certauth
 import functools
 import doublethink
+import importlib
 
 class Factory:
     @staticmethod
