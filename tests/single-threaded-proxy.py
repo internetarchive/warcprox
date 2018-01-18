@@ -65,6 +65,8 @@ def parse_args():
         help='where to store and load generated certificates')
     arg_parser.add_argument('--onion-tor-socks-proxy', dest='onion_tor_socks_proxy',
         default=None, help='host:port of tor socks proxy, used only to connect to .onion sites')
+    arg_parser.add_argument('--global-socks-proxy', dest='global_socks_proxy',
+        default=None, help='host:port of socks proxy, used to connect to all sites (overrides --onion-tor-socks-proxy')
     arg_parser.add_argument('--version', action='version',
         version="warcprox {}".format(warcprox.__version__))
     arg_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true')
