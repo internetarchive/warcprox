@@ -42,7 +42,6 @@ import certauth.certauth
 import warcprox
 import doublethink
 import cryptography.hazmat.backends.openssl
-import importlib
 
 class BetterArgumentDefaultsHelpFormatter(
                 argparse.ArgumentDefaultsHelpFormatter,
