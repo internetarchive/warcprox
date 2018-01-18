@@ -61,7 +61,7 @@ class BetterArgumentDefaultsHelpFormatter(
         else:
             return argparse.ArgumentDefaultsHelpFormatter._get_help_string(self, action)
 
-def _build_arg_parser(prog):
+def _build_arg_parser(prog='warcprox'):
     arg_parser = argparse.ArgumentParser(prog=prog,
             description='warcprox - WARC writing MITM HTTP/S proxy',
             formatter_class=BetterArgumentDefaultsHelpFormatter)
@@ -77,12 +77,18 @@ def _build_arg_parser(prog):
             help='where to store and load generated certificates')
     arg_parser.add_argument('-d', '--dir', dest='directory',
             default='./warcs', help='where to write warcs')
+    arg_parser.add_argument('--warc-filename', dest='warc_filename',
+            default='{prefix}-{timestamp17}-{serialno}-{randomtoken}',
+            help='define custom WARC filename with variables {prefix}, {timestamp14}, {timestamp17}, {serialno}, {randomtoken}, {hostname}, {shorthostname}')
     arg_parser.add_argument('-z', '--gzip', dest='gzip', action='store_true',
             help='write gzip-compressed warc records')
     arg_parser.add_argument('--no-warc-open-suffix', dest='no_warc_open_suffix',
             default=False, action='store_true', help=argparse.SUPPRESS)
-    arg_parser.add_argument('-n', '--prefix', dest='prefix',
-            default='WARCPROX', help='WARC filename prefix')
+    # not mentioned in --help: special value for '-' for --prefix means don't
+    # archive the capture, unless prefix set in warcprox-meta header
+    arg_parser.add_argument(
+            '-n', '--prefix', dest='prefix', default='WARCPROX',
+            help='default WARC filename prefix')
     arg_parser.add_argument(
             '-s', '--size', dest='rollover_size', default=1000*1000*1000,
             type=int, help='WARC file rollover size threshold in bytes')
@@ -113,9 +119,9 @@ def _build_arg_parser(prog):
 
     arg_parser.add_argument('-P', '--playback-port', dest='playback_port',
             type=int, default=None, help='port to listen on for instant playback')
-    arg_parser.add_argument('--playback-index-db-file', dest='playback_index_db_file',
-            default='./warcprox-playback-index.db',
-            help='playback index database file (only used if --playback-port is specified)')
+    # arg_parser.add_argument('--playback-index-db-file', dest='playback_index_db_file',
+    #         default='./warcprox-playback-index.db',
+    #         help='playback index database file (only used if --playback-port is specified)')
     group = arg_parser.add_mutually_exclusive_group()
     group.add_argument('-j', '--dedup-db-file', dest='dedup_db_file',
             default='./warcprox.sqlite', help='persistent deduplication database file; empty string or /dev/null disables deduplication')
@@ -195,12 +201,12 @@ def dump_state(signum=None, frame=None):
             'dumping state (caught signal %s)\n%s',
             signum, '\n'.join(state_strs))
 
-def init_controller(args):
+def parse_args(argv):
     '''
-    Creates a warcprox.controller.WarcproxController configured according to
-    the supplied arguments (normally the result of parse_args(sys.argv)).
+    Parses command line arguments with argparse.
     '''
-    options = warcprox.Options(**vars(args))
+    arg_parser = _build_arg_parser(prog=os.path.basename(argv[0]))
+    args = arg_parser.parse_args(args=argv[1:])
 
     try:
         hashlib.new(args.digest_algorithm)
@@ -208,102 +214,6 @@ def init_controller(args):
         logging.fatal(e)
         exit(1)
 
-    listeners = []
-
-    if args.rethinkdb_dedup_url:
-        dedup_db = warcprox.dedup.RethinkDedupDb(options=options)
-    elif args.rethinkdb_big_table_url:
-        dedup_db = warcprox.bigtable.RethinkCapturesDedup(options=options)
-    elif args.rethinkdb_trough_db_url:
-        dedup_db = warcprox.dedup.TroughDedupDb(options)
-    elif args.cdxserver_dedup:
-        dedup_db = warcprox.dedup.CdxServerDedup(cdx_url=args.cdxserver_dedup)
-    elif args.dedup_db_file in (None, '', '/dev/null'):
-        logging.info('deduplication disabled')
-        dedup_db = None
-    else:
-        dedup_db = warcprox.dedup.DedupDb(args.dedup_db_file, options=options)
-    if dedup_db:
-        listeners.append(dedup_db)
-
-    if args.rethinkdb_stats_url:
-        stats_db = warcprox.stats.RethinkStatsDb(options=options)
-        listeners.append(stats_db)
-    elif args.stats_db_file in (None, '', '/dev/null'):
-        logging.info('statistics tracking disabled')
-        stats_db = None
-    else:
-        stats_db = warcprox.stats.StatsDb(args.stats_db_file, options=options)
-        listeners.append(stats_db)
-
-    recorded_url_q = warcprox.TimestampedQueue(maxsize=args.queue_size)
-
-    ca_name = 'Warcprox CA on {}'.format(socket.gethostname())[:64]
-    ca = certauth.certauth.CertificateAuthority(args.cacert, args.certs_dir,
-                                                ca_name=ca_name)
-
-    proxy = warcprox.warcproxy.WarcProxy(ca=ca, recorded_url_q=recorded_url_q,
-            stats_db=stats_db, options=options)
-
-    if args.playback_port is not None:
-        playback_index_db = warcprox.playback.PlaybackIndexDb(
-                args.playback_index_db_file, options=options)
-        playback_proxy = warcprox.playback.PlaybackProxy(
-                ca=ca, playback_index_db=playback_index_db, options=options)
-        listeners.append(playback_index_db)
-    else:
-        playback_index_db = None
-        playback_proxy = None
-
-    if args.crawl_log_dir:
-        listeners.append(warcprox.crawl_log.CrawlLogger(
-            args.crawl_log_dir, options=options))
-
-    for qualname in args.plugins or []:
-        try:
-            (module_name, class_name) = qualname.rsplit('.', 1)
-            module_ = importlib.import_module(module_name)
-            class_ = getattr(module_, class_name)
-            listener = class_()
-            listener.notify  # make sure it has this method
-            listeners.append(listener)
-        except Exception as e:
-            logging.fatal('problem with plugin class %r: %s', qualname, e)
-            sys.exit(1)
-
-    writer_pool = warcprox.writer.WarcWriterPool(options=options)
-    # number of warc writer threads = sqrt(proxy.max_threads)
-    # I came up with this out of thin air because it strikes me as reasonable
-    # 1=>1 2=>1 5=>2 10=>3 50=>7 100=>10 200=>14 500=>22 1000=>32 2000=>45
-    num_writer_threads = args.writer_threads or int(proxy.max_threads ** 0.5)
-    logging.debug('initializing %d warc writer threads', num_writer_threads)
-    warc_writer_threads = [
-            warcprox.writerthread.WarcWriterThread(
-                name='WarcWriterThread%03d' % i, recorded_url_q=recorded_url_q,
-                writer_pool=writer_pool, dedup_db=dedup_db,
-                listeners=listeners, options=options)
-            for i in range(num_writer_threads)]
-
-    if args.rethinkdb_services_url:
-        parsed = doublethink.parse_rethinkdb_url(
-                options.rethinkdb_services_url)
-        rr = doublethink.Rethinker(servers=parsed.hosts, db=parsed.database)
-        svcreg = doublethink.ServiceRegistry(rr, table=parsed.table)
-    else:
-        svcreg = None
-
-    controller = warcprox.controller.WarcproxController(
-            proxy, warc_writer_threads, playback_proxy,
-            service_registry=svcreg, options=options)
-
-    return controller
-
-def parse_args(argv):
-    '''
-    Parses command line arguments with argparse.
-    '''
-    arg_parser = _build_arg_parser(prog=os.path.basename(argv[0]))
-    args = arg_parser.parse_args(args=argv[1:])
     return args
 
 def main(argv=None):
@@ -329,7 +239,8 @@ def main(argv=None):
     # see https://github.com/pyca/cryptography/issues/2911
     cryptography.hazmat.backends.openssl.backend.activate_builtin_random()
 
-    controller = init_controller(args)
+    options = warcprox.Options(**vars(args))
+    controller = warcprox.controller.WarcproxController(options)
 
     signal.signal(signal.SIGTERM, lambda a,b: controller.stop.set())
     signal.signal(signal.SIGINT, lambda a,b: controller.stop.set())
@@ -400,7 +311,8 @@ def ensure_rethinkdb_tables(argv=None):
         svcreg = doublethink.ServiceRegistry(rr, table=parsed.table)
         did_something = True
     if args.rethinkdb_stats_url:
-        stats_db = warcprox.stats.RethinkStatsDb(options=options)
+        stats_db = warcprox.stats.RethinkStatsProcessor(options=options)
+        stats_db._ensure_db_table()
         did_something = True
     if args.rethinkdb_dedup_url:
         dedup_db = warcprox.dedup.RethinkDedupDb(options=options)
@@ -411,7 +323,7 @@ def ensure_rethinkdb_tables(argv=None):
     if args.rethinkdb_trough_db_url:
         dedup_db = warcprox.dedup.TroughDedupDb(options)
         logging.warn(
-                'trough it responsible for creating most of the rethinkdb '
+                'trough is responsible for creating most of the rethinkdb '
                 'tables that it uses')
         did_something = True
 

@@ -21,18 +21,20 @@ USA.
 
 from __future__ import absolute_import
 
+from hanzo import warctools
+import collections
+import copy
+import datetime
+import doublethink
+import json
 import logging
 import os
-import json
-from hanzo import warctools
-import warcprox
-import threading
 import rethinkdb as r
-import datetime
-import urlcanon
 import sqlite3
-import copy
-import doublethink
+import threading
+import time
+import urlcanon
+import warcprox
 
 def _empty_bucket(bucket):
     return {
@@ -51,45 +53,88 @@ def _empty_bucket(bucket):
         },
     }
 
-class StatsDb:
-    logger = logging.getLogger("warcprox.stats.StatsDb")
+class StatsProcessor(warcprox.BaseBatchPostfetchProcessor):
+    logger = logging.getLogger("warcprox.stats.StatsProcessor")
 
-    def __init__(self, file='./warcprox.sqlite', options=warcprox.Options()):
-        self.file = file
-        self.options = options
-        self._lock = threading.RLock()
+    def _startup(self):
+        if os.path.exists(self.options.stats_db_file):
+            self.logger.info(
+                    'opening existing stats database %s',
+                    self.options.stats_db_file)
+        else:
+            self.logger.info(
+                    'creating new stats database %s',
+                    self.options.stats_db_file)
 
-    def start(self):
-        with self._lock:
-            if os.path.exists(self.file):
-                self.logger.info(
-                        'opening existing stats database %s', self.file)
-            else:
-                self.logger.info(
-                        'creating new stats database %s', self.file)
+        conn = sqlite3.connect(self.options.stats_db_file)
+        conn.execute(
+                'create table if not exists buckets_of_stats ('
+                '  bucket varchar(300) primary key,'
+                '  stats varchar(4000)'
+                ');')
+        conn.commit()
+        conn.close()
 
-            conn = sqlite3.connect(self.file)
+        self.logger.info(
+                'created table buckets_of_stats in %s',
+                self.options.stats_db_file)
+
+    def _process_batch(self, batch):
+        batch_buckets = self._tally_batch(batch)
+        self._update_db(batch_buckets)
+        logging.trace('updated stats from batch of %s', len(batch))
+
+    def _update_db(self, batch_buckets):
+        conn = sqlite3.connect(self.options.stats_db_file)
+        for bucket in batch_buckets:
+            bucket_stats = batch_buckets[bucket]
+
+            cursor = conn.execute(
+                    'select stats from buckets_of_stats where bucket=?',
+                    (bucket,))
+            result_tuple = cursor.fetchone()
+            cursor.close()
+
+            if result_tuple:
+                old_bucket_stats = json.loads(result_tuple[0])
+
+                bucket_stats['total']['urls'] += old_bucket_stats['total']['urls']
+                bucket_stats['total']['wire_bytes'] += old_bucket_stats['total']['wire_bytes']
+                bucket_stats['revisit']['urls'] += old_bucket_stats['revisit']['urls']
+                bucket_stats['revisit']['wire_bytes'] += old_bucket_stats['revisit']['wire_bytes']
+                bucket_stats['new']['urls'] += old_bucket_stats['new']['urls']
+                bucket_stats['new']['wire_bytes'] += old_bucket_stats['new']['wire_bytes']
+
+            json_value = json.dumps(bucket_stats, separators=(',',':'))
             conn.execute(
-                    'create table if not exists buckets_of_stats ('
-                    '  bucket varchar(300) primary key,'
-                    '  stats varchar(4000)'
-                    ');')
+                    'insert or replace into buckets_of_stats '
+                    '(bucket, stats) values (?, ?)', (bucket, json_value))
             conn.commit()
-            conn.close()
+        conn.close()
 
-        self.logger.info('created table buckets_of_stats in %s', self.file)
+    def _tally_batch(self, batch):
+        batch_buckets = {}
+        for recorded_url in batch:
+            for bucket in self.buckets(recorded_url):
+                bucket_stats = batch_buckets.get(bucket)
+                if not bucket_stats:
+                    bucket_stats = _empty_bucket(bucket)
+                    batch_buckets[bucket] = bucket_stats
 
-    def stop(self):
-        pass
+                bucket_stats["total"]["urls"] += 1
+                bucket_stats["total"]["wire_bytes"] += recorded_url.size
 
-    def close(self):
-        pass
-
-    def sync(self):
-        pass
+                if recorded_url.warc_records:
+                    if recorded_url.warc_records[0].type == b'revisit':
+                        bucket_stats["revisit"]["urls"] += 1
+                        bucket_stats["revisit"]["wire_bytes"] += recorded_url.size
+                    else:
+                        bucket_stats["new"]["urls"] += 1
+                        bucket_stats["new"]["wire_bytes"] += recorded_url.size
+        return batch_buckets
 
     def value(self, bucket0="__all__", bucket1=None, bucket2=None):
-        conn = sqlite3.connect(self.file)
+        conn = sqlite3.connect(self.options.stats_db_file)
         cursor = conn.execute(
                 'select stats from buckets_of_stats where bucket = ?',
                 (bucket0,))
@@ -106,9 +151,6 @@ class StatsDb:
                 return bucket0_stats
         else:
             return None
-
-    def notify(self, recorded_url, records):
-        self.tally(recorded_url, records)
 
     def buckets(self, recorded_url):
         '''
@@ -152,117 +194,20 @@ class StatsDb:
 
         return buckets
 
-    def tally(self, recorded_url, records):
-        with self._lock:
-            conn = sqlite3.connect(self.file)
-
-            for bucket in self.buckets(recorded_url):
-                cursor = conn.execute(
-                        'select stats from buckets_of_stats where bucket=?',
-                        (bucket,))
-
-                result_tuple = cursor.fetchone()
-                cursor.close()
-                if result_tuple:
-                    bucket_stats = json.loads(result_tuple[0])
-                else:
-                    bucket_stats = _empty_bucket(bucket)
-
-                bucket_stats["total"]["urls"] += 1
-                bucket_stats["total"]["wire_bytes"] += recorded_url.size
-
-                if records:
-                    if records[0].type == b'revisit':
-                        bucket_stats["revisit"]["urls"] += 1
-                        bucket_stats["revisit"]["wire_bytes"] += recorded_url.size
-                    else:
-                        bucket_stats["new"]["urls"] += 1
-                        bucket_stats["new"]["wire_bytes"] += recorded_url.size
-
-                json_value = json.dumps(bucket_stats, separators=(',',':'))
-                conn.execute(
-                        'insert or replace into buckets_of_stats '
-                        '(bucket, stats) values (?, ?)', (bucket, json_value))
-                conn.commit()
-
-            conn.close()
-
-class RethinkStatsDb(StatsDb):
-    """Updates database in batch every 2.0 seconds"""
-    logger = logging.getLogger("warcprox.stats.RethinkStatsDb")
+class RethinkStatsProcessor(StatsProcessor):
+    logger = logging.getLogger("warcprox.stats.RethinkStatsProcessor")
 
     def __init__(self, options=warcprox.Options()):
+        StatsProcessor.__init__(self, options)
+
         parsed = doublethink.parse_rethinkdb_url(options.rethinkdb_stats_url)
         self.rr = doublethink.Rethinker(
                 servers=parsed.hosts, db=parsed.database)
         self.table = parsed.table
         self.replicas = min(3, len(self.rr.servers))
+
+    def _startup(self):
         self._ensure_db_table()
-        self.options = options
-
-        self._stop = threading.Event()
-        self._batch_lock = threading.RLock()
-        with self._batch_lock:
-            self._batch = {}
-        self._timer = None
-
-    def start(self):
-        """Starts batch update repeating timer."""
-        self._update_batch() # starts repeating timer
-
-    def _bucket_batch_update_reql(self, bucket, batch):
-        return self.rr.table(self.table).get(bucket).replace(
-            lambda old: r.branch(
-                old.eq(None), batch[bucket], old.merge({
-                    "total": {
-                        "urls": old["total"]["urls"].add(
-                            batch[bucket]["total"]["urls"]),
-                        "wire_bytes": old["total"]["wire_bytes"].add(
-                            batch[bucket]["total"]["wire_bytes"]),
-                        },
-                    "new": {
-                        "urls": old["new"]["urls"].add(
-                            batch[bucket]["new"]["urls"]),
-                        "wire_bytes": old["new"]["wire_bytes"].add(
-                            batch[bucket]["new"]["wire_bytes"]),
-                        },
-                    "revisit": {
-                        "urls": old["revisit"]["urls"].add(
-                            batch[bucket]["revisit"]["urls"]),
-                        "wire_bytes": old["revisit"]["wire_bytes"].add(
-                            batch[bucket]["revisit"]["wire_bytes"]),
-                        },
-                })))
-
-    def _update_batch(self):
-        with self._batch_lock:
-            batch_copy = copy.deepcopy(self._batch)
-            self._batch = {}
-        try:
-            if len(batch_copy) > 0:
-                # XXX can all the buckets be done in one query?
-                for bucket in batch_copy:
-                    result = self._bucket_batch_update_reql(
-                            bucket, batch_copy).run()
-                    if (not result["inserted"] and not result["replaced"]
-                            or sorted(result.values()) != [0,0,0,0,0,1]):
-                        raise Exception(
-                                "unexpected result %s updating stats %s" % (
-                                    result, batch_copy[bucket]))
-        except Exception as e:
-            self.logger.error("problem updating stats", exc_info=True)
-            # now we need to restore the stats that didn't get saved to the
-            # batch so that they are saved in the next call to _update_batch()
-            with self._batch_lock:
-                self._add_to_batch(batch_copy)
-        finally:
-           if not self._stop.is_set():
-               self._timer = threading.Timer(2.0, self._update_batch)
-               self._timer.name = "RethinkStats-batch-update-timer-%s" % (
-                       datetime.datetime.utcnow().isoformat())
-               self._timer.start()
-           else:
-               self.logger.info("finished")
 
     def _ensure_db_table(self):
         dbs = self.rr.db_list().run()
@@ -280,17 +225,38 @@ class RethinkStatsDb(StatsDb):
                     self.table, primary_key="bucket", shards=1,
                     replicas=self.replicas).run()
 
-    def close(self):
-        self.stop()
+    def _update_db(self, batch_buckets):
+        # XXX can all the buckets be done in one query?
+        for bucket in batch_buckets:
+            result = self._bucket_batch_update_reql(
+                    bucket, batch_buckets[bucket]).run()
+            if (not result['inserted'] and not result['replaced']
+                    or sorted(result.values()) != [0,0,0,0,0,1]):
+                self.logger.error(
+                        'unexpected result %s updating stats %s' % (
+                            result, batch_buckets[bucket]))
 
-    def stop(self):
-        self.logger.info("stopping rethinkdb stats table batch updates")
-        self._stop.set()
-        if self._timer:
-            self._timer.join()
-
-    def sync(self):
-        pass
+    def _bucket_batch_update_reql(self, bucket, new):
+        return self.rr.table(self.table).get(bucket).replace(
+            lambda old: r.branch(
+                old.eq(None), new, old.merge({
+                    'total': {
+                        'urls': old['total']['urls'].add(new['total']['urls']),
+                        'wire_bytes': old['total']['wire_bytes'].add(
+                            new['total']['wire_bytes']),
+                        },
+                    'new': {
+                        'urls': old['new']['urls'].add(new['new']['urls']),
+                        'wire_bytes': old['new']['wire_bytes'].add(
+                            new['new']['wire_bytes']),
+                        },
+                    'revisit': {
+                        'urls': old['revisit']['urls'].add(
+                            new['revisit']['urls']),
+                        'wire_bytes': old['revisit']['wire_bytes'].add(
+                            new['revisit']['wire_bytes']),
+                        },
+                })))
 
     def value(self, bucket0="__all__", bucket1=None, bucket2=None):
         bucket0_stats = self.rr.table(self.table).get(bucket0).run()
@@ -305,36 +271,83 @@ class RethinkStatsDb(StatsDb):
                     return bucket0_stats[bucket1]
         return bucket0_stats
 
-    def tally(self, recorded_url, records):
-        buckets = self.buckets(recorded_url)
-        with self._batch_lock:
-            for bucket in buckets:
-                bucket_stats = self._batch.setdefault(
-                        bucket, _empty_bucket(bucket))
-
-                bucket_stats["total"]["urls"] += 1
-                bucket_stats["total"]["wire_bytes"] += recorded_url.size
-
-                if records:
-                    if records[0].type == b'revisit':
-                        bucket_stats["revisit"]["urls"] += 1
-                        bucket_stats["revisit"]["wire_bytes"] += recorded_url.size
-                    else:
-                        bucket_stats["new"]["urls"] += 1
-                        bucket_stats["new"]["wire_bytes"] += recorded_url.size
-
-    def _add_to_batch(self, add_me):
-        with self._batch_lock:
-            for bucket in add_me:
-                bucket_stats = self._batch.setdefault(
-                        bucket, _empty_bucket(bucket))
-                bucket_stats["total"]["urls"] += add_me[bucket]["total"]["urls"]
-                bucket_stats["total"]["wire_bytes"] += add_me[bucket]["total"]["wire_bytes"]
-                bucket_stats["revisit"]["urls"] += add_me[bucket]["revisit"]["urls"]
-                bucket_stats["revisit"]["wire_bytes"] += add_me[bucket]["revisit"]["wire_bytes"]
-                bucket_stats["new"]["urls"] += add_me[bucket]["new"]["urls"]
-                bucket_stats["new"]["wire_bytes"] += add_me[bucket]["new"]["wire_bytes"]
+class RunningStats:
+    '''
+    In-memory stats for measuring overall warcprox performance.
+    '''
+    def __init__(self):
+        self.urls = 0
+        self.warc_bytes = 0
+        self._lock = threading.RLock()
+        self.first_snap_time = time.time()
+        # snapshot every minute since the beginning of time
+        self.minute_snaps = [(self.first_snap_time, 0, 0)]
+        # snapshot every 10 seconds for the last 2 minutes (fill with zeroes)
+        self.ten_sec_snaps = collections.deque()
+        for i in range(0, 13):
+            self.ten_sec_snaps.append(
+                    (self.first_snap_time - 120 + i * 10, 0, 0))
 
     def notify(self, recorded_url, records):
-        self.tally(recorded_url, records)
+        with self._lock:
+            self.urls += 1
+            if records:
+                self.warc_bytes += records[-1].offset + records[-1].length - records[0].offset
+
+    def snap(self):
+        now = time.time()
+        last_snap_time = self.minute_snaps[-1][0]
+        need_minute_snap = (now - self.first_snap_time) // 60 > (self.minute_snaps[-1][0] - self.first_snap_time) // 60
+        need_ten_sec_snap = (now - self.ten_sec_snaps[0][0]) // 10 > (self.ten_sec_snaps[-1][0] - self.ten_sec_snaps[0][0]) // 10
+        if need_minute_snap:
+            self.minute_snaps.append((now, self.urls, self.warc_bytes))
+            logging.debug('added minute snap %r', self.minute_snaps[-1])
+        if need_ten_sec_snap:
+            self.ten_sec_snaps.popleft()
+            self.ten_sec_snaps.append((now, self.urls, self.warc_bytes))
+            logging.trace('rotated in ten second snap %r', self.ten_sec_snaps[-1])
+
+    def _closest_ten_sec_snap(self, t):
+        # it's a deque so iterating over it is faster than indexed lookup
+        closest_snap = (0, 0, 0)
+        for snap in self.ten_sec_snaps:
+            if abs(t - snap[0]) < abs(t - closest_snap[0]):
+                closest_snap = snap
+        return closest_snap
+
+    def _closest_minute_snap(self, t):
+        minutes_ago = int((time.time() - t) / 60)
+        # jump to approximately where we expect the closest snap
+        i = max(0, len(self.minute_snaps) - minutes_ago)
+        # move back to the last one earlier than `t`
+        while self.minute_snaps[i][0] > t and i > 0:
+            i -= 1
+        closest_snap = self.minute_snaps[i]
+        # move forward until we start getting farther away from `t`
+        while i < len(self.minute_snaps):
+            if abs(t - self.minute_snaps[i][0]) <= abs(t - closest_snap[0]):
+                closest_snap = self.minute_snaps[i]
+            else:
+                break
+            i += 1
+        return closest_snap
+
+    def current_rates(self, time_period_minutes):
+        assert time_period_minutes > 0
+        with self._lock:
+            now = time.time()
+            urls = self.urls
+            warc_bytes = self.warc_bytes
+
+        t = now - time_period_minutes * 60
+        if time_period_minutes <= 2:
+            start_snap = self._closest_ten_sec_snap(t)
+        else:
+            start_snap = self._closest_minute_snap(t)
+
+        elapsed = now - start_snap[0]
+        logging.trace(
+                'elapsed=%0.1fs urls=%s warc_bytes=%s', elapsed,
+                urls - start_snap[1], warc_bytes - start_snap[2])
+        return elapsed, (urls - start_snap[1]) / elapsed, (warc_bytes - start_snap[2]) / elapsed
 

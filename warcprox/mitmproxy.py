@@ -62,6 +62,8 @@ except ImportError:
 import concurrent.futures
 import urlcanon
 import time
+import collections
+import cProfile
 
 class ProxyingRecorder(object):
     """
@@ -79,7 +81,7 @@ class ProxyingRecorder(object):
         self.block_digest = hashlib.new(digest_algorithm)
         self.payload_offset = None
         self.proxy_client = proxy_client
-        self._proxy_client_conn_open = True
+        self._proxy_client_conn_open = bool(self.proxy_client)
         self.len = 0
         self.url = url
 
@@ -451,6 +453,7 @@ class PooledMixIn(socketserver.ThreadingMixIn):
         on system resource limits.
         '''
         self.active_requests = set()
+        self.unaccepted_requests = 0
         if not max_threads:
             # man getrlimit: "RLIMIT_NPROC The maximum number of processes (or,
             # more precisely on Linux, threads) that can be created for the
@@ -474,6 +477,17 @@ class PooledMixIn(socketserver.ThreadingMixIn):
                 self.logger.info("max_threads=%s", max_threads)
         self.max_threads = max_threads
         self.pool = concurrent.futures.ThreadPoolExecutor(max_threads)
+
+    def status(self):
+        if hasattr(super(), 'status'):
+            result = super().status()
+        else:
+            result = {}
+        result.update({
+            'threads': self.pool._max_workers,
+            'active_requests': len(self.active_requests),
+            'unaccepted_requests': self.unaccepted_requests})
+        return result
 
     def process_request(self, request, client_address):
         self.active_requests.add(request)
@@ -503,12 +517,14 @@ class PooledMixIn(socketserver.ThreadingMixIn):
         self.logger.trace(
                 'someone is connecting active_requests=%s',
                 len(self.active_requests))
+        self.unaccepted_requests += 1
         while len(self.active_requests) > self.max_threads:
             time.sleep(0.05)
         res = self.socket.accept()
         self.logger.trace(
                 'accepted after %.1f sec active_requests=%s socket=%s',
                 time.time() - start, len(self.active_requests), res[0])
+        self.unaccepted_requests -= 1
         return res
 
 class MitmProxy(http_server.HTTPServer):
@@ -547,9 +563,14 @@ class PooledMitmProxy(PooledMixIn, MitmProxy):
     # See also https://blog.dubbelboer.com/2012/04/09/syn-cookies.html
     request_queue_size = 4096
 
-    def __init__(self, max_threads, options=warcprox.Options()):
-        PooledMixIn.__init__(self, max_threads)
-        self.profilers = {}
+    def __init__(self, options=warcprox.Options()):
+        if options.max_threads:
+            self.logger.info(
+                    'max_threads=%s set by command line option',
+                    options.max_threads)
+
+        PooledMixIn.__init__(self, options.max_threads)
+        self.profilers = collections.defaultdict(cProfile.Profile)
 
         if options.profile:
             self.process_request_thread = self._profile_process_request_thread
@@ -557,9 +578,6 @@ class PooledMitmProxy(PooledMixIn, MitmProxy):
             self.process_request_thread = self._process_request_thread
 
     def _profile_process_request_thread(self, request, client_address):
-        if not threading.current_thread().ident in self.profilers:
-            import cProfile
-            self.profilers[threading.current_thread().ident] = cProfile.Profile()
         profiler = self.profilers[threading.current_thread().ident]
         profiler.enable()
         self._process_request_thread(request, client_address)
