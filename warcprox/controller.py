@@ -4,7 +4,7 @@ starting up and shutting down the various components of warcprox, and for
 sending heartbeats to the service registry if configured to do so; also has
 some memory profiling capabilities
 
-Copyright (C) 2013-2017 Internet Archive
+Copyright (C) 2013-2018 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -27,54 +27,189 @@ from __future__ import absolute_import
 import logging
 import threading
 import time
-import warcprox
 import sys
 import gc
 import datetime
+import warcprox
+import certauth
+import functools
+import doublethink
+import importlib
+
+class Factory:
+    @staticmethod
+    def dedup_db(options):
+        if options.rethinkdb_dedup_url:
+            dedup_db = warcprox.dedup.RethinkDedupDb(options=options)
+        elif options.rethinkdb_big_table_url:
+            dedup_db = warcprox.bigtable.RethinkCapturesDedup(options=options)
+        elif options.rethinkdb_trough_db_url:
+            dedup_db = warcprox.dedup.TroughDedupDb(options)
+        elif options.cdxserver_dedup:
+            dedup_db = warcprox.dedup.CdxServerDedup(
+                cdx_url=options.cdxserver_dedup)
+        elif options.dedup_db_file in (None, '', '/dev/null'):
+            logging.info('deduplication disabled')
+            dedup_db = None
+        else:
+            dedup_db = warcprox.dedup.DedupDb(options.dedup_db_file, options=options)
+        return dedup_db
+
+    @staticmethod
+    def stats_processor(options):
+        # return warcprox.stats.StatsProcessor(options)
+        if options.rethinkdb_stats_url:
+            stats_processor = warcprox.stats.RethinkStatsProcessor(options)
+        elif options.stats_db_file in (None, '', '/dev/null'):
+            logging.info('statistics tracking disabled')
+            stats_processor = None
+        else:
+            stats_processor = warcprox.stats.StatsProcessor(options)
+        return stats_processor
+
+    @staticmethod
+    def warc_writer(options):
+        return warcprox.writerthread.WarcWriterThread(options)
+
+    @staticmethod
+    def playback_proxy(ca, options):
+        if options.playback_port is not None:
+            playback_index_db = warcprox.playback.PlaybackIndexDb(
+                options=options)
+            playback_proxy = warcprox.playback.PlaybackProxy(
+                    ca=ca, playback_index_db=playback_index_db, options=options)
+        else:
+            playback_index_db = None
+            playback_proxy = None
+        return playback_proxy
+
+    @staticmethod
+    def crawl_logger(options):
+        if options.crawl_log_dir:
+            return warcprox.crawl_log.CrawlLogger(
+                options.crawl_log_dir, options=options)
+        else:
+            return None
+
+    @staticmethod
+    def plugin(qualname):
+        try:
+            (module_name, class_name) = qualname.rsplit('.', 1)
+            module_ = importlib.import_module(module_name)
+            class_ = getattr(module_, class_name)
+            plugin = class_()
+            plugin.notify  # make sure it has this method
+            return plugin
+        except Exception as e:
+            logging.fatal('problem with plugin class %r: %s', qualname, e)
+            sys.exit(1)
+
+    @staticmethod
+    def service_registry(options):
+        if options.rethinkdb_services_url:
+            parsed = doublethink.parse_rethinkdb_url(
+                    options.rethinkdb_services_url)
+            rr = doublethink.Rethinker(servers=parsed.hosts, db=parsed.database)
+            return doublethink.ServiceRegistry(rr, table=parsed.table)
+        else:
+            return None
 
 class WarcproxController(object):
     logger = logging.getLogger("warcprox.controller.WarcproxController")
 
     HEARTBEAT_INTERVAL = 20.0
 
-    def __init__(
-            self, proxy=None, warc_writer_threads=None, playback_proxy=None,
-            service_registry=None, options=warcprox.Options()):
+    def __init__(self, options=warcprox.Options()):
         """
-        Create warcprox controller.
-
-        If supplied, `proxy` should be an instance of WarcProxy, and
-        `warc_writer_threads` should be a list of WarcWriterThread instances.
-        If not supplied, they are created with default values.
-
-        If supplied, playback_proxy should be an instance of PlaybackProxy. If
-        not supplied, no playback proxy will run.
+        Create warcprox controller based on `options`.
         """
-        if proxy is not None:
-            self.proxy = proxy
-        else:
-            self.proxy = warcprox.warcproxy.WarcProxy(options=options)
-
-        if warc_writer_threads is not None:
-            self.warc_writer_threads = warc_writer_threads
-        else:
-            self.warc_writer_threads = [
-                    warcprox.writerthread.WarcWriterThread(
-                        name='WarcWriterThread%03d' % i,
-                        recorded_url_q=self.proxy.recorded_url_q,
-                        listeners=[self.proxy.running_stats], options=options)
-                    for i in range(int(self.proxy.max_threads ** 0.5))]
+        self.options = options
 
         self.proxy_thread = None
         self.playback_proxy_thread = None
-        self.playback_proxy = playback_proxy
-        self.service_registry = service_registry
-        self.options = options
-
         self._last_rss = None
-
         self.stop = threading.Event()
         self._start_stop_lock = threading.Lock()
+
+        self.stats_processor = Factory.stats_processor(self.options)
+
+        self.proxy = warcprox.warcproxy.WarcProxy(
+                self.stats_processor, self.postfetch_status, options)
+        self.playback_proxy = Factory.playback_proxy(
+            self.proxy.ca, self.options)
+
+        self.build_postfetch_chain(self.proxy.recorded_url_q)
+
+        self.service_registry = Factory.service_registry(options)
+
+    def postfetch_status(self):
+        result = {'postfetch_chain': []}
+        for processor in self._postfetch_chain:
+            if processor.__class__ == warcprox.ListenerPostfetchProcessor:
+                name = processor.listener.__class__.__name__
+            else:
+                name = processor.__class__.__name__
+
+            queued = len(processor.inq.queue)
+            if hasattr(processor, 'batch'):
+                queued += len(processor.batch)
+
+            result['postfetch_chain'].append({
+                'processor': name,
+                'queued_urls': len(processor.inq.queue)})
+        return result
+
+    def chain(self, processor0, processor1):
+        '''
+        Sets `processor0.outq` = `processor1.inq` = `queue.Queue()`
+        '''
+        assert not processor0.outq
+        assert not processor1.inq
+        q = warcprox.TimestampedQueue(maxsize=self.options.queue_size)
+        processor0.outq = q
+        processor1.inq = q
+
+    def build_postfetch_chain(self, inq):
+        self._postfetch_chain = []
+
+        self.dedup_db = Factory.dedup_db(self.options)
+
+        if self.dedup_db:
+            self._postfetch_chain.append(self.dedup_db.loader())
+
+        self.warc_writer_thread = Factory.warc_writer(self.options)
+        self._postfetch_chain.append(self.warc_writer_thread)
+
+        if self.dedup_db:
+            self._postfetch_chain.append(self.dedup_db.storer())
+
+        if self.stats_processor:
+            self._postfetch_chain.append(self.stats_processor)
+
+        if self.playback_proxy:
+            self._postfetch_chain.append(
+                    warcprox.ListenerPostfetchProcessor(
+                        self.playback_proxy.playback_index_db, self.options))
+
+        crawl_logger = Factory.crawl_logger(self.options)
+        if crawl_logger:
+            self._postfetch_chain.append(
+                    warcprox.ListenerPostfetchProcessor(
+                        crawl_logger, self.options))
+
+        self._postfetch_chain.append(
+                warcprox.ListenerPostfetchProcessor(
+                    self.proxy.running_stats, self.options))
+
+        for qualname in self.options.plugins or []:
+            plugin = Factory.plugin(qualname)
+            self._postfetch_chain.append(
+                    warcprox.ListenerPostfetchProcessor(plugin, self.options))
+
+        # chain them all up
+        self._postfetch_chain[0].inq = inq
+        for i in range(1, len(self._postfetch_chain)):
+            self.chain(self._postfetch_chain[i-1], self._postfetch_chain[i])
 
     def debug_mem(self):
         self.logger.info("self.proxy.recorded_url_q.qsize()=%s", self.proxy.recorded_url_q.qsize())
@@ -162,26 +297,18 @@ class WarcproxController(object):
                 self.logger.info('warcprox is already running')
                 return
 
-            if self.proxy.stats_db:
-                self.proxy.stats_db.start()
             self.proxy_thread = threading.Thread(
                     target=self.proxy.serve_forever, name='ProxyThread')
             self.proxy_thread.start()
 
-            assert(all(
-                wwt.dedup_db is self.warc_writer_threads[0].dedup_db
-                for wwt in self.warc_writer_threads))
-            if any((t.dedup_db for t in self.warc_writer_threads)):
-                self.warc_writer_threads[0].dedup_db.start()
-
-            for wwt in self.warc_writer_threads:
-                wwt.start()
-
-            if self.playback_proxy is not None:
+            if self.playback_proxy:
                 self.playback_proxy_thread = threading.Thread(
-                        target=self.playback_proxy.serve_forever,
-                        name='PlaybackProxyThread')
+                    target=self.playback_proxy.serve_forever,
+                    name='PlaybackProxyThread')
                 self.playback_proxy_thread.start()
+
+            for processor in self._postfetch_chain:
+                processor.start()
 
     def shutdown(self):
         with self._start_stop_lock:
@@ -189,8 +316,8 @@ class WarcproxController(object):
                 self.logger.info('warcprox is not running')
                 return
 
-            for wwt in self.warc_writer_threads:
-                wwt.stop.set()
+            for processor in self._postfetch_chain:
+                processor.stop.set()
             self.proxy.shutdown()
             self.proxy.server_close()
 
@@ -200,12 +327,8 @@ class WarcproxController(object):
                 if self.playback_proxy.playback_index_db is not None:
                     self.playback_proxy.playback_index_db.close()
 
-            # wait for threads to finish
-            for wwt in self.warc_writer_threads:
-                wwt.join()
-
-            if self.proxy.stats_db:
-                self.proxy.stats_db.stop()
+            for processor in self._postfetch_chain:
+                processor.join()
 
             self.proxy_thread.join()
             if self.playback_proxy is not None:
@@ -288,18 +411,17 @@ class WarcproxController(object):
                     'aggregate performance profile of %s proxy threads:\n%s',
                     len(files), buf.getvalue())
 
-            # warc writer threads
-            files = []
-            for wwt in self.warc_writer_threads:
-                file = os.path.join(tmpdir, '%s.dat' % wwt.ident)
-                wwt.profiler.dump_stats(file)
-                files.append(file)
-
-            buf = io.StringIO()
-            stats = pstats.Stats(*files, stream=buf)
-            stats.sort_stats('cumulative')
-            stats.print_stats(0.1)
-            self.logger.notice(
-                    'aggregate performance profile of %s warc writer threads:\n%s',
-                    len(self.warc_writer_threads), buf.getvalue())
-
+            # postfetch processors
+            for processor in self._postfetch_chain:
+                if not processor.profiler:
+                    self.logger.notice('%s has no profiling data', processor)
+                    continue
+                file = os.path.join(tmpdir, '%s.dat' % processor.ident)
+                processor.profiler.dump_stats(file)
+                buf = io.StringIO()
+                stats = pstats.Stats(file, stream=buf)
+                stats.sort_stats('cumulative')
+                stats.print_stats(0.1)
+                self.logger.notice(
+                        'performance profile of %s:\n%s', processor,
+                        buf.getvalue())

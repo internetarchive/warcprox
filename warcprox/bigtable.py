@@ -215,7 +215,7 @@ class RethinkCaptures:
         if self._timer:
             self._timer.join()
 
-class RethinkCapturesDedup:
+class RethinkCapturesDedup(warcprox.dedup.DedupDb):
     logger = logging.getLogger("warcprox.dedup.RethinkCapturesDedup")
 
     def __init__(self, options=warcprox.Options()):

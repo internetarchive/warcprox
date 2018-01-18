@@ -2,7 +2,7 @@
 warcprox/warcproxy.py - recording proxy, extends mitmproxy to record traffic,
 enqueue info on the recorded url queue
 
-Copyright (C) 2013-2016 Internet Archive
+Copyright (C) 2013-2018 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -92,6 +92,8 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                                 self.url, rule))
 
     def _enforce_limit(self, limit_key, limit_value, soft=False):
+        if not self.server.stats_db:
+            return
         bucket0, bucket1, bucket2 = limit_key.rsplit("/", 2)
         _limit_key = limit_key
 
@@ -328,7 +330,7 @@ class RecordedUrl:
             warcprox_meta=None, content_type=None, custom_type=None,
             status=None, size=None, client_ip=None, method=None,
             timestamp=None, host=None, duration=None, referer=None,
-            payload_digest=None):
+            payload_digest=None, warc_records=None):
         # XXX should test what happens with non-ascii url (when does
         # url-encoding happen?)
         if type(url) is not bytes:
@@ -367,6 +369,7 @@ class RecordedUrl:
         self.duration = duration
         self.referer = referer
         self.payload_digest = payload_digest
+        self.warc_records = warc_records
 
 # inherit from object so that multiple inheritance from this class works
 # properly in python 2
@@ -375,8 +378,12 @@ class SingleThreadedWarcProxy(http_server.HTTPServer, object):
     logger = logging.getLogger("warcprox.warcproxy.WarcProxy")
 
     def __init__(
-            self, ca=None, recorded_url_q=None, stats_db=None,
+            self, stats_db=None, status_callback=None,
             options=warcprox.Options()):
+        self.status_callback = status_callback
+        self.stats_db = stats_db
+        self.options = options
+
         server_address = (
                 options.address or 'localhost',
                 options.port if options.port is not None else 8000)
@@ -395,22 +402,13 @@ class SingleThreadedWarcProxy(http_server.HTTPServer, object):
 
         self.digest_algorithm = options.digest_algorithm or 'sha1'
 
-        if ca is not None:
-            self.ca = ca
-        else:
-            ca_name = 'Warcprox CA on {}'.format(socket.gethostname())[:64]
-            self.ca = CertificateAuthority(ca_file='warcprox-ca.pem',
-                                           certs_dir='./warcprox-ca',
-                                           ca_name=ca_name)
+        ca_name = ('Warcprox CA on %s' % socket.gethostname())[:64]
+        self.ca = CertificateAuthority(
+                ca_file='warcprox-ca.pem', certs_dir='./warcprox-ca',
+                ca_name=ca_name)
 
-        if recorded_url_q is not None:
-            self.recorded_url_q = recorded_url_q
-        else:
-            self.recorded_url_q = warcprox.TimestampedQueue(
-                    maxsize=options.queue_size or 1000)
-
-        self.stats_db = stats_db
-        self.options = options
+        self.recorded_url_q = warcprox.TimestampedQueue(
+                maxsize=options.queue_size or 1000)
 
         self.running_stats = warcprox.stats.RunningStats()
 
@@ -425,6 +423,9 @@ class SingleThreadedWarcProxy(http_server.HTTPServer, object):
             'queued_urls': self.recorded_url_q.qsize(),
             'queue_max_size': self.recorded_url_q.maxsize,
             'seconds_behind': self.recorded_url_q.seconds_behind(),
+            'urls_processed': self.running_stats.urls,
+            'warc_bytes_written': self.running_stats.warc_bytes,
+            'start_time': self.running_stats.first_snap_time,
         })
         elapsed, urls_per_sec, warc_bytes_per_sec = self.running_stats.current_rates(1)
         result['rates_1min'] = {
@@ -444,22 +445,20 @@ class SingleThreadedWarcProxy(http_server.HTTPServer, object):
             'urls_per_sec': urls_per_sec,
             'warc_bytes_per_sec': warc_bytes_per_sec,
         }
+        # gets postfetch chain status from the controller
+        if self.status_callback:
+            result.update(self.status_callback())
         return result
 
 class WarcProxy(SingleThreadedWarcProxy, warcprox.mitmproxy.PooledMitmProxy):
     logger = logging.getLogger("warcprox.warcproxy.WarcProxy")
 
     def __init__(
-            self, ca=None, recorded_url_q=None, stats_db=None,
+            self, stats_db=None, status_callback=None,
             options=warcprox.Options()):
-        if options.max_threads:
-            self.logger.info(
-                    "max_threads=%s set by command line option",
-                    options.max_threads)
-        warcprox.mitmproxy.PooledMitmProxy.__init__(
-                self, options.max_threads, options)
+        warcprox.mitmproxy.PooledMitmProxy.__init__(self, options)
         SingleThreadedWarcProxy.__init__(
-                self, ca, recorded_url_q, stats_db, options)
+                self, stats_db, status_callback, options)
 
     def server_activate(self):
         http_server.HTTPServer.server_activate(self)

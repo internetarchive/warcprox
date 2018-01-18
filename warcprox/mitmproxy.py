@@ -62,6 +62,8 @@ except ImportError:
 import concurrent.futures
 import urlcanon
 import time
+import collections
+import cProfile
 
 class ProxyingRecorder(object):
     """
@@ -562,9 +564,14 @@ class PooledMitmProxy(PooledMixIn, MitmProxy):
     # See also https://blog.dubbelboer.com/2012/04/09/syn-cookies.html
     request_queue_size = 4096
 
-    def __init__(self, max_threads, options=warcprox.Options()):
-        PooledMixIn.__init__(self, max_threads)
-        self.profilers = {}
+    def __init__(self, options=warcprox.Options()):
+        if options.max_threads:
+            self.logger.info(
+                    'max_threads=%s set by command line option',
+                    options.max_threads)
+
+        PooledMixIn.__init__(self, options.max_threads)
+        self.profilers = collections.defaultdict(cProfile.Profile)
 
         if options.profile:
             self.process_request_thread = self._profile_process_request_thread
@@ -572,9 +579,6 @@ class PooledMitmProxy(PooledMixIn, MitmProxy):
             self.process_request_thread = self._process_request_thread
 
     def _profile_process_request_thread(self, request, client_address):
-        if not threading.current_thread().ident in self.profilers:
-            import cProfile
-            self.profilers[threading.current_thread().ident] = cProfile.Profile()
         profiler = self.profilers[threading.current_thread().ident]
         profiler.enable()
         self._process_request_thread(request, client_address)

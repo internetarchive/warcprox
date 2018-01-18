@@ -96,6 +96,14 @@ logging.getLogger("requests.packages.urllib3").setLevel(logging.WARN)
 warnings.simplefilter("ignore", category=requests.packages.urllib3.exceptions.InsecureRequestWarning)
 warnings.simplefilter("ignore", category=requests.packages.urllib3.exceptions.InsecurePlatformWarning)
 
+def wait(callback, timeout=10):
+    start = time.time()
+    while time.time() - start < timeout:
+        if callback():
+            return
+        time.sleep(0.1)
+    raise Exception('timed out waiting for %s to return truthy' % callback)
+
 # monkey patch dns lookup so we can test domain inheritance on localhost
 orig_getaddrinfo = socket.getaddrinfo
 orig_gethostbyname = socket.gethostbyname
@@ -339,6 +347,9 @@ def warcprox_(request):
     logging.info('changing to working directory %r', work_dir)
     os.chdir(work_dir)
 
+    # we can't wait around all day in the tests
+    warcprox.BaseBatchPostfetchProcessor.MAX_BATCH_SEC = 0.5
+
     argv = ['warcprox',
             '--method-filter=GET',
             '--method-filter=POST',
@@ -357,9 +368,12 @@ def warcprox_(request):
         argv.append('--rethinkdb-trough-db-url=%s' % request.config.getoption('--rethinkdb-trough-db-url'))
 
     args = warcprox.main.parse_args(argv)
-    warcprox_ = warcprox.main.init_controller(args)
+
+    options = warcprox.Options(**vars(args))
+    warcprox_ = warcprox.controller.WarcproxController(options)
 
     logging.info('starting warcprox')
+    warcprox_.start()
     warcprox_thread = threading.Thread(
             name='WarcproxThread', target=warcprox_.run_until_shutdown)
     warcprox_thread.start()
@@ -431,17 +445,9 @@ def test_httpds_no_proxy(http_daemon, https_daemon):
     assert response.headers['warcprox-test-header'] == 'c!'
     assert response.content == b'I am the warcprox test payload! dddddddddd!\n'
 
-def _poll_playback_until(playback_proxies, url, status, timeout_sec):
-    start = time.time()
-    # check playback (warc writing is asynchronous, give it up to 10 sec)
-    while time.time() - start < timeout_sec:
-        response = requests.get(url, proxies=playback_proxies, verify=False)
-        if response.status_code == status:
-            break
-        time.sleep(0.5)
-    return response
+def test_archive_and_playback_http_url(http_daemon, archiving_proxies, playback_proxies, warcprox_):
+    urls_before = warcprox_.proxy.running_stats.urls
 
-def test_archive_and_playback_http_url(http_daemon, archiving_proxies, playback_proxies):
     url = 'http://localhost:{}/a/b'.format(http_daemon.server_port)
 
     # ensure playback fails before archiving
@@ -455,12 +461,17 @@ def test_archive_and_playback_http_url(http_daemon, archiving_proxies, playback_
     assert response.headers['warcprox-test-header'] == 'a!'
     assert response.content == b'I am the warcprox test payload! bbbbbbbbbb!\n'
 
-    response = _poll_playback_until(playback_proxies, url, status=200, timeout_sec=10)
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
+
+    response = requests.get(url, proxies=playback_proxies, verify=False)
     assert response.status_code == 200
     assert response.headers['warcprox-test-header'] == 'a!'
     assert response.content == b'I am the warcprox test payload! bbbbbbbbbb!\n'
 
-def test_archive_and_playback_https_url(https_daemon, archiving_proxies, playback_proxies):
+def test_archive_and_playback_https_url(https_daemon, archiving_proxies, playback_proxies, warcprox_):
+    urls_before = warcprox_.proxy.running_stats.urls
+
     url = 'https://localhost:{}/c/d'.format(https_daemon.server_port)
 
     # ensure playback fails before archiving
@@ -474,14 +485,19 @@ def test_archive_and_playback_https_url(https_daemon, archiving_proxies, playbac
     assert response.headers['warcprox-test-header'] == 'c!'
     assert response.content == b'I am the warcprox test payload! dddddddddd!\n'
 
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
+
     # test playback
-    response = _poll_playback_until(playback_proxies, url, status=200, timeout_sec=10)
+    response = requests.get(url, proxies=playback_proxies, verify=False)
     assert response.status_code == 200
     assert response.headers['warcprox-test-header'] == 'c!'
     assert response.content == b'I am the warcprox test payload! dddddddddd!\n'
 
 # test dedup of same http url with same payload
 def test_dedup_http(http_daemon, warcprox_, archiving_proxies, playback_proxies):
+    urls_before = warcprox_.proxy.running_stats.urls
+
     url = 'http://localhost:{}/e/f'.format(http_daemon.server_port)
 
     # ensure playback fails before archiving
@@ -490,8 +506,8 @@ def test_dedup_http(http_daemon, warcprox_, archiving_proxies, playback_proxies)
     assert response.content == b'404 Not in Archive\n'
 
     # check not in dedup db
-    dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
-            b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
+    dedup_lookup = warcprox_.dedup_db.lookup(
+        b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
     assert dedup_lookup is None
 
     # archive
@@ -500,21 +516,17 @@ def test_dedup_http(http_daemon, warcprox_, archiving_proxies, playback_proxies)
     assert response.headers['warcprox-test-header'] == 'e!'
     assert response.content == b'I am the warcprox test payload! ffffffffff!\n'
 
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
     # test playback
-    response = _poll_playback_until(playback_proxies, url, status=200, timeout_sec=10)
+    response = requests.get(url, proxies=playback_proxies, verify=False)
     assert response.status_code == 200
     assert response.headers['warcprox-test-header'] == 'e!'
     assert response.content == b'I am the warcprox test payload! ffffffffff!\n'
 
-    # wait for writer thread to process
-    time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
-        time.sleep(0.5)
-    time.sleep(0.5)
-
     # check in dedup db
     # {u'id': u'<urn:uuid:e691dc0f-4bb9-4ad8-9afb-2af836aa05e4>', u'url': u'https://localhost:62841/c/d', u'date': u'2013-11-22T00:14:37Z'}
-    dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
+    dedup_lookup = warcprox_.dedup_db.lookup(
             b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
     assert dedup_lookup
     assert dedup_lookup['url'] == url.encode('ascii')
@@ -525,7 +537,7 @@ def test_dedup_http(http_daemon, warcprox_, archiving_proxies, playback_proxies)
 
     # need revisit to have a later timestamp than original, else playing
     # back the latest record might not hit the revisit
-    time.sleep(1.5)
+    time.sleep(1.1)
 
     # fetch & archive revisit
     response = requests.get(url, proxies=archiving_proxies, verify=False)
@@ -533,14 +545,11 @@ def test_dedup_http(http_daemon, warcprox_, archiving_proxies, playback_proxies)
     assert response.headers['warcprox-test-header'] == 'e!'
     assert response.content == b'I am the warcprox test payload! ffffffffff!\n'
 
-    # wait for writer thread to process
-    time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
-        time.sleep(0.5)
-    time.sleep(0.5)
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 2)
 
     # check in dedup db (no change from prev)
-    dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
+    dedup_lookup = warcprox_.dedup_db.lookup(
             b'sha1:65e1216acfd220f0292715e74bd7a1ec35c99dfc')
     assert dedup_lookup['url'] == url.encode('ascii')
     assert dedup_lookup['id'] == record_id
@@ -548,7 +557,7 @@ def test_dedup_http(http_daemon, warcprox_, archiving_proxies, playback_proxies)
 
     # test playback
     logging.debug('testing playback of revisit of {}'.format(url))
-    response = _poll_playback_until(playback_proxies, url, status=200, timeout_sec=10)
+    response = requests.get(url, proxies=playback_proxies, verify=False)
     assert response.status_code == 200
     assert response.headers['warcprox-test-header'] == 'e!'
     assert response.content == b'I am the warcprox test payload! ffffffffff!\n'
@@ -556,6 +565,8 @@ def test_dedup_http(http_daemon, warcprox_, archiving_proxies, playback_proxies)
 
 # test dedup of same https url with same payload
 def test_dedup_https(https_daemon, warcprox_, archiving_proxies, playback_proxies):
+    urls_before = warcprox_.proxy.running_stats.urls
+
     url = 'https://localhost:{}/g/h'.format(https_daemon.server_port)
 
     # ensure playback fails before archiving
@@ -564,7 +575,7 @@ def test_dedup_https(https_daemon, warcprox_, archiving_proxies, playback_proxie
     assert response.content == b'404 Not in Archive\n'
 
     # check not in dedup db
-    dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
+    dedup_lookup = warcprox_.dedup_db.lookup(
             b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
     assert dedup_lookup is None
 
@@ -574,21 +585,18 @@ def test_dedup_https(https_daemon, warcprox_, archiving_proxies, playback_proxie
     assert response.headers['warcprox-test-header'] == 'g!'
     assert response.content == b'I am the warcprox test payload! hhhhhhhhhh!\n'
 
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
+
     # test playback
-    response = _poll_playback_until(playback_proxies, url, status=200, timeout_sec=10)
+    response = requests.get(url, proxies=playback_proxies, verify=False)
     assert response.status_code == 200
     assert response.headers['warcprox-test-header'] == 'g!'
     assert response.content == b'I am the warcprox test payload! hhhhhhhhhh!\n'
 
-    # wait for writer thread to process
-    time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
-        time.sleep(0.5)
-    time.sleep(0.5)
-
     # check in dedup db
     # {u'id': u'<urn:uuid:e691dc0f-4bb9-4ad8-9afb-2af836aa05e4>', u'url': u'https://localhost:62841/c/d', u'date': u'2013-11-22T00:14:37Z'}
-    dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
+    dedup_lookup = warcprox_.dedup_db.lookup(
             b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
     assert dedup_lookup
     assert dedup_lookup['url'] == url.encode('ascii')
@@ -599,7 +607,7 @@ def test_dedup_https(https_daemon, warcprox_, archiving_proxies, playback_proxie
 
     # need revisit to have a later timestamp than original, else playing
     # back the latest record might not hit the revisit
-    time.sleep(1.5)
+    time.sleep(1.1)
 
     # fetch & archive revisit
     response = requests.get(url, proxies=archiving_proxies, verify=False)
@@ -607,14 +615,11 @@ def test_dedup_https(https_daemon, warcprox_, archiving_proxies, playback_proxie
     assert response.headers['warcprox-test-header'] == 'g!'
     assert response.content == b'I am the warcprox test payload! hhhhhhhhhh!\n'
 
-    # wait for writer thread to process
-    time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
-        time.sleep(0.5)
-    time.sleep(0.5)
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 2)
 
     # check in dedup db (no change from prev)
-    dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
+    dedup_lookup = warcprox_.dedup_db.lookup(
             b'sha1:5b4efa64fdb308ec06ae56a9beba155a6f734b89')
     assert dedup_lookup['url'] == url.encode('ascii')
     assert dedup_lookup['id'] == record_id
@@ -622,13 +627,15 @@ def test_dedup_https(https_daemon, warcprox_, archiving_proxies, playback_proxie
 
     # test playback
     logging.debug('testing playback of revisit of {}'.format(url))
-    response = _poll_playback_until(playback_proxies, url, status=200, timeout_sec=10)
+    response = requests.get(url, proxies=playback_proxies, verify=False)
     assert response.status_code == 200
     assert response.headers['warcprox-test-header'] == 'g!'
     assert response.content == b'I am the warcprox test payload! hhhhhhhhhh!\n'
     # XXX how to check dedup was used?
 
 def test_limits(http_daemon, warcprox_, archiving_proxies):
+    urls_before = warcprox_.proxy.running_stats.urls
+
     url = 'http://localhost:{}/i/j'.format(http_daemon.server_port)
     request_meta = {"stats":{"buckets":["test_limits_bucket"]},"limits":{"test_limits_bucket/total/urls":10}}
     headers = {"Warcprox-Meta": json.dumps(request_meta)}
@@ -638,11 +645,8 @@ def test_limits(http_daemon, warcprox_, archiving_proxies):
     assert response.headers['warcprox-test-header'] == 'i!'
     assert response.content == b'I am the warcprox test payload! jjjjjjjjjj!\n'
 
-    # wait for writer thread to process
-    time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
-        time.sleep(0.5)
-    time.sleep(0.5)
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
 
     for i in range(9):
         response = requests.get(url, proxies=archiving_proxies, headers=headers, stream=True)
@@ -650,11 +654,8 @@ def test_limits(http_daemon, warcprox_, archiving_proxies):
         assert response.headers['warcprox-test-header'] == 'i!'
         assert response.content == b'I am the warcprox test payload! jjjjjjjjjj!\n'
 
-    # wait for writer thread to process
-    time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
-        time.sleep(0.5)
-    time.sleep(2.5)
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 10)
 
     response = requests.get(url, proxies=archiving_proxies, headers=headers, stream=True)
     assert response.status_code == 420
@@ -665,6 +666,8 @@ def test_limits(http_daemon, warcprox_, archiving_proxies):
     assert response.raw.data == b"request rejected by warcprox: reached limit test_limits_bucket/total/urls=10\n"
 
 def test_return_capture_timestamp(http_daemon, warcprox_, archiving_proxies):
+    urls_before = warcprox_.proxy.running_stats.urls
+
     url = 'http://localhost:{}/i/j'.format(http_daemon.server_port)
     request_meta = {"accept": ["capture-metadata"]}
     headers = {"Warcprox-Meta": json.dumps(request_meta)}
@@ -680,7 +683,12 @@ def test_return_capture_timestamp(http_daemon, warcprox_, archiving_proxies):
     except ValueError:
         pytest.fail('Invalid capture-timestamp format %s', data['capture-timestamp'])
 
+    # wait for postfetch chain (or subsequent test could fail)
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
+
 def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, playback_proxies):
+    urls_before = warcprox_.proxy.running_stats.urls
+
     url1 = 'http://localhost:{}/k/l'.format(http_daemon.server_port)
     url2 = 'https://localhost:{}/k/l'.format(https_daemon.server_port)
 
@@ -691,15 +699,14 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
     assert response.headers['warcprox-test-header'] == 'k!'
     assert response.content == b'I am the warcprox test payload! llllllllll!\n'
 
-    # wait for writer thread to process
-    time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
-        time.sleep(0.5)
-    time.sleep(0.5)
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
 
     # check url1 in dedup db bucket_a
-    dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
+    # logging.info('looking up sha1:bc3fac8847c9412f49d955e626fb58a76befbf81 in bucket_a')
+    dedup_lookup = warcprox_.dedup_db.lookup(
             b'sha1:bc3fac8847c9412f49d955e626fb58a76befbf81', bucket="bucket_a")
+    assert dedup_lookup
     assert dedup_lookup['url'] == url1.encode('ascii')
     assert re.match(br'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$', dedup_lookup['id'])
     assert re.match(br'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$', dedup_lookup['date'])
@@ -707,7 +714,7 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
     dedup_date = dedup_lookup['date']
 
     # check url1 not in dedup db bucket_b
-    dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
+    dedup_lookup = warcprox_.dedup_db.lookup(
             b'sha1:bc3fac8847c9412f49d955e626fb58a76befbf81', bucket="bucket_b")
     assert dedup_lookup is None
 
@@ -718,14 +725,11 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
     assert response.headers['warcprox-test-header'] == 'k!'
     assert response.content == b'I am the warcprox test payload! llllllllll!\n'
 
-    # wait for writer thread to process
-    time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
-        time.sleep(0.5)
-    time.sleep(0.5)
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 2)
 
     # check url2 in dedup db bucket_b
-    dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
+    dedup_lookup = warcprox_.dedup_db.lookup(
             b'sha1:bc3fac8847c9412f49d955e626fb58a76befbf81', bucket="bucket_b")
     assert dedup_lookup['url'] == url2.encode('ascii')
     assert re.match(br'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$', dedup_lookup['id'])
@@ -740,11 +744,8 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
     assert response.headers['warcprox-test-header'] == 'k!'
     assert response.content == b'I am the warcprox test payload! llllllllll!\n'
 
-    # wait for writer thread to process
-    time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
-        time.sleep(0.5)
-    time.sleep(0.5)
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 3)
 
     # archive url1 bucket_b
     headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"test_dedup_buckets","captures-bucket":"bucket_b"})}
@@ -753,17 +754,14 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
     assert response.headers['warcprox-test-header'] == 'k!'
     assert response.content == b'I am the warcprox test payload! llllllllll!\n'
 
-    # wait for writer thread to process
-    time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
-        time.sleep(0.5)
-    time.sleep(0.5)
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 4)
 
     # close the warc
-    assert warcprox_.warc_writer_threads[0].writer_pool.warc_writers["test_dedup_buckets"]
-    writer = warcprox_.warc_writer_threads[0].writer_pool.warc_writers["test_dedup_buckets"]
+    assert warcprox_.warc_writer_thread.writer_pool.warc_writers["test_dedup_buckets"]
+    writer = warcprox_.warc_writer_thread.writer_pool.warc_writers["test_dedup_buckets"]
     warc_path = os.path.join(writer.directory, writer._f_finalname)
-    warcprox_.warc_writer_threads[0].writer_pool.warc_writers["test_dedup_buckets"].close_writer()
+    warcprox_.warc_writer_thread.writer_pool.warc_writers["test_dedup_buckets"].close_writer()
     assert os.path.exists(warc_path)
 
     # read the warc
@@ -821,6 +819,8 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
         fh.close()
 
 def test_block_rules(http_daemon, https_daemon, warcprox_, archiving_proxies):
+    urls_before = warcprox_.proxy.running_stats.urls
+
     rules = [
         {
             "domain": "localhost",
@@ -857,6 +857,9 @@ def test_block_rules(http_daemon, https_daemon, warcprox_, archiving_proxies):
             url, proxies=archiving_proxies, headers=headers, stream=True)
     assert response.status_code == 200
 
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
+
     # blocked by SURT_MATCH
     url = 'http://localhost:{}/fuh/guh'.format(http_daemon.server_port)
     response = requests.get(
@@ -872,6 +875,9 @@ def test_block_rules(http_daemon, https_daemon, warcprox_, archiving_proxies):
     # 404 because server set up at the top of this file doesn't handle this url
     assert response.status_code == 404
 
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 2)
+
     # not blocked because surt scheme does not match (differs from heritrix
     # behavior where https urls are coerced to http surt form)
     url = 'https://localhost:{}/fuh/guh'.format(https_daemon.server_port)
@@ -879,6 +885,9 @@ def test_block_rules(http_daemon, https_daemon, warcprox_, archiving_proxies):
             url, proxies=archiving_proxies, headers=headers, stream=True,
             verify=False)
     assert response.status_code == 200
+
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 3)
 
     # blocked by blanket domain block
     url = 'http://bad.domain.com/'
@@ -932,6 +941,8 @@ def test_block_rules(http_daemon, https_daemon, warcprox_, archiving_proxies):
 
 def test_domain_doc_soft_limit(
         http_daemon, https_daemon, warcprox_, archiving_proxies):
+    urls_before = warcprox_.proxy.running_stats.urls
+
     request_meta = {
         "stats": {"buckets": [{"bucket":"test_domain_doc_limit_bucket","tally-domains":["foo.localhost"]}]},
         "soft-limits": {"test_domain_doc_limit_bucket:foo.localhost/total/urls":10},
@@ -946,11 +957,8 @@ def test_domain_doc_soft_limit(
     assert response.headers['warcprox-test-header'] == 'o!'
     assert response.content == b'I am the warcprox test payload! pppppppppp!\n'
 
-    # wait for writer thread to process
-    time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
-        time.sleep(0.5)
-    time.sleep(0.5)
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
 
     # make sure stats from different domain don't count
     url = 'http://bar.localhost:{}/o/p'.format(http_daemon.server_port)
@@ -961,15 +969,10 @@ def test_domain_doc_soft_limit(
         assert response.headers['warcprox-test-header'] == 'o!'
         assert response.content == b'I am the warcprox test payload! pppppppppp!\n'
 
-    # wait for writer thread to process
-    time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
-        time.sleep(0.5)
-    # rethinkdb stats db update cycle is 2 seconds (at the moment anyway)
-    time.sleep(2.0)
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 11)
 
     # (2) same host but different scheme and port: domain limit applies
-    #
     url = 'https://foo.localhost:{}/o/p'.format(https_daemon.server_port)
     response = requests.get(
             url, proxies=archiving_proxies, headers=headers, stream=True,
@@ -988,12 +991,12 @@ def test_domain_doc_soft_limit(
         assert response.headers['warcprox-test-header'] == 'o!'
         assert response.content == b'I am the warcprox test payload! pppppppppp!\n'
 
-    # wait for writer thread to process
-    time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
-        time.sleep(0.5)
-    # rethinkdb stats db update cycle is 2 seconds (at the moment anyway)
-    time.sleep(2.0)
+    # wait for postfetch chain
+    time.sleep(3)
+    logging.info(
+        'warcprox_.proxy.running_stats.urls - urls_before = %s',
+        warcprox_.proxy.running_stats.urls - urls_before)
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 19)
 
     # (10)
     response = requests.get(
@@ -1003,12 +1006,8 @@ def test_domain_doc_soft_limit(
     assert response.headers['warcprox-test-header'] == 'o!'
     assert response.content == b'I am the warcprox test payload! pppppppppp!\n'
 
-    # wait for writer thread to process
-    time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
-        time.sleep(0.5)
-    # rethinkdb stats db update cycle is 2 seconds (at the moment anyway)
-    time.sleep(2.0)
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 20)
 
     # (11) back to http, and this is the 11th request
     url = 'http://zuh.foo.localhost:{}/o/p'.format(http_daemon.server_port)
@@ -1029,6 +1028,9 @@ def test_domain_doc_soft_limit(
     assert response.status_code == 200
     assert response.headers['warcprox-test-header'] == 'o!'
     assert response.content == b'I am the warcprox test payload! pppppppppp!\n'
+
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 21)
 
     # https also blocked
     url = 'https://zuh.foo.localhost:{}/o/p'.format(https_daemon.server_port)
@@ -1056,6 +1058,8 @@ def test_domain_doc_soft_limit(
 
 def test_domain_data_soft_limit(
         http_daemon, https_daemon, warcprox_, archiving_proxies):
+    urls_before = warcprox_.proxy.running_stats.urls
+
     # using idn
     request_meta = {
         "stats": {"buckets": [{"bucket":"test_domain_data_limit_bucket","tally-domains":['ÞzZ.LOCALhost']}]},
@@ -1071,12 +1075,8 @@ def test_domain_data_soft_limit(
     assert response.headers['warcprox-test-header'] == 'y!'
     assert response.content == b'I am the warcprox test payload! zzzzzzzzzz!\n'
 
-    # wait for writer thread to process
-    time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
-        time.sleep(0.5)
-    # rethinkdb stats db update cycle is 2 seconds (at the moment anyway)
-    time.sleep(2.0)
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
 
     # duplicate, does not count toward limit
     url = 'https://baz.Þzz.localhost:{}/y/z'.format(https_daemon.server_port)
@@ -1087,12 +1087,8 @@ def test_domain_data_soft_limit(
     assert response.headers['warcprox-test-header'] == 'y!'
     assert response.content == b'I am the warcprox test payload! zzzzzzzzzz!\n'
 
-    # wait for writer thread to process
-    time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
-        time.sleep(0.5)
-    # rethinkdb stats db update cycle is 2 seconds (at the moment anyway)
-    time.sleep(2.0)
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 2)
 
     # novel, pushes stats over the limit
     url = 'https://muh.XN--Zz-2Ka.locALHOst:{}/z/~'.format(https_daemon.server_port)
@@ -1103,12 +1099,8 @@ def test_domain_data_soft_limit(
     assert response.headers['warcprox-test-header'] == 'z!'
     assert response.content == b'I am the warcprox test payload! ~~~~~~~~~~!\n'
 
-    # wait for writer thread to process
-    time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
-        time.sleep(0.5)
-    # rethinkdb stats db update cycle is 2 seconds (at the moment anyway)
-    time.sleep(2.0)
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 3)
 
     # make sure limit doesn't get applied to a different host
     url = 'http://baz.localhost:{}/z/~'.format(http_daemon.server_port)
@@ -1117,6 +1109,9 @@ def test_domain_data_soft_limit(
     assert response.status_code == 200
     assert response.headers['warcprox-test-header'] == 'z!'
     assert response.content == b'I am the warcprox test payload! ~~~~~~~~~~!\n'
+
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 4)
 
     # blocked because we're over the limit now
     url = 'http://lOl.wHut.ÞZZ.lOcALHOst:{}/y/z'.format(http_daemon.server_port)
@@ -1149,7 +1144,9 @@ def test_domain_data_soft_limit(
 # connection to the internet, and relies on a third party site (facebook) being
 # up and behaving a certain way
 @pytest.mark.xfail
-def test_tor_onion(archiving_proxies):
+def test_tor_onion(archiving_proxies, warcprox_):
+    urls_before = warcprox_.proxy.running_stats.urls
+
     response = requests.get('http://www.facebookcorewwwi.onion/',
         proxies=archiving_proxies, verify=False, allow_redirects=False)
     assert response.status_code == 302
@@ -1158,7 +1155,12 @@ def test_tor_onion(archiving_proxies):
         proxies=archiving_proxies, verify=False, allow_redirects=False)
     assert response.status_code == 200
 
-def test_missing_content_length(archiving_proxies, http_daemon, https_daemon):
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 2)
+
+def test_missing_content_length(archiving_proxies, http_daemon, https_daemon, warcprox_):
+    urls_before = warcprox_.proxy.running_stats.urls
+
     # double-check that our test http server is responding as expected
     url = 'http://localhost:%s/missing-content-length' % (
             http_daemon.server_port)
@@ -1195,8 +1197,14 @@ def test_missing_content_length(archiving_proxies, http_daemon, https_daemon):
             b'This response is missing a Content-Length http header.')
     assert not 'content-length' in response.headers
 
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 2)
+
 def test_method_filter(
-        https_daemon, http_daemon, archiving_proxies, playback_proxies):
+        warcprox_, https_daemon, http_daemon, archiving_proxies,
+        playback_proxies):
+    urls_before = warcprox_.proxy.running_stats.urls
+
     # we've configured warcprox with method_filters=['GET','POST'] so HEAD
     # requests should not be archived
 
@@ -1207,7 +1215,10 @@ def test_method_filter(
     assert response.headers['warcprox-test-header'] == 'z!'
     assert response.content == b''
 
-    response = _poll_playback_until(playback_proxies, url, status=200, timeout_sec=10)
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
+
+    response = requests.get(url, proxies=playback_proxies, verify=False)
     assert response.status_code == 404
     assert response.content == b'404 Not in Archive\n'
 
@@ -1224,13 +1235,17 @@ def test_method_filter(
             headers=headers, proxies=archiving_proxies)
     assert response.status_code == 204
 
-    response = _poll_playback_until(
-            playback_proxies, url, status=200, timeout_sec=10)
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 2)
+
+    response = requests.get(url, proxies=playback_proxies, verify=False)
     assert response.status_code == 200
     assert response.content == payload
 
 def test_dedup_ok_flag(
         https_daemon, http_daemon, warcprox_, archiving_proxies):
+    urls_before = warcprox_.proxy.running_stats.urls
+
     if not warcprox_.options.rethinkdb_big_table:
         # this feature is n/a unless using rethinkdb big table
         return
@@ -1238,7 +1253,7 @@ def test_dedup_ok_flag(
     url = 'http://localhost:{}/z/b'.format(http_daemon.server_port)
 
     # check not in dedup db
-    dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
+    dedup_lookup = warcprox_.dedup_db.lookup(
             b'sha1:2d7f13181b90a256ce5e5ebfd6e9c9826ece9079',
             bucket='test_dedup_ok_flag')
     assert dedup_lookup is None
@@ -1252,13 +1267,11 @@ def test_dedup_ok_flag(
     assert response.headers['warcprox-test-header'] == 'z!'
     assert response.content == b'I am the warcprox test payload! bbbbbbbbbb!\n'
 
-    time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
-        time.sleep(0.5)
-    time.sleep(0.5)
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
 
     # check that dedup db doesn't give us anything for this
-    dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
+    dedup_lookup = warcprox_.dedup_db.lookup(
             b'sha1:2d7f13181b90a256ce5e5ebfd6e9c9826ece9079',
             bucket='test_dedup_ok_flag')
     assert dedup_lookup is None
@@ -1273,19 +1286,17 @@ def test_dedup_ok_flag(
     assert response.headers['warcprox-test-header'] == 'z!'
     assert response.content == b'I am the warcprox test payload! bbbbbbbbbb!\n'
 
-    time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
-        time.sleep(0.5)
-    time.sleep(0.5)
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 2)
 
     # check that dedup db gives us something for this
-    dedup_lookup = warcprox_.warc_writer_threads[0].dedup_db.lookup(
+    dedup_lookup = warcprox_.dedup_db.lookup(
             b'sha1:2d7f13181b90a256ce5e5ebfd6e9c9826ece9079',
             bucket='test_dedup_ok_flag')
     assert dedup_lookup
 
     # inspect what's in rethinkdb more closely
-    rethink_captures = warcprox_.warc_writer_threads[0].dedup_db.captures_db
+    rethink_captures = warcprox_.dedup_db.captures_db
     results_iter = rethink_captures.rr.table(rethink_captures.table).get_all(
                 ['FV7RGGA3SCRFNTS6L275N2OJQJXM5EDZ', 'response',
                     'test_dedup_ok_flag'], index='sha1_warc_type').order_by(
@@ -1310,7 +1321,8 @@ def test_status_api(warcprox_):
             'role', 'version', 'host', 'address', 'port', 'pid', 'load',
             'queued_urls', 'queue_max_size', 'seconds_behind', 'threads',
             'rates_5min', 'rates_1min', 'unaccepted_requests', 'rates_15min',
-            'active_requests',}
+            'active_requests','start_time','urls_processed',
+            'warc_bytes_written','postfetch_chain',}
     assert status['role'] == 'warcprox'
     assert status['version'] == warcprox.__version__
     assert status['port'] == warcprox_.proxy.server_port
@@ -1331,7 +1343,8 @@ def test_svcreg_status(warcprox_):
                 'queued_urls', 'queue_max_size', 'seconds_behind',
                 'first_heartbeat', 'ttl', 'last_heartbeat', 'threads',
                 'rates_5min', 'rates_1min', 'unaccepted_requests',
-                'rates_15min', 'active_requests',}
+                'rates_15min', 'active_requests','start_time','urls_processed',
+                'warc_bytes_written','postfetch_chain',}
         assert status['role'] == 'warcprox'
         assert status['version'] == warcprox.__version__
         assert status['port'] == warcprox_.proxy.server_port
@@ -1366,32 +1379,51 @@ def test_controller_with_defaults():
     assert controller.proxy.server_address == ('127.0.0.1', 8000)
     assert controller.proxy.server_port == 8000
     assert controller.proxy.running_stats
-    for wwt in controller.warc_writer_threads:
-        assert wwt
-        assert wwt.recorded_url_q
-        assert wwt.recorded_url_q is controller.proxy.recorded_url_q
-        assert wwt.writer_pool
-        assert wwt.writer_pool.default_warc_writer
-        assert wwt.writer_pool.default_warc_writer.directory == './warcs'
-        assert wwt.writer_pool.default_warc_writer.rollover_idle_time is None
-        assert wwt.writer_pool.default_warc_writer.rollover_size == 1000000000
-        assert wwt.writer_pool.default_warc_writer.prefix == 'warcprox'
-        assert wwt.writer_pool.default_warc_writer.gzip is False
-        assert wwt.writer_pool.default_warc_writer.record_builder
-        assert not wwt.writer_pool.default_warc_writer.record_builder.base32
-        assert wwt.writer_pool.default_warc_writer.record_builder.digest_algorithm == 'sha1'
+    assert not controller.proxy.stats_db
+    wwt = controller.warc_writer_thread
+    assert wwt
+    assert wwt.inq
+    assert wwt.outq
+    assert wwt.writer_pool
+    assert wwt.writer_pool.default_warc_writer
+    assert wwt.writer_pool.default_warc_writer.directory == './warcs'
+    assert wwt.writer_pool.default_warc_writer.rollover_idle_time is None
+    assert wwt.writer_pool.default_warc_writer.rollover_size == 1000000000
+    assert wwt.writer_pool.default_warc_writer.prefix == 'warcprox'
+    assert wwt.writer_pool.default_warc_writer.gzip is False
+    assert wwt.writer_pool.default_warc_writer.record_builder
+    assert not wwt.writer_pool.default_warc_writer.record_builder.base32
+    assert wwt.writer_pool.default_warc_writer.record_builder.digest_algorithm == 'sha1'
+
+def test_load_plugin():
+    options = warcprox.Options(port=0, plugins=['warcprox.stats.RunningStats'])
+    controller = warcprox.controller.WarcproxController(options)
+    assert isinstance(
+            controller._postfetch_chain[-1],
+            warcprox.ListenerPostfetchProcessor)
+    assert isinstance(
+            controller._postfetch_chain[-1].listener,
+            warcprox.stats.RunningStats)
+    assert isinstance(
+            controller._postfetch_chain[-2],
+            warcprox.ListenerPostfetchProcessor)
+    assert isinstance(
+            controller._postfetch_chain[-2].listener,
+            warcprox.stats.RunningStats)
 
 def test_choose_a_port_for_me(warcprox_):
     options = warcprox.Options()
     options.port = 0
-    controller = warcprox.controller.WarcproxController(
-            service_registry=warcprox_.service_registry, options=options)
+    if warcprox_.service_registry:
+        options.rethinkdb_services_url = 'rethinkdb://localhost/test0/services'
+    controller = warcprox.controller.WarcproxController(options)
     assert controller.proxy.server_port != 0
     assert controller.proxy.server_port != 8000
     assert controller.proxy.server_address == (
             '127.0.0.1', controller.proxy.server_port)
 
     th = threading.Thread(target=controller.run_until_shutdown)
+    controller.start()
     th.start()
     try:
         # check that the status api lists the correct port
@@ -1417,16 +1449,21 @@ def test_choose_a_port_for_me(warcprox_):
         th.join()
 
 def test_via_response_header(warcprox_, http_daemon, archiving_proxies, playback_proxies):
+    urls_before = warcprox_.proxy.running_stats.urls
+
     url = 'http://localhost:%s/a/z' % http_daemon.server_port
     response = requests.get(url, proxies=archiving_proxies)
     assert response.headers['via'] == '1.1 warcprox'
 
-    playback_response = _poll_playback_until(
-            playback_proxies, url, status=200, timeout_sec=10)
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
+
+    playback_response = requests.get(
+            url, proxies=playback_proxies, verify=False)
     assert response.status_code == 200
     assert not 'via' in playback_response
 
-    warc = warcprox_.warc_writer_threads[0].writer_pool.default_warc_writer._fpath
+    warc = warcprox_.warc_writer_thread.writer_pool.default_warc_writer._fpath
     with open(warc, 'rb') as f:
         for record in warcio.archiveiterator.ArchiveIterator(f):
             if record.rec_headers.get_header('warc-target-uri') == url:
@@ -1449,15 +1486,19 @@ def test_slash_in_warc_prefix(warcprox_, http_daemon, archiving_proxies):
     assert response.reason == 'request rejected by warcprox: slash and backslash are not permitted in warc-prefix'
 
 def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
+    urls_before = warcprox_.proxy.running_stats.urls
+
     try:
         os.unlink(os.path.join(warcprox_.options.crawl_log_dir, 'crawl.log'))
     except:
         pass
 
+    # should go to default crawl log
     url = 'http://localhost:%s/b/aa' % http_daemon.server_port
     response = requests.get(url, proxies=archiving_proxies)
     assert response.status_code == 200
 
+    # should go to test_crawl_log_1.log
     url = 'http://localhost:%s/b/bb' % http_daemon.server_port
     headers = {
         "Warcprox-Meta": json.dumps({"warc-prefix":"test_crawl_log_1"}),
@@ -1466,13 +1507,12 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     response = requests.get(url, proxies=archiving_proxies, headers=headers)
     assert response.status_code == 200
 
-    start = time.time()
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 2)
+
     file = os.path.join(warcprox_.options.crawl_log_dir, 'test_crawl_log_1.log')
-    while time.time() - start < 10:
-        if os.path.exists(file) and os.stat(file).st_size > 0:
-            break
-        time.sleep(0.5)
     assert os.path.exists(file)
+    assert os.stat(file).st_size > 0
     assert os.path.exists(os.path.join(
         warcprox_.options.crawl_log_dir, 'crawl.log'))
 
@@ -1527,13 +1567,12 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     response = requests.get(url, proxies=archiving_proxies, headers=headers)
     assert response.status_code == 200
 
-    start = time.time()
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 3)
+
     file = os.path.join(warcprox_.options.crawl_log_dir, 'test_crawl_log_2.log')
-    while time.time() - start < 10:
-        if os.path.exists(file) and os.stat(file).st_size > 0:
-            break
-        time.sleep(0.5)
     assert os.path.exists(file)
+    assert os.stat(file).st_size > 0
 
     crawl_log_2 = open(file, 'rb').read()
 
@@ -1557,17 +1596,14 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     assert extra_info['contentSize'] == 145
 
     # a request that is not saved to a warc (because of --method-filter)
-    # currently not logged at all (XXX maybe it should be)
     url = 'http://localhost:%s/b/cc' % http_daemon.server_port
     headers = {'Warcprox-Meta': json.dumps({'warc-prefix': 'test_crawl_log_3'})}
     response = requests.head(url, proxies=archiving_proxies, headers=headers)
 
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 4)
+
     file = os.path.join(warcprox_.options.crawl_log_dir, 'test_crawl_log_3.log')
-    start = time.time()
-    while time.time() - start < 10:
-        if os.path.exists(file) and os.stat(file).st_size > 0:
-            break
-        time.sleep(0.5)
 
     assert os.path.exists(file)
     crawl_log_3 = open(file, 'rb').read()
@@ -1602,13 +1638,10 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
             headers=headers, proxies=archiving_proxies)
     assert response.status_code == 204
 
-    start = time.time()
-    file = os.path.join(warcprox_.options.crawl_log_dir, 'test_crawl_log_4.log')
-    while time.time() - start < 10:
-        if os.path.exists(file) and os.stat(file).st_size > 0:
-            break
-        time.sleep(0.5)
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 5)
 
+    file = os.path.join(warcprox_.options.crawl_log_dir, 'test_crawl_log_4.log')
     assert os.path.exists(file)
     crawl_log_4 = open(file, 'rb').read()
 
@@ -1633,6 +1666,8 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
 
 def test_long_warcprox_meta(
         warcprox_, http_daemon, archiving_proxies, playback_proxies):
+    urls_before = warcprox_.proxy.running_stats.urls
+
     url = 'http://localhost:%s/b/g' % http_daemon.server_port
 
     # create a very long warcprox-meta header
@@ -1642,17 +1677,14 @@ def test_long_warcprox_meta(
             url, proxies=archiving_proxies, headers=headers, verify=False)
     assert response.status_code == 200
 
-    # wait for writer thread to process
-    time.sleep(0.5)
-    while not all(wwt.idle for wwt in warcprox_.warc_writer_threads):
-        time.sleep(0.5)
-    time.sleep(0.5)
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
 
     # check that warcprox-meta was parsed and honored ("warc-prefix" param)
-    assert warcprox_.warc_writer_threads[0].writer_pool.warc_writers["test_long_warcprox_meta"]
-    writer = warcprox_.warc_writer_threads[0].writer_pool.warc_writers["test_long_warcprox_meta"]
+    assert warcprox_.warc_writer_thread.writer_pool.warc_writers["test_long_warcprox_meta"]
+    writer = warcprox_.warc_writer_thread.writer_pool.warc_writers["test_long_warcprox_meta"]
     warc_path = os.path.join(writer.directory, writer._f_finalname)
-    warcprox_.warc_writer_threads[0].writer_pool.warc_writers["test_long_warcprox_meta"].close_writer()
+    warcprox_.warc_writer_thread.writer_pool.warc_writers["test_long_warcprox_meta"].close_writer()
     assert os.path.exists(warc_path)
 
     # read the warc
@@ -1672,7 +1704,6 @@ def test_long_warcprox_meta(
 def test_empty_response(
         warcprox_, http_daemon, https_daemon, archiving_proxies,
         playback_proxies):
-
     url = 'http://localhost:%s/empty-response' % http_daemon.server_port
     response = requests.get(url, proxies=archiving_proxies, verify=False)
     assert response.status_code == 502

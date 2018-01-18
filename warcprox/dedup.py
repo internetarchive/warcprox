@@ -1,7 +1,7 @@
 '''
 warcprox/dedup.py - identical payload digest deduplication using sqlite db
 
-Copyright (C) 2013-2017 Internet Archive
+Copyright (C) 2013-2018 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -32,8 +32,18 @@ import doublethink
 import datetime
 import urllib3
 from urllib3.exceptions import HTTPError
+import collections
 
 urllib3.disable_warnings()
+
+class DedupLoader(warcprox.BaseStandardPostfetchProcessor):
+    def __init__(self, dedup_db, options=warcprox.Options()):
+        warcprox.BaseStandardPostfetchProcessor.__init__(self, options=options)
+        self.dedup_db = dedup_db
+
+    def _process_url(self, recorded_url):
+        decorate_with_dedup_info(
+                self.dedup_db, recorded_url, self.options.base32)
 
 class DedupDb(object):
     logger = logging.getLogger("warcprox.dedup.DedupDb")
@@ -60,6 +70,12 @@ class DedupDb(object):
                 ');')
         conn.commit()
         conn.close()
+
+    def loader(self, *args, **kwargs):
+        return DedupLoader(self, self.options)
+
+    def storer(self, *args, **kwargs):
+        return warcprox.ListenerPostfetchProcessor(self, self.options)
 
     def save(self, digest_key, response_record, bucket=""):
         record_id = response_record.get_header(warctools.WarcRecord.ID).decode('latin1')
@@ -106,20 +122,20 @@ class DedupDb(object):
             else:
                 self.save(digest_key, records[0])
 
-
 def decorate_with_dedup_info(dedup_db, recorded_url, base32=False):
     if (recorded_url.response_recorder
             and recorded_url.payload_digest
             and recorded_url.response_recorder.payload_size() > 0):
         digest_key = warcprox.digest_str(recorded_url.payload_digest, base32)
         if recorded_url.warcprox_meta and "captures-bucket" in recorded_url.warcprox_meta:
-            recorded_url.dedup_info = dedup_db.lookup(digest_key, recorded_url.warcprox_meta["captures-bucket"],
-                                                      recorded_url.url)
+            recorded_url.dedup_info = dedup_db.lookup(
+                digest_key, recorded_url.warcprox_meta["captures-bucket"],
+                recorded_url.url)
         else:
-            recorded_url.dedup_info = dedup_db.lookup(digest_key,
-                                                      url=recorded_url.url)
+            recorded_url.dedup_info = dedup_db.lookup(
+                digest_key, url=recorded_url.url)
 
-class RethinkDedupDb:
+class RethinkDedupDb(DedupDb):
     logger = logging.getLogger("warcprox.dedup.RethinkDedupDb")
 
     def __init__(self, options=warcprox.Options()):
@@ -181,7 +197,7 @@ class RethinkDedupDb:
             else:
                 self.save(digest_key, records[0])
 
-class CdxServerDedup(object):
+class CdxServerDedup(DedupDb):
     """Query a CDX server to perform deduplication.
     """
     logger = logging.getLogger("warcprox.dedup.CdxServerDedup")
@@ -244,7 +260,82 @@ class CdxServerDedup(object):
         """
         pass
 
-class TroughDedupDb(object):
+class BatchTroughStorer(warcprox.BaseBatchPostfetchProcessor):
+    def __init__(self, trough_dedup_db, options=warcprox.Options()):
+        warcprox.BaseBatchPostfetchProcessor.__init__(self, options)
+        self.trough_dedup_db = trough_dedup_db
+
+    def _filter_and_bucketize(self, batch):
+        '''
+        Returns `{bucket: [recorded_url, ...]}`, excluding urls that should
+        have dedup info stored.
+        '''
+        buckets = collections.defaultdict(list)
+        for recorded_url in batch:
+            if (recorded_url.warc_records
+                    and recorded_url.warc_records[0].type == b'response'
+                    and recorded_url.response_recorder.payload_size() > 0):
+                if (recorded_url.warcprox_meta
+                        and 'captures-bucket' in recorded_url.warcprox_meta):
+                    bucket = recorded_url.warcprox_meta['captures-bucket']
+                else:
+                    bucket = '__unspecified__'
+                buckets[bucket].append(recorded_url)
+        return buckets
+
+    def _process_batch(self, batch):
+        buckets = self._filter_and_bucketize(batch)
+        for bucket in buckets:
+            self.trough_dedup_db.batch_save(buckets[bucket], bucket)
+
+class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
+    def __init__(self, trough_dedup_db, options=warcprox.Options()):
+        warcprox.BaseBatchPostfetchProcessor.__init__(self, options)
+        self.trough_dedup_db = trough_dedup_db
+
+    def _startup(self):
+        self.trough_dedup_db.start()
+
+    def _filter_and_bucketize(self, batch):
+        '''
+        Returns `{bucket: [recorded_url, ...]}`, excluding urls that should not
+        be looked up.
+        '''
+        buckets = collections.defaultdict(list)
+        for recorded_url in batch:
+            if (recorded_url.response_recorder
+                    and recorded_url.payload_digest
+                    and recorded_url.response_recorder.payload_size() > 0):
+                if (recorded_url.warcprox_meta
+                        and 'captures-bucket' in recorded_url.warcprox_meta):
+                    bucket = recorded_url.warcprox_meta['captures-bucket']
+                else:
+                    bucket = '__unspecified__'
+                buckets[bucket].append(recorded_url)
+        return buckets
+
+    def _build_key_index(self, batch):
+        '''
+        Returns `{digest_key: [recorded_url, ...]}`.
+        '''
+        key_index = collections.defaultdict(list)
+        for recorded_url in batch:
+            digest_key = warcprox.digest_str(
+                    recorded_url.payload_digest, self.options.base32)
+            key_index[digest_key].append(recorded_url)
+        return key_index
+
+    def _process_batch(self, batch):
+        buckets = self._filter_and_bucketize(batch)
+        for bucket in buckets:
+            key_index = self._build_key_index(buckets[bucket])
+            results = self.trough_dedup_db.batch_lookup(
+                    key_index.keys(), bucket)
+            for result in results:
+                for recorded_url in key_index[result['digest_key']]:
+                    recorded_url.dedup_info = result
+
+class TroughDedupDb(DedupDb):
     '''
     https://github.com/internetarchive/trough
     '''
@@ -256,13 +347,20 @@ class TroughDedupDb(object):
                   '    url varchar(2100) not null,\n'
                   '    date datetime not null,\n'
                   '    id varchar(100));\n') # warc record id
-    WRITE_SQL_TMPL = ('insert into dedup (digest_key, url, date, id) '
+    WRITE_SQL_TMPL = ('insert or ignore into dedup\n'
+                      '(digest_key, url, date, id)\n'
                       'values (%s, %s, %s, %s);')
 
     def __init__(self, options=warcprox.Options()):
         self.options = options
         self._trough_cli = warcprox.trough.TroughClient(
                 options.rethinkdb_trough_db_url, promotion_interval=60*60)
+
+    def loader(self, *args, **kwargs):
+        return BatchTroughLoader(self, self.options)
+
+    def storer(self, *args, **kwargs):
+        return BatchTroughStorer(self, self.options)
 
     def start(self):
         self._trough_cli.register_schema(self.SCHEMA_ID, self.SCHEMA_SQL)
@@ -274,6 +372,21 @@ class TroughDedupDb(object):
         self._trough_cli.write(
                bucket, self.WRITE_SQL_TMPL,
                (digest_key, url, warc_date, record_id), self.SCHEMA_ID)
+
+    def batch_save(self, batch, bucket='__unspecified__'):
+        sql_tmpl = ('insert or ignore into dedup\n'
+                      '(digest_key, url, date, id)\n'
+                      'values %s;' % ','.join(
+                          '(%s,%s,%s,%s)' for i in range(len(batch))))
+        values = []
+        for recorded_url in batch:
+            values.extend([
+                warcprox.digest_str(
+                    recorded_url.payload_digest, self.options.base32),
+                recorded_url.url,
+                recorded_url.warc_records[0].date,
+                recorded_url.warc_records[0].id,])
+        self._trough_cli.write(bucket, sql_tmpl, values, self.SCHEMA_ID)
 
     def lookup(self, digest_key, bucket='__unspecified__', url=None):
         results = self._trough_cli.read(
@@ -290,6 +403,23 @@ class TroughDedupDb(object):
             return result
         else:
             return None
+
+    def batch_lookup(self, digest_keys, bucket='__unspecified__'):
+        sql_tmpl = 'select * from dedup where digest_key in (%s)' % (
+                ','.join('%s' for i in range(len(digest_keys))))
+        results = self._trough_cli.read(bucket, sql_tmpl, digest_keys)
+        if results is None:
+            return []
+        self.logger.debug(
+            'trough batch lookup of %s keys returned %s results',
+            len(digest_keys), len(results))
+        assert len(results) >= 0 and len(results) <= len(digest_keys)
+        for result in results:
+            result['id'] = result['id'].encode('ascii')
+            result['url'] = result['url'].encode('ascii')
+            result['date'] = result['date'].encode('ascii')
+            result['digest_key'] = result['digest_key'].encode('ascii')
+        return results
 
     def notify(self, recorded_url, records):
         if (records and records[0].type == b'response'
