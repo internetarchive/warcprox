@@ -201,12 +201,15 @@ class CdxServerDedup(DedupDb):
     """Query a CDX server to perform deduplication.
     """
     logger = logging.getLogger("warcprox.dedup.CdxServerDedup")
+    cookies = None
 
     def __init__(self, cdx_url="https://web.archive.org/cdx/search",
                  maxsize=200, options=warcprox.Options()):
         self.cdx_url = cdx_url
         self.options = options
         self.http_pool = urllib3.PoolManager(maxsize=maxsize)
+        if options.cdxserver_dedup_cookies:
+            self.cookies = options.cdxserver_dedup_cookies
 
     def start(self):
         pass
@@ -233,9 +236,10 @@ class CdxServerDedup(DedupDb):
         """
         u = url.decode("utf-8") if isinstance(url, bytes) else url
         try:
+            headers = {'Cookie': self.cookies} if self.cookies else {}
             result = self.http_pool.request('GET', self.cdx_url, fields=dict(
                 url=u, fl="timestamp,digest", filter="!mimetype:warc/revisit",
-                limit=-1))
+                limit=-1), headers=headers)
             assert result.status == 200
             if isinstance(digest_key, bytes):
                 dkey = digest_key
