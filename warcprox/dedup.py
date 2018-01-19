@@ -419,7 +419,7 @@ class TroughDedupDb(DedupDb):
             len(digest_keys), len(results))
         assert len(results) >= 0 and len(results) <= len(digest_keys)
         for result in results:
-            result['id'] = result['id'].encode('ascii')
+            result['id'] = result.get('id') and result['id'].encode('ascii')
             result['url'] = result['url'].encode('ascii')
             result['date'] = result['date'].encode('ascii')
             result['digest_key'] = result['digest_key'].encode('ascii')
