@@ -145,6 +145,9 @@ def _build_arg_parser(prog='warcprox'):
             '--rethinkdb-services-url', dest='rethinkdb_services_url', help=(
                 'rethinkdb service registry table url; if provided, warcprox '
                 'will create and heartbeat entry for itself'))
+    # optional cookie values to pass to CDX Server; e.g. "cookie1=val1;cookie2=val2"
+    arg_parser.add_argument('--cdxserver-dedup-cookies', dest='cdxserver_dedup_cookies',
+            help=argparse.SUPPRESS)
     arg_parser.add_argument('--queue-size', dest='queue_size', type=int,
             default=500, help=argparse.SUPPRESS)
     arg_parser.add_argument('--max-threads', dest='max_threads', type=int,

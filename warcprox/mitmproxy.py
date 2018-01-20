@@ -245,6 +245,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                     port=self.onion_tor_socks_proxy_port, rdns=True)
         else:
             self._remote_server_sock = socket.socket()
+            self._remote_server_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
         # XXX what value should this timeout have?
         self._remote_server_sock.settimeout(60)

@@ -1396,8 +1396,7 @@ def test_controller_with_defaults():
     assert wwt.writer_pool.default_warc_writer.record_builder.digest_algorithm == 'sha1'
 
 def test_load_plugin():
-    options = warcprox.Options()
-    options.plugins = ['warcprox.stats.RunningStats']
+    options = warcprox.Options(port=0, plugins=['warcprox.stats.RunningStats'])
     controller = warcprox.controller.WarcproxController(options)
     assert isinstance(
             controller._postfetch_chain[-1],

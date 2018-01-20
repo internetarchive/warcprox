@@ -47,7 +47,7 @@ class Factory:
             dedup_db = warcprox.dedup.TroughDedupDb(options)
         elif options.cdxserver_dedup:
             dedup_db = warcprox.dedup.CdxServerDedup(
-                cdx_url=options.cdxserver_dedup)
+                cdx_url=options.cdxserver_dedup, options=options)
         elif options.dedup_db_file in (None, '', '/dev/null'):
             logging.info('deduplication disabled')
             dedup_db = None
