@@ -174,7 +174,6 @@ class WarcWriter:
                         record.get_header(warctools.WarcRecord.URL),
                         self._fpath, record.offset)
 
-            self._f.flush()
             self._last_activity = time.time()
 
         return records
