@@ -404,7 +404,7 @@ class SingleThreadedWarcProxy(http_server.HTTPServer, object):
 
         ca_name = ('Warcprox CA on %s' % socket.gethostname())[:64]
         self.ca = CertificateAuthority(
-                ca_file='warcprox-ca.pem', certs_dir='./warcprox-ca',
+                ca_file='warcprox-ca.pem', certs_dir=options.certs_dir,
                 ca_name=ca_name)
 
         self.recorded_url_q = warcprox.TimestampedQueue(
