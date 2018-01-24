@@ -158,7 +158,6 @@ class WarcWriter:
 
         with self._lock:
             writer = self._writer()
-            recordset_offset = writer.tell()
 
             for record in records:
                 offset = writer.tell()

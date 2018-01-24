@@ -89,3 +89,7 @@ class WarcWriterThread(warcprox.BaseStandardPostfetchProcessor):
                 recorded_url.method, recorded_url.url.decode("utf-8"),
                 recorded_url.mimetype, recorded_url.size, payload_digest,
                 type_, filename, offset)
+
+    def _shutdown(self):
+        self.writer_pool.close_writers()
+

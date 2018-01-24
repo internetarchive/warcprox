@@ -1,23 +1,23 @@
-#
-# warcprox/warc.py - assembles warc records
-#
-# Copyright (C) 2013-2016 Internet Archive
-#
-# This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public License
-# as published by the Free Software Foundation; either version 2
-# of the License, or (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
-# USA.
-#
+'''
+warcprox/warc.py - assembles warc records
+
+Copyright (C) 2013-2018 Internet Archive
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
+USA.
+'''
 
 from __future__ import absolute_import
 
@@ -140,6 +140,13 @@ class WarcRecordBuilder:
 
         return record
 
+    def _local_address(self):
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('10.255.255.255', 1)) # ip doesn't need to be reachable
+        output = s.getsockname()[0]
+        s.close()
+        return output
+
     def build_warcinfo_record(self, filename):
         warc_record_date = warctools.warc.warc_datetime_str(datetime.datetime.utcnow())
         record_id = warctools.WarcRecord.random_warc_uuid()
@@ -154,7 +161,7 @@ class WarcRecordBuilder:
         warcinfo_fields.append(b'software: warcprox ' + warcprox.__version__.encode('latin1'))
         hostname = socket.gethostname()
         warcinfo_fields.append('hostname: {}'.format(hostname).encode('latin1'))
-        warcinfo_fields.append('ip: {}'.format(socket.gethostbyname(hostname)).encode('latin1'))
+        warcinfo_fields.append(('ip: %s' % self._local_address()).encode('latin1'))
         warcinfo_fields.append(b'format: WARC File Format 1.0')
         # warcinfo_fields.append('robots: ignore')
         # warcinfo_fields.append('description: {0}'.format(self.description))
