@@ -254,9 +254,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         # Wrap socket if SSL is required
         if self.is_connect:
             try:
-                context = ssl.create_default_context()
-                context.check_hostname = False
-                context.verify_mode = ssl.CERT_NONE
+                context = ssl._create_unverified_context()
                 self._remote_server_sock = context.wrap_socket(
                         self._remote_server_sock, server_hostname=self.hostname)
             except AttributeError:
