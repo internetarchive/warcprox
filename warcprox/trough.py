@@ -176,6 +176,10 @@ class TroughClient(object):
 
         try:
             response = requests.post(write_url, sql, timeout=600)
+            if response.status_code != 200:
+                raise Exception(
+                    'Received %s: %r in response to POST %s with data %r' % (
+                        response.status_code, response.text, write_url, sql))
             if segment_id not in self._dirty_segments:
                 with self._dirty_segments_lock:
                     self._dirty_segments.add(segment_id)
