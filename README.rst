@@ -34,20 +34,34 @@ get the warning when you visit each new site. But worse, any embedded
 https content on a different server will simply fail to load, because
 the browser will reject the certificate without telling you.
 
+Plugins
+~~~~~~~
+
+Warcprox supports a limited notion of plugins by way of the `--plugin` command
+line argument. Plugin classes are loaded from the regular python module search
+path. They will be instantiated with one argument, a `warcprox.Options`, which
+holds the values of all the command line arguments. Legacy plugins with
+constructors that take no arguments are also supported. Plugins should either
+have a method `notify(self, recorded_url, records)` or should subclass
+`warcprox.BasePostfetchProcessor`. More than one plugin can be configured by
+specifying `--plugin` multiples times.
+
+XXX example?
+
 Usage
 ~~~~~
 
 ::
 
     usage: warcprox [-h] [-p PORT] [-b ADDRESS] [-c CACERT]
-                    [--certs-dir CERTS_DIR] [-d DIRECTORY] [-z] [-n PREFIX]
+                    [--certs-dir CERTS_DIR] [-d DIRECTORY]
+                    [--warc-filename WARC_FILENAME] [-z] [-n PREFIX]
                     [-s ROLLOVER_SIZE]
                     [--rollover-idle-time ROLLOVER_IDLE_TIME]
                     [-g DIGEST_ALGORITHM] [--base32]
                     [--method-filter HTTP_METHOD]
                     [--stats-db-file STATS_DB_FILE | --rethinkdb-stats-url RETHINKDB_STATS_URL]
                     [-P PLAYBACK_PORT]
-                    [--playback-index-db-file PLAYBACK_INDEX_DB_FILE]
                     [-j DEDUP_DB_FILE | --rethinkdb-dedup-url RETHINKDB_DEDUP_URL | --rethinkdb-big-table-url RETHINKDB_BIG_TABLE_URL | --rethinkdb-trough-db-url RETHINKDB_TROUGH_DB_URL | --cdxserver-dedup CDXSERVER_DEDUP]
                     [--rethinkdb-services-url RETHINKDB_SERVICES_URL]
                     [--onion-tor-socks-proxy ONION_TOR_SOCKS_PROXY]
@@ -63,13 +77,19 @@ Usage
                             address to listen on (default: localhost)
       -c CACERT, --cacert CACERT
                             CA certificate file; if file does not exist, it
-                            will be created (default: ./ayutla.local-warcprox-
-                            ca.pem)
+                            will be created (default:
+                            ./ayutla.monkeybrains.net-warcprox-ca.pem)
       --certs-dir CERTS_DIR
                             where to store and load generated certificates
-                            (default: ./ayutla.local-warcprox-ca)
+                            (default: ./ayutla.monkeybrains.net-warcprox-ca)
       -d DIRECTORY, --dir DIRECTORY
                             where to write warcs (default: ./warcs)
+      --warc-filename WARC_FILENAME
+                            define custom WARC filename with variables
+                            {prefix}, {timestamp14}, {timestamp17},
+                            {serialno}, {randomtoken}, {hostname},
+                            {shorthostname} (default:
+                            {prefix}-{timestamp17}-{serialno}-{randomtoken})
       -z, --gzip            write gzip-compressed warc records
       -n PREFIX, --prefix PREFIX
                             default WARC filename prefix (default: WARCPROX)
@@ -81,8 +101,8 @@ Usage
                             (so that Friday's last open WARC doesn't sit there
                             all weekend waiting for more data) (default: None)
       -g DIGEST_ALGORITHM, --digest-algorithm DIGEST_ALGORITHM
-                            digest algorithm, one of sha256, sha224, sha512,
-                            sha384, md5, sha1 (default: sha1)
+                            digest algorithm, one of sha384, sha224, md5,
+                            sha256, sha512, sha1 (default: sha1)
       --base32              write digests in Base32 instead of hex
       --method-filter HTTP_METHOD
                             only record requests with the given http method(s)
@@ -98,10 +118,6 @@ Usage
       -P PLAYBACK_PORT, --playback-port PLAYBACK_PORT
                             port to listen on for instant playback (default:
                             None)
-      --playback-index-db-file PLAYBACK_INDEX_DB_FILE
-                            playback index database file (only used if
-                            --playback-port is specified) (default:
-                            ./warcprox-playback-index.db)
       -j DEDUP_DB_FILE, --dedup-db-file DEDUP_DB_FILE
                             persistent deduplication database file; empty
                             string or /dev/null disables deduplication
@@ -138,12 +154,8 @@ Usage
       --plugin PLUGIN_CLASS
                             Qualified name of plugin class, e.g.
                             "mypkg.mymod.MyClass". May be used multiple times
-                            to register multiple plugins. Plugin classes are
-                            loaded from the regular python module search path.
-                            They will be instantiated with no arguments and
-                            must have a method `notify(self, recorded_url,
-                            records)` which will be called for each url, after
-                            warc records have been written. (default: None)
+                            to register multiple plugins. See README.rst for
+                            more information. (default: None)
       --version             show program's version number and exit
       -v, --verbose
       --trace
@@ -156,7 +168,7 @@ Warcprox is a derivative work of pymiproxy, which is GPL. Thus warcprox is also
 GPL.
 
 * Copyright (C) 2012 Cygnos Corporation
-* Copyright (C) 2013-2017 Internet Archive
+* Copyright (C) 2013-2018 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License

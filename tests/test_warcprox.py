@@ -3,7 +3,7 @@
 '''
 tests/test_warcprox.py - automated tests for warcprox
 
-Copyright (C) 2013-2017 Internet Archive
+Copyright (C) 2013-2018 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -1396,7 +1396,10 @@ def test_controller_with_defaults():
     assert wwt.writer_pool.default_warc_writer.record_builder.digest_algorithm == 'sha1'
 
 def test_load_plugin():
-    options = warcprox.Options(port=0, plugins=['warcprox.stats.RunningStats'])
+    options = warcprox.Options(port=0, plugins=[
+        'warcprox.stats.RunningStats',
+        'warcprox.BaseStandardPostfetchProcessor',
+        'warcprox.BaseBatchPostfetchProcessor',])
     controller = warcprox.controller.WarcproxController(options)
     assert isinstance(
             controller._postfetch_chain[-1],
@@ -1404,11 +1407,18 @@ def test_load_plugin():
     assert isinstance(
             controller._postfetch_chain[-1].listener,
             warcprox.stats.RunningStats)
+
     assert isinstance(
             controller._postfetch_chain[-2],
+            warcprox.BaseBatchPostfetchProcessor)
+    assert isinstance(
+            controller._postfetch_chain[-3],
+            warcprox.BaseStandardPostfetchProcessor)
+    assert isinstance(
+            controller._postfetch_chain[-4],
             warcprox.ListenerPostfetchProcessor)
     assert isinstance(
-            controller._postfetch_chain[-2].listener,
+            controller._postfetch_chain[-4].listener,
             warcprox.stats.RunningStats)
 
 def test_choose_a_port_for_me(warcprox_):

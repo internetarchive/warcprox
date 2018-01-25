@@ -4,7 +4,7 @@
 warcprox/main.py - entrypoint for warcprox executable, parses command line
 arguments, initializes components, starts controller, handles signals
 
-Copyright (C) 2013-2017 Internet Archive
+Copyright (C) 2013-2018 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -172,11 +172,7 @@ def _build_arg_parser(prog='warcprox'):
             action='append', help=(
                 'Qualified name of plugin class, e.g. "mypkg.mymod.MyClass". '
                 'May be used multiple times to register multiple plugins. '
-                'Plugin classes are loaded from the regular python module '
-                'search path. They will be instantiated with no arguments and '
-                'must have a method `notify(self, recorded_url, records)` '
-                'which will be called for each url, after warc records have '
-                'been written.'))
+                'See README.rst for more information.'))
     arg_parser.add_argument('--version', action='version',
             version="warcprox {}".format(warcprox.__version__))
     arg_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true')
