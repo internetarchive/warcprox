@@ -302,7 +302,7 @@ class BatchTroughStorer(warcprox.BaseBatchPostfetchProcessor):
 
     def _filter_and_bucketize(self, batch):
         '''
-        Returns `{bucket: [recorded_url, ...]}`, excluding urls that should
+        Returns `{bucket: [recorded_url, ...]}`, excluding urls that should not
         have dedup info stored.
         '''
         buckets = collections.defaultdict(list)
