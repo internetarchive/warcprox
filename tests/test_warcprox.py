@@ -249,6 +249,14 @@ class _TestHttpRequestHandler(http_server.BaseHTTPRequestHandler):
         elif self.path == '/empty-response':
             headers = b''
             payload = b''
+        elif self.path == '/slow-response':
+            time.sleep(6)
+            headers = (b'HTTP/1.1 200 OK\r\n'
+                    +  b'Content-Type: text/plain\r\n'
+                    +  b'\r\n')
+            payload = b'Test.'
+            actual_headers = (b'Content-Type: text/plain\r\n'
+                           + b'Content-Length: ' + str(len(payload)).encode('ascii') + b'\r\n')
         else:
             payload = b'404 Not Found\n'
             headers = (b'HTTP/1.1 404 Not Found\r\n'
@@ -356,7 +364,8 @@ def warcprox_(request):
             '--port=0',
             '--playback-port=0',
             '--onion-tor-socks-proxy=localhost:9050',
-            '--crawl-log-dir=crawl-logs']
+            '--crawl-log-dir=crawl-logs',
+            '--socket-timeout=4']
     if request.config.getoption('--rethinkdb-dedup-url'):
         argv.append('--rethinkdb-dedup-url=%s' % request.config.getoption('--rethinkdb-dedup-url'))
         # test these here only
@@ -1700,6 +1709,16 @@ def test_long_warcprox_meta(
         assert record.rec_headers.get_header('warc-target-uri') == url
         with pytest.raises(StopIteration):
             next(rec_iter)
+
+def test_socket_timeout_response(
+        warcprox_, http_daemon, https_daemon, archiving_proxies,
+        playback_proxies):
+    """Response will timeout because we use --socket-timeout=4 whereas the
+    target URL will return after 6 sec.
+    """
+    url = 'http://localhost:%s/slow-response' % http_daemon.server_port
+    response = requests.get(url, proxies=archiving_proxies, verify=False)
+    assert response.status_code == 502
 
 def test_empty_response(
         warcprox_, http_daemon, https_daemon, archiving_proxies,
