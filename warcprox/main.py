@@ -162,9 +162,9 @@ def _build_arg_parser(prog='warcprox'):
             default=None, help=(
                 'host:port of tor socks proxy, used only to connect to '
                 '.onion sites'))
-    # Configurable connection timeout to target sites, default is 60 sec.
+    # Configurable connection socket timeout, default is 60 sec.
     arg_parser.add_argument(
-            '--remote-server-timeout', dest='remote_server_timeout', type=float,
+            '--socket-timeout', dest='socket_timeout', type=float,
             default=None, help=argparse.SUPPRESS)
     arg_parser.add_argument(
             '--crawl-log-dir', dest='crawl_log_dir', default=None, help=(
