@@ -205,12 +205,13 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
     and records the bytes in transit as it proxies them.
     '''
     logger = logging.getLogger("warcprox.mitmproxy.MitmProxyHandler")
+    _socket_timeout = 60
 
     def __init__(self, request, client_address, server):
         threading.current_thread().name = 'MitmProxyHandler(tid={},started={},client={}:{})'.format(warcprox.gettid(), datetime.datetime.utcnow().isoformat(), client_address[0], client_address[1])
         self.is_connect = False
         self._headers_buffer = []
-        request.settimeout(60)  # XXX what value should this have?
+        request.settimeout(self._socket_timeout)
         http_server.BaseHTTPRequestHandler.__init__(self, request, client_address, server)
 
     def _determine_host_port(self):
@@ -247,8 +248,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             self._remote_server_sock = socket.socket()
             self._remote_server_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
-        # XXX what value should this timeout have?
-        self._remote_server_sock.settimeout(60)
+        self._remote_server_sock.settimeout(self._socket_timeout)
         self._remote_server_sock.connect((self.hostname, int(self.port)))
 
         # Wrap socket if SSL is required

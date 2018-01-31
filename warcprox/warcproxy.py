@@ -397,6 +397,9 @@ class SingleThreadedWarcProxy(http_server.HTTPServer, object):
                 WarcProxyHandler.onion_tor_socks_proxy_host = options.onion_tor_socks_proxy
                 WarcProxyHandler.onion_tor_socks_proxy_port = None
 
+        if options.socket_timeout:
+            WarcProxyHandler._socket_timeout = options.socket_timeout
+
         http_server.HTTPServer.__init__(
                 self, server_address, WarcProxyHandler, bind_and_activate=True)
 
