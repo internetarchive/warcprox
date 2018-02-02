@@ -196,7 +196,6 @@ class WarcWriterPool:
         self.default_warc_writer = WarcWriter(options=options)
         self.warc_writers = {}  # {prefix:WarcWriter}
         self.options = options
-        self._lock = threading.RLock()
         self._last_maybe = time.time()
 
     # chooses writer for filename specified by warcprox_meta["warc-prefix"] if set
@@ -206,11 +205,10 @@ class WarcWriterPool:
             # self.logger.info("recorded_url.warcprox_meta={} for {}".format(recorded_url.warcprox_meta, recorded_url.url))
             options = warcprox.Options(**vars(self.options))
             options.prefix = recorded_url.warcprox_meta["warc-prefix"]
-            with self._lock:
-                if not options.prefix in self.warc_writers:
-                    self.warc_writers[options.prefix] = WarcWriter(
-                            options=options)
-                w = self.warc_writers[options.prefix]
+            if not options.prefix in self.warc_writers:
+                self.warc_writers[options.prefix] = WarcWriter(
+                        options=options)
+            w = self.warc_writers[options.prefix]
         return w
 
     def write_records(self, recorded_url):
