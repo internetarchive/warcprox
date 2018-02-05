@@ -100,7 +100,7 @@ class WarcWriterMultiThread(WarcWriterThread):
 
     def __init__(self, options=warcprox.Options()):
         warcprox.BaseStandardPostfetchProcessor.__init__(self, options=options)
-        self.pool = futures.ThreadPoolExecutor(max_workers=10)
+        self.pool = futures.ThreadPoolExecutor(max_workers=options.writer_threads)
         self.batch = set()
         self.options = options
         self.writer_pool = warcprox.writer.WarcWriterPool(options)
