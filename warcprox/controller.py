@@ -69,7 +69,10 @@ class Factory:
 
     @staticmethod
     def warc_writer(options):
-        return warcprox.writerthread.WarcWriterThread(options)
+        if options.writer_threads:
+            return warcprox.writerthread.WarcWriterMultiThread(options)
+        else:
+            return warcprox.writerthread.WarcWriterThread(options)
 
     @staticmethod
     def playback_proxy(ca, options):
