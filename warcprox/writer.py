@@ -189,11 +189,109 @@ class WarcWriter:
                         self._f_finalname, time.time() - self._last_activity)
                 self.close_writer()
 
+class MultiWarcWriter(WarcWriter):
+    logger = logging.getLogger("warcprox.writer.MultiWarcWriter")
+
+    def __init__(self, options=warcprox.Options()):
+        super().__init__(options)
+        self._f = [None] * 3
+        self._fpath = [None] * 3
+        self._f_finalname = [None] * 3
+        self._lock = [threading.RLock()] * 3
+
+    def _writer(self, curr):
+        with self._lock[curr]:
+            if self._fpath[curr] and os.path.getsize(
+                    self._fpath[curr]) > self.rollover_size:
+                self.close_writer()
+
+            if self._f[curr] == None:
+                self._f_finalname[curr] = self._warc_filename()
+                self._fpath[curr] = os.path.sep.join([
+                    self.directory, self._f_finalname[curr] + self._f_open_suffix])
+
+                self._f[curr] = open(self._fpath[curr], 'wb')
+                # if no '.open' suffix is used for WARC, acquire an exclusive
+                # file lock.
+                if self._f_open_suffix == '':
+                    try:
+                        fcntl.lockf(self._f[curr], fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    except IOError as exc:
+                        self.logger.error('could not lock file %s (%s)',
+                                          self._fpath, exc)
+
+                warcinfo_record = self.record_builder.build_warcinfo_record(
+                        self._f_finalname[curr])
+                self.logger.debug(
+                        'warcinfo_record.headers=%s', warcinfo_record.headers)
+                warcinfo_record.write_to(self._f[curr], gzip=self.gzip)
+
+                self._serial += 1
+
+        return self._f[curr]
+
+    def write_records(self, recorded_url):
+        """Returns tuple of records written, which are instances of
+        hanzo.warctools.warc.WarcRecord, decorated with "warc_filename" and
+        "offset" attributes."""
+        records = self.record_builder.build_warc_records(recorded_url)
+        curr = random.choice([0, 1, 2])
+
+        with self._lock[curr]:
+            writer = self._writer(curr)
+
+            for record in records:
+                offset = writer.tell()
+                record.write_to(writer, gzip=self.gzip)
+                record.offset = offset
+                record.length = writer.tell() - offset
+                record.warc_filename = self._f_finalname[curr]
+                self.logger.debug(
+                        'wrote warc record: warc_type=%s content_length=%s '
+                        'url=%s warc=%s offset=%d',
+                        record.get_header(warctools.WarcRecord.TYPE),
+                        record.get_header(warctools.WarcRecord.CONTENT_LENGTH),
+                        record.get_header(warctools.WarcRecord.URL),
+                        self._fpath[curr], record.offset)
+
+            self._f[curr].flush()
+            self._last_activity = time.time()
+
+        return records
+
+    def maybe_idle_rollover(self):
+        for curr in range(0, 3):
+            with self._lock[curr]:
+                if (self._fpath[curr] is not None
+                        and self.rollover_idle_time is not None
+                        and self.rollover_idle_time > 0
+                        and time.time() - self._last_activity > self.rollover_idle_time):
+                    self.logger.info(
+                            'rolling over %s after %s seconds idle',
+                            self._f_finalname[curr], time.time() - self._last_activity)
+                    self.close_writer(curr)
+
+    def close_writer(self, curr):
+        with self._lock[curr]:
+            if self._fpath[curr]:
+                self.logger.info('closing %s', self._f_finalname[curr])
+                if self._f_open_suffix == '':
+                    try:
+                        fcntl.lockf(self._f[curr], fcntl.LOCK_UN)
+                    except IOError as exc:
+                        self.logger.error('could not unlock file %s (%s)',
+                                          self._fpath[curr], exc)
+                self._f[curr].close()
+                finalpath = os.path.sep.join(
+                        [self.directory, self._f_finalname[curr]])
+                os.rename(self._fpath[curr], finalpath)
+
 class WarcWriterPool:
     logger = logging.getLogger("warcprox.writer.WarcWriterPool")
 
     def __init__(self, options=warcprox.Options()):
-        self.default_warc_writer = WarcWriter(options=options)
+        # self.default_warc_writer = WarcWriter(options=options)
+        self.default_warc_writer = MultiWarcWriter(options=options)
         self.warc_writers = {}  # {prefix:WarcWriter}
         self.options = options
         self._lock = threading.RLock()
