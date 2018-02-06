@@ -32,32 +32,42 @@ import time
 import warcprox
 from concurrent import futures
 
-class WarcWriterThread(warcprox.BaseStandardPostfetchProcessor):
-    logger = logging.getLogger("warcprox.writerthread.WarcWriterThread")
+class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
+    logger = logging.getLogger("warcprox.writerthread.WarcWriterProcessor")
 
     _ALWAYS_ACCEPT = {'WARCPROX_WRITE_RECORD'}
 
     def __init__(self, options=warcprox.Options()):
         warcprox.BaseStandardPostfetchProcessor.__init__(self, options=options)
-        self.options = options
         self.writer_pool = warcprox.writer.WarcWriterPool(options)
         self.method_filter = set(method.upper() for method in self.options.method_filter or [])
+        self.pool = futures.ThreadPoolExecutor(max_workers=options.writer_threads or 1)
+        self.batch = set()
 
     def _get_process_put(self):
-        try:
-            warcprox.BaseStandardPostfetchProcessor._get_process_put(self)
-        finally:
-            self.writer_pool.maybe_idle_rollover()
+        recorded_url = self.inq.get(block=True, timeout=0.5)
+        self.batch.add(recorded_url)
+        self.pool.submit(self._process_url, recorded_url)
 
     def _process_url(self, recorded_url):
-        records = []
-        if self._should_archive(recorded_url):
-            records = self.writer_pool.write_records(recorded_url)
-        recorded_url.warc_records = records
-        self._log(recorded_url, records)
-        # try to release resources in a timely fashion
-        if recorded_url.response_recorder and recorded_url.response_recorder.tempfile:
-            recorded_url.response_recorder.tempfile.close()
+        try:
+            records = []
+            if self._should_archive(recorded_url):
+                records = self.writer_pool.write_records(recorded_url)
+            recorded_url.warc_records = records
+            self._log(recorded_url, records)
+            # try to release resources in a timely fashion
+            if recorded_url.response_recorder and recorded_url.response_recorder.tempfile:
+                recorded_url.response_recorder.tempfile.close()
+        except:
+            logging.error(
+                    'caught exception processing %s', recorded_url.url,
+                    exc_info=True)
+        finally:
+            self.batch.remove(recorded_url)
+            if self.outq:
+                self.outq.put(recorded_url)
+            self.writer_pool.maybe_idle_rollover()
 
     def _filter_accepts(self, recorded_url):
         if not self.method_filter:
@@ -94,35 +104,3 @@ class WarcWriterThread(warcprox.BaseStandardPostfetchProcessor):
     def _shutdown(self):
         self.writer_pool.close_writers()
 
-
-class WarcWriterMultiThread(WarcWriterThread):
-    logger = logging.getLogger("warcprox.writerthread.WarcWriterMultiThread")
-
-    def __init__(self, options=warcprox.Options()):
-        warcprox.BaseStandardPostfetchProcessor.__init__(self, options=options)
-        self.pool = futures.ThreadPoolExecutor(max_workers=options.writer_threads)
-        self.batch = set()
-        self.options = options
-        self.writer_pool = warcprox.writer.WarcWriterPool(options)
-        self.method_filter = set(method.upper() for method in self.options.method_filter or [])
-
-    def _get_process_put(self):
-        recorded_url = self.inq.get(block=True, timeout=0.5)
-        self.batch.add(recorded_url)
-        self.pool.submit(self._process_url, recorded_url)
-
-    def _process_url(self, recorded_url):
-        try:
-            records = []
-            if self._should_archive(recorded_url):
-                records = self.writer_pool.write_records(recorded_url)
-            recorded_url.warc_records = records
-            self._log(recorded_url, records)
-            # try to release resources in a timely fashion
-            if recorded_url.response_recorder and recorded_url.response_recorder.tempfile:
-                recorded_url.response_recorder.tempfile.close()
-        finally:
-            self.batch.remove(recorded_url)
-            if self.outq:
-                self.outq.put(recorded_url)
-            self.writer_pool.maybe_idle_rollover()

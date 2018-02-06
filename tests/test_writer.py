@@ -61,7 +61,8 @@ def test_warc_writer_locking(tmpdir):
             timestamp=datetime.utcnow())
 
     dirname = os.path.dirname(str(tmpdir.mkdir('test-warc-writer')))
-    wwriter = WarcWriter(Options(directory=dirname, no_warc_open_suffix=True))
+    wwriter = WarcWriter(Options(
+        directory=dirname, no_warc_open_suffix=True, writer_threads=1))
     wwriter.write_records(recorded_url)
     warcs = [fn for fn in os.listdir(dirname) if fn.endswith('.warc')]
     assert warcs
@@ -93,7 +94,8 @@ def test_special_dont_write_prefix():
         logging.debug('cd %s', tmpdir)
         os.chdir(tmpdir)
 
-        wwt = warcprox.writerthread.WarcWriterThread(Options(prefix='-'))
+        wwt = warcprox.writerthread.WarcWriterProcessor(
+                Options(prefix='-', writer_threads=1))
         wwt.inq = warcprox.TimestampedQueue(maxsize=1)
         wwt.outq = warcprox.TimestampedQueue(maxsize=1)
         try:
@@ -126,7 +128,8 @@ def test_special_dont_write_prefix():
             wwt.stop.set()
             wwt.join()
 
-        wwt = warcprox.writerthread.WarcWriterThread()
+        wwt = warcprox.writerthread.WarcWriterProcessor(
+                Options(writer_threads=1))
         wwt.inq = warcprox.TimestampedQueue(maxsize=1)
         wwt.outq = warcprox.TimestampedQueue(maxsize=1)
         try:
@@ -172,8 +175,11 @@ def test_warc_writer_filename(tmpdir):
 
     dirname = os.path.dirname(str(tmpdir.mkdir('test-warc-writer')))
     wwriter = WarcWriter(Options(directory=dirname, prefix='foo',
-        warc_filename='{timestamp17}_{prefix}_{timestamp14}_{serialno}'))
+        warc_filename='{timestamp17}_{prefix}_{timestamp14}_{serialno}',
+        writer_threads=1))
     wwriter.write_records(recorded_url)
     warcs = [fn for fn in os.listdir(dirname)]
     assert warcs
-    assert re.search('\d{17}_foo_\d{14}_00000.warc.open', wwriter._fpath)
+    assert re.search(
+            r'\d{17}_foo_\d{14}_00000.warc.open',
+            wwriter._available_warcs.queue[0].path)
