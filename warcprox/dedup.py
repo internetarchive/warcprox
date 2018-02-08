@@ -206,9 +206,14 @@ class CdxServerDedup(DedupDb):
 
     def __init__(self, cdx_url="https://web.archive.org/cdx/search",
                  maxsize=200, options=warcprox.Options()):
+        """Initialize cdx server connection pool and related parameters.
+        Use low timeout value and no retries to avoid blocking warcprox
+        operation by a slow CDX server.
+        """
         self.cdx_url = cdx_url
         self.options = options
-        self.http_pool = urllib3.PoolManager(maxsize=maxsize)
+        self.http_pool = urllib3.PoolManager(maxsize=maxsize, retries=0,
+                                             timeout=2.0)
         if options.cdxserver_dedup_cookies:
             self.cookies = options.cdxserver_dedup_cookies
 
@@ -271,7 +276,7 @@ class CdxServerDedup(DedupDb):
 class CdxServerDedupLoader(warcprox.BaseBatchPostfetchProcessor):
     def __init__(self, cdx_dedup, options=warcprox.Options()):
         warcprox.BaseBatchPostfetchProcessor.__init__(self, options)
-        self.pool = futures.ThreadPoolExecutor(max_workers=50)
+        self.pool = futures.ThreadPoolExecutor(max_workers=200)
         self.batch = set()
         self.cdx_dedup = cdx_dedup
 
