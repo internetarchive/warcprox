@@ -166,6 +166,10 @@ def _build_arg_parser(prog='warcprox'):
     arg_parser.add_argument(
             '--socket-timeout', dest='socket_timeout', type=float,
             default=None, help=argparse.SUPPRESS)
+    # Configurable max resource size in bytes, default is no limit.
+    arg_parser.add_argument(
+            '--max-resource-size', dest='max_resource_size', type=int,
+            default=None, help=argparse.SUPPRESS)
     arg_parser.add_argument(
             '--crawl-log-dir', dest='crawl_log_dir', default=None, help=(
                 'if specified, write crawl log files in the specified '
