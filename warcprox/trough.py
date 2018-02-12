@@ -103,17 +103,13 @@ class TroughClient(object):
         elif isinstance(x, bool):
             return int(x)
         elif isinstance(x, str) or isinstance(x, bytes):
-            # py3: repr(u'abc') => 'abc'
-            #      repr(b'abc') => b'abc'
-            # py2: repr(u'abc') => u'abc'
-            #      repr(b'abc') => 'abc'
-            # Repr gives us a prefix we don't want in different situations
-            # depending on whether this is py2 or py3. Chop it off either way.
-            r = repr(x)
-            if r[:1] == "'":
-                return r
+            # the only character that needs escaped in sqlite string literals
+            # is single-quote, which is escaped as two single-quotes
+            if isinstance(x, bytes):
+                s = x.decode('utf-8')
             else:
-                return r[1:]
+                s = x
+            return "'" + s.replace("'", "''") + "'"
         elif isinstance(x, (int, float)):
             return x
         else:
@@ -196,7 +192,7 @@ class TroughClient(object):
                     response.status_code, response.reason, response.text,
                     write_url, sql)
             return
-        self.logger.debug('posted %r to %s', sql, write_url)
+        self.logger.debug('posted to %s: %r', write_url, sql)
 
     def read(self, segment_id, sql_tmpl, values=()):
         read_url = self.read_url(segment_id)
