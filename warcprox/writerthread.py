@@ -81,8 +81,12 @@ class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
                   if recorded_url.warcprox_meta
                      and 'warc-prefix' in recorded_url.warcprox_meta
                   else self.options.prefix)
+        do_not_archive = (recorded_url.do_not_archive
+                          if recorded_url.do_not_archive
+                          else False)
         # special warc name prefix '-' means "don't archive"
-        return prefix != '-' and self._filter_accepts(recorded_url)
+        return prefix != '-' and (not do_not_archive) and
+               self._filter_accepts(recorded_url)
 
     def _log(self, recorded_url, records):
         try:
