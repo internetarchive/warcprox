@@ -330,7 +330,7 @@ class RecordedUrl:
             warcprox_meta=None, content_type=None, custom_type=None,
             status=None, size=None, client_ip=None, method=None,
             timestamp=None, host=None, duration=None, referer=None,
-            payload_digest=None, warc_records=None):
+            payload_digest=None, warc_records=None, do_not_archive=False):
         # XXX should test what happens with non-ascii url (when does
         # url-encoding happen?)
         if type(url) is not bytes:
@@ -370,6 +370,7 @@ class RecordedUrl:
         self.referer = referer
         self.payload_digest = payload_digest
         self.warc_records = warc_records
+        self.do_not_archive = do_not_archive
 
 # inherit from object so that multiple inheritance from this class works
 # properly in python 2
@@ -396,6 +397,9 @@ class SingleThreadedWarcProxy(http_server.HTTPServer, object):
             except ValueError:
                 WarcProxyHandler.onion_tor_socks_proxy_host = options.onion_tor_socks_proxy
                 WarcProxyHandler.onion_tor_socks_proxy_port = None
+
+        if options.socket_timeout:
+            WarcProxyHandler._socket_timeout = options.socket_timeout
 
         http_server.HTTPServer.__init__(
                 self, server_address, WarcProxyHandler, bind_and_activate=True)

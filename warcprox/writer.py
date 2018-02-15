@@ -22,133 +22,172 @@ USA.
 from __future__ import absolute_import
 
 import logging
-from datetime import datetime
 from hanzo import warctools
 import fcntl
 import time
 import warcprox
 import os
 import socket
-import string
 import random
 import threading
+try:
+    import queue
+except ImportError:
+    import Queue as queue
+import contextlib
 
-class WarcWriter:
-    logger = logging.getLogger('warcprox.writer.WarcWriter')
+class _OneWritableWarc:
+    logger = logging.getLogger('warcprox.writer._OneWritableWarc')
 
-    def __init__(self, options=warcprox.Options()):
-
+    '''
+    Utility class used by WarcWriter
+    '''
+    def __init__(self, options=warcprox.Options(), randomtoken='0'):
+        self.f = None
+        self.path = None
+        self.finalname = None
+        self.gzip = options.gzip or False
+        self.prefix = options.prefix or 'warcprox'
+        self.open_suffix = '' if options.no_warc_open_suffix else '.open'
+        self.randomtoken = randomtoken
         self.rollover_size = options.rollover_size or 1000000000
         self.rollover_idle_time = options.rollover_idle_time or None
-        self._last_activity = time.time()
-
-        self.gzip = options.gzip or False
-        self.warc_filename = options.warc_filename or \
-            '{prefix}-{timestamp17}-{randomtoken}-{serialno}'
-        digest_algorithm = options.digest_algorithm or 'sha1'
-        base32 = options.base32
-        self.record_builder = warcprox.warc.WarcRecordBuilder(
-                digest_algorithm=digest_algorithm, base32=base32)
-
-        # warc path and filename stuff
         self.directory = options.directory or './warcs'
-        self.prefix = options.prefix or 'warcprox'
-
-        self._f = None
-        self._fpath = None
-        self._f_finalname = None
-        self._f_open_suffix = '' if options.no_warc_open_suffix else '.open'
-        self._serial = 0
-        self._lock = threading.RLock()
-
-        self._randomtoken = "".join(random.Random().sample(string.digits + string.ascii_lowercase, 8))
-
-        if not os.path.exists(self.directory):
-            self.logger.info("warc destination directory {} doesn't exist, creating it".format(self.directory))
-            os.mkdir(self.directory)
-
-    def timestamp17(self):
-        now = datetime.utcnow()
-        return '{:%Y%m%d%H%M%S}{:03d}'.format(now, now.microsecond//1000)
-
-    def timestamp14(self):
-        now = datetime.utcnow()
-        return '{:%Y%m%d%H%M%S}'.format(now)
-
-    def close_writer(self):
-        with self._lock:
-            if self._fpath:
-                self.logger.info('closing %s', self._f_finalname)
-                if self._f_open_suffix == '':
-                    try:
-                        fcntl.lockf(self._f, fcntl.LOCK_UN)
-                    except IOError as exc:
-                        self.logger.error('could not unlock file %s (%s)',
-                                          self._fpath, exc)
-                self._f.close()
-                finalpath = os.path.sep.join(
-                        [self.directory, self._f_finalname])
-                os.rename(self._fpath, finalpath)
-
-                self._fpath = None
-                self._f = None
-
-    def serial(self):
-        return '{:05d}'.format(self._serial)
+        self.filename_template = options.warc_filename or \
+                '{prefix}-{timestamp17}-{randomtoken}-{serialno}'
+        self.last_activity = time.time()
 
     # h3 default <!-- <property name="template" value="${prefix}-${timestamp17}-${serialno}-${heritrix.pid}~${heritrix.hostname}~${heritrix.port}" /> -->
-    def _warc_filename(self):
+    def next_filename(self, serial):
         """WARC filename is configurable with CLI parameter --warc-filename.
-        Default: '{prefix}-{timestamp17}-{serialno}-{randomtoken}'
+        Default: '{prefix}-{timestamp17}-{randomtoken}-{serialno}'
         Available variables are: prefix, timestamp14, timestamp17, serialno,
         randomtoken, hostname, shorthostname.
         Extension ``.warc`` or ``.warc.gz`` is appended automatically.
         """
         hostname = socket.getfqdn()
         shorthostname = hostname.split('.')[0]
-        fname = self.warc_filename.format(prefix=self.prefix,
-                                          timestamp14=self.timestamp14(),
-                                          timestamp17=self.timestamp17(),
-                                          serialno=self.serial(),
-                                          randomtoken=self._randomtoken,
-                                          hostname=hostname,
-                                          shorthostname=shorthostname)
+        fname = self.filename_template.format(
+                prefix=self.prefix, timestamp14=warcprox.timestamp14(),
+                timestamp17=warcprox.timestamp17(),
+                serialno='{:05d}'.format(serial),
+                randomtoken=self.randomtoken, hostname=hostname,
+                shorthostname=shorthostname)
         if self.gzip:
             fname = fname + '.warc.gz'
         else:
             fname = fname + '.warc'
         return fname
 
-    def _writer(self):
-        with self._lock:
-            if self._fpath and os.path.getsize(
-                    self._fpath) > self.rollover_size:
-                self.close_writer()
+    def open(self, serial):
+        if not os.path.exists(self.directory):
+            self.logger.info(
+                    "warc destination directory %s doesn't exist, creating it",
+                    self.directory)
+            os.mkdir(self.directory)
 
-            if self._f == None:
-                self._f_finalname = self._warc_filename()
-                self._fpath = os.path.sep.join([
-                    self.directory, self._f_finalname + self._f_open_suffix])
+        self.finalname = self.next_filename(serial)
+        self.path = os.path.sep.join(
+                [self.directory, self.finalname + self.open_suffix])
 
-                self._f = open(self._fpath, 'wb')
-                # if no '.open' suffix is used for WARC, acquire an exclusive
-                # file lock.
-                if self._f_open_suffix == '':
-                    try:
-                        fcntl.lockf(self._f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                    except IOError as exc:
-                        self.logger.error('could not lock file %s (%s)',
-                                          self._fpath, exc)
+        self.f = open(self.path, 'wb')
+        # if no '.open' suffix is used for WARC, acquire an exclusive
+        # file lock.
+        if self.open_suffix == '':
+            try:
+                fcntl.lockf(self.f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except IOError as exc:
+                self.logger.error(
+                        'could not lock file %s (%s)', self.path, exc)
+        return self.f
 
-                warcinfo_record = self.record_builder.build_warcinfo_record(
-                        self._f_finalname)
-                self.logger.debug(
-                        'warcinfo_record.headers=%s', warcinfo_record.headers)
-                warcinfo_record.write_to(self._f, gzip=self.gzip)
+    def close(self):
+        if self.path:
+            self.logger.trace('closing %s', self.finalname)
+            if self.open_suffix == '':
+                try:
+                    fcntl.lockf(self.f, fcntl.LOCK_UN)
+                except IOError as exc:
+                    self.logger.error(
+                            'could not unlock file %s (%s)', self.path, exc)
+            self.f.close()
+            finalpath = os.path.sep.join(
+                    [self.directory, self.finalname])
+            os.rename(self.path, finalpath)
 
+            self.path = None
+            self.f = None
+
+    def maybe_idle_rollover(self):
+        if (self.path and self.rollover_idle_time
+                and self.rollover_idle_time > 0
+                and time.time() - self.last_activity > self.rollover_idle_time):
+            self.logger.info(
+                    'rolling over %s after %0.1f seconds idle',
+                    self.finalname, time.time() - self.last_activity)
+            self.close()
+
+    def maybe_size_rollover(self):
+        if self.path and os.path.getsize(self.path) > self.rollover_size:
+            self.logger.info(
+                    'rolling over %s because it has reached %s bytes in size',
+                    self.finalname, os.path.getsize(self.path))
+            self.close()
+
+class WarcWriter:
+    logger = logging.getLogger('warcprox.writer.WarcWriter')
+
+    def __init__(self, options=warcprox.Options()):
+        self.options = options
+
+        self.gzip = options.gzip or False
+        self.record_builder = warcprox.warc.WarcRecordBuilder(
+                digest_algorithm=options.digest_algorithm or 'sha1',
+                base32=options.base32)
+
+        self._available_warcs = queue.Queue()
+        self._warc_count = 0
+        self._warc_count_lock = threading.Lock()
+
+        self._serial = 0
+        self._serial_lock = threading.Lock()
+
+        self._randomtoken = ''.join(
+                random.sample('abcdefghijklmnopqrstuvwxyz0123456789', 8))
+
+    def _bespeak_warc(self):
+        try:
+            return self._available_warcs.get(block=False)
+        except queue.Empty:
+            with self._warc_count_lock:
+                if self._warc_count < self.options.writer_threads:
+                    self._warc_count += 1
+                    return _OneWritableWarc(self.options, self._randomtoken)
+            # else we're maxed out, wait for one to free up
+            return self._available_warcs.get(block=True)
+
+    @contextlib.contextmanager
+    def _warc(self):
+        warc = self._bespeak_warc()
+
+        warc.maybe_size_rollover()
+
+        # lazy file open
+        if warc.f == None:
+            with self._serial_lock:
+                serial = self._serial
                 self._serial += 1
+            warc.open(serial)
+            warcinfo = self.record_builder.build_warcinfo_record(warc.finalname)
+            self.logger.debug('warcinfo.headers=%s', warcinfo.headers)
+            warcinfo.write_to(warc.f, gzip=self.gzip)
 
-        return self._f
+        yield warc
+
+        # __exit__()
+        warc.f.flush()
+        warc.last_activity = time.time()
+        self._available_warcs.put(warc)
 
     def write_records(self, recorded_url):
         """Returns tuple of records written, which are instances of
@@ -156,44 +195,47 @@ class WarcWriter:
         "offset" attributes."""
         records = self.record_builder.build_warc_records(recorded_url)
 
-        with self._lock:
-            writer = self._writer()
-
+        with self._warc() as warc:
             for record in records:
-                offset = writer.tell()
-                record.write_to(writer, gzip=self.gzip)
+                offset = warc.f.tell()
+                record.write_to(warc.f, gzip=self.gzip)
                 record.offset = offset
-                record.length = writer.tell() - offset
-                record.warc_filename = self._f_finalname
+                record.length = warc.f.tell() - offset
+                record.warc_filename = warc.finalname
                 self.logger.debug(
                         'wrote warc record: warc_type=%s content_length=%s '
                         'url=%s warc=%s offset=%d',
                         record.get_header(warctools.WarcRecord.TYPE),
                         record.get_header(warctools.WarcRecord.CONTENT_LENGTH),
                         record.get_header(warctools.WarcRecord.URL),
-                        self._fpath, record.offset)
-
-            self._f.flush()
-            self._last_activity = time.time()
+                        warc.path, record.offset)
 
         return records
 
     def maybe_idle_rollover(self):
-        with self._lock:
-            if (self._fpath is not None
-                    and self.rollover_idle_time is not None
-                    and self.rollover_idle_time > 0
-                    and time.time() - self._last_activity > self.rollover_idle_time):
-                self.logger.info(
-                        'rolling over %s after %s seconds idle',
-                        self._f_finalname, time.time() - self._last_activity)
-                self.close_writer()
+        warcs = []
+        while True:
+            try:
+                warc = self._available_warcs.get(block=False)
+                warcs.append(warc)
+            except queue.Empty:
+                break
+        for warc in warcs:
+            warc.maybe_idle_rollover()
+            self._available_warcs.put(warc)
+
+    def close_writer(self):
+        while self._warc_count > 0:
+            with self._warc_count_lock:
+                warc = self._available_warcs.get()
+                warc.close()
+                self._warc_count -= 1
 
 class WarcWriterPool:
     logger = logging.getLogger("warcprox.writer.WarcWriterPool")
 
     def __init__(self, options=warcprox.Options()):
-        self.default_warc_writer = WarcWriter(options=options)
+        self.default_warc_writer = WarcWriter(options)
         self.warc_writers = {}  # {prefix:WarcWriter}
         self.options = options
         self._lock = threading.RLock()
@@ -208,8 +250,7 @@ class WarcWriterPool:
             options.prefix = recorded_url.warcprox_meta["warc-prefix"]
             with self._lock:
                 if not options.prefix in self.warc_writers:
-                    self.warc_writers[options.prefix] = WarcWriter(
-                            options=options)
+                    self.warc_writers[options.prefix] = WarcWriter(options)
                 w = self.warc_writers[options.prefix]
         return w
 

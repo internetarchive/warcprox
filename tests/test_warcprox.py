@@ -249,6 +249,14 @@ class _TestHttpRequestHandler(http_server.BaseHTTPRequestHandler):
         elif self.path == '/empty-response':
             headers = b''
             payload = b''
+        elif self.path == '/slow-response':
+            time.sleep(6)
+            headers = (b'HTTP/1.1 200 OK\r\n'
+                    +  b'Content-Type: text/plain\r\n'
+                    +  b'\r\n')
+            payload = b'Test.'
+            actual_headers = (b'Content-Type: text/plain\r\n'
+                           + b'Content-Length: ' + str(len(payload)).encode('ascii') + b'\r\n')
         else:
             payload = b'404 Not Found\n'
             headers = (b'HTTP/1.1 404 Not Found\r\n'
@@ -356,7 +364,8 @@ def warcprox_(request):
             '--port=0',
             '--playback-port=0',
             '--onion-tor-socks-proxy=localhost:9050',
-            '--crawl-log-dir=crawl-logs']
+            '--crawl-log-dir=crawl-logs',
+            '--socket-timeout=4']
     if request.config.getoption('--rethinkdb-dedup-url'):
         argv.append('--rethinkdb-dedup-url=%s' % request.config.getoption('--rethinkdb-dedup-url'))
         # test these here only
@@ -758,10 +767,12 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 4)
 
     # close the warc
-    assert warcprox_.warc_writer_thread.writer_pool.warc_writers["test_dedup_buckets"]
-    writer = warcprox_.warc_writer_thread.writer_pool.warc_writers["test_dedup_buckets"]
-    warc_path = os.path.join(writer.directory, writer._f_finalname)
-    warcprox_.warc_writer_thread.writer_pool.warc_writers["test_dedup_buckets"].close_writer()
+    assert warcprox_.warc_writer_processor.writer_pool.warc_writers["test_dedup_buckets"]
+    writer = warcprox_.warc_writer_processor.writer_pool.warc_writers["test_dedup_buckets"]
+    warc = writer._available_warcs.queue[0]
+    warc_path = os.path.join(warc.directory, warc.finalname)
+    assert not os.path.exists(warc_path)
+    warcprox_.warc_writer_processor.writer_pool.warc_writers["test_dedup_buckets"].close_writer()
     assert os.path.exists(warc_path)
 
     # read the warc
@@ -1380,20 +1391,16 @@ def test_controller_with_defaults():
     assert controller.proxy.server_port == 8000
     assert controller.proxy.running_stats
     assert not controller.proxy.stats_db
-    wwt = controller.warc_writer_thread
-    assert wwt
-    assert wwt.inq
-    assert wwt.outq
-    assert wwt.writer_pool
-    assert wwt.writer_pool.default_warc_writer
-    assert wwt.writer_pool.default_warc_writer.directory == './warcs'
-    assert wwt.writer_pool.default_warc_writer.rollover_idle_time is None
-    assert wwt.writer_pool.default_warc_writer.rollover_size == 1000000000
-    assert wwt.writer_pool.default_warc_writer.prefix == 'warcprox'
-    assert wwt.writer_pool.default_warc_writer.gzip is False
-    assert wwt.writer_pool.default_warc_writer.record_builder
-    assert not wwt.writer_pool.default_warc_writer.record_builder.base32
-    assert wwt.writer_pool.default_warc_writer.record_builder.digest_algorithm == 'sha1'
+    wwp = controller.warc_writer_processor
+    assert wwp
+    assert wwp.inq
+    assert wwp.outq
+    assert wwp.writer_pool
+    assert wwp.writer_pool.default_warc_writer
+    assert wwp.writer_pool.default_warc_writer.gzip is False
+    assert wwp.writer_pool.default_warc_writer.record_builder
+    assert not wwp.writer_pool.default_warc_writer.record_builder.base32
+    assert wwp.writer_pool.default_warc_writer.record_builder.digest_algorithm == 'sha1'
 
 def test_load_plugin():
     options = warcprox.Options(port=0, plugins=[
@@ -1473,7 +1480,7 @@ def test_via_response_header(warcprox_, http_daemon, archiving_proxies, playback
     assert response.status_code == 200
     assert not 'via' in playback_response
 
-    warc = warcprox_.warc_writer_thread.writer_pool.default_warc_writer._fpath
+    warc = warcprox_.warc_writer_processor.writer_pool.default_warc_writer._available_warcs.queue[0].path
     with open(warc, 'rb') as f:
         for record in warcio.archiveiterator.ArchiveIterator(f):
             if record.rec_headers.get_header('warc-target-uri') == url:
@@ -1691,10 +1698,11 @@ def test_long_warcprox_meta(
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
 
     # check that warcprox-meta was parsed and honored ("warc-prefix" param)
-    assert warcprox_.warc_writer_thread.writer_pool.warc_writers["test_long_warcprox_meta"]
-    writer = warcprox_.warc_writer_thread.writer_pool.warc_writers["test_long_warcprox_meta"]
-    warc_path = os.path.join(writer.directory, writer._f_finalname)
-    warcprox_.warc_writer_thread.writer_pool.warc_writers["test_long_warcprox_meta"].close_writer()
+    assert warcprox_.warc_writer_processor.writer_pool.warc_writers["test_long_warcprox_meta"]
+    writer = warcprox_.warc_writer_processor.writer_pool.warc_writers["test_long_warcprox_meta"]
+    warc = writer._available_warcs.queue[0]
+    warc_path = os.path.join(warc.directory, warc.finalname)
+    warcprox_.warc_writer_processor.writer_pool.warc_writers["test_long_warcprox_meta"].close_writer()
     assert os.path.exists(warc_path)
 
     # read the warc
@@ -1710,6 +1718,16 @@ def test_long_warcprox_meta(
         assert record.rec_headers.get_header('warc-target-uri') == url
         with pytest.raises(StopIteration):
             next(rec_iter)
+
+def test_socket_timeout_response(
+        warcprox_, http_daemon, https_daemon, archiving_proxies,
+        playback_proxies):
+    """Response will timeout because we use --socket-timeout=4 whereas the
+    target URL will return after 6 sec.
+    """
+    url = 'http://localhost:%s/slow-response' % http_daemon.server_port
+    response = requests.get(url, proxies=archiving_proxies, verify=False)
+    assert response.status_code == 502
 
 def test_empty_response(
         warcprox_, http_daemon, https_daemon, archiving_proxies,

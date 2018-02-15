@@ -57,7 +57,6 @@ class Factory:
 
     @staticmethod
     def stats_processor(options):
-        # return warcprox.stats.StatsProcessor(options)
         if options.rethinkdb_stats_url:
             stats_processor = warcprox.stats.RethinkStatsProcessor(options)
         elif options.stats_db_file in (None, '', '/dev/null'):
@@ -68,8 +67,8 @@ class Factory:
         return stats_processor
 
     @staticmethod
-    def warc_writer(options):
-        return warcprox.writerthread.WarcWriterThread(options)
+    def warc_writer_processor(options):
+        return warcprox.writerthread.WarcWriterProcessor(options)
 
     @staticmethod
     def playback_proxy(ca, options):
@@ -142,6 +141,12 @@ class WarcproxController(object):
         self.playback_proxy = Factory.playback_proxy(
             self.proxy.ca, self.options)
 
+        # default number of warc writer threads = sqrt(proxy.max_threads)
+        # pulled out of thin air because it strikes me as reasonable
+        # 1=>1 2=>1 5=>2 10=>3 50=>7 100=>10 200=>14 500=>22 1000=>32 2000=>45
+        if not self.options.writer_threads:
+            self.options.writer_threads = int(self.proxy.max_threads ** 0.5)
+
         self.build_postfetch_chain(self.proxy.recorded_url_q)
 
         self.service_registry = Factory.service_registry(options)
@@ -181,8 +186,8 @@ class WarcproxController(object):
         if self.dedup_db:
             self._postfetch_chain.append(self.dedup_db.loader())
 
-        self.warc_writer_thread = Factory.warc_writer(self.options)
-        self._postfetch_chain.append(self.warc_writer_thread)
+        self.warc_writer_processor = Factory.warc_writer_processor(self.options)
+        self._postfetch_chain.append(self.warc_writer_processor)
 
         if self.dedup_db:
             self._postfetch_chain.append(self.dedup_db.storer())
@@ -207,6 +212,8 @@ class WarcproxController(object):
                 self._postfetch_chain.append(
                         warcprox.ListenerPostfetchProcessor(
                             plugin, self.options))
+            elif hasattr(plugin, 'CHAIN_POSITION') and plugin.CHAIN_POSITION == 'early':
+                self._postfetch_chain.insert(0, plugin) # or insert early but later than 0?
             else:
                 self._postfetch_chain.append(plugin)
 

@@ -237,6 +237,14 @@ class ListenerPostfetchProcessor(BaseStandardPostfetchProcessor):
                 self.logger.error(
                         '%s raised exception', listener.stop, exc_info=True)
 
+def timestamp17():
+    now = datetime.datetime.utcnow()
+    return '{:%Y%m%d%H%M%S}{:03d}'.format(now, now.microsecond//1000)
+
+def timestamp14():
+    now = datetime.datetime.utcnow()
+    return '{:%Y%m%d%H%M%S}'.format(now)
+
 # monkey-patch log levels TRACE and NOTICE
 TRACE = 5
 def _logger_trace(self, msg, *args, **kwargs):

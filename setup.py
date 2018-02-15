@@ -2,7 +2,7 @@
 '''
 setup.py - setuptools installation configuration for warcprox
 
-Copyright (C) 2013-2016 Internet Archive
+Copyright (C) 2013-2018 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -22,18 +22,6 @@ USA.
 
 import sys
 import setuptools
-import setuptools.command.test
-
-class PyTest(setuptools.command.test.test):
-    def finalize_options(self):
-        setuptools.command.test.test.finalize_options(self)
-        self.test_args = []
-        self.test_suite = True
-    def run_tests(self):
-        # import here, because outside the eggs aren't loaded
-        import pytest
-        errno = pytest.main(self.test_args)
-        sys.exit(errno)
 
 deps = [
     'certauth==1.1.6',
@@ -52,7 +40,7 @@ except:
 
 setuptools.setup(
         name='warcprox',
-        version='2.4b1.dev144',
+        version='2.4b2.dev149',
         description='WARC writing MITM HTTP/S proxy',
         url='https://github.com/internetarchive/warcprox',
         author='Noah Levitt',
@@ -61,9 +49,8 @@ setuptools.setup(
         license='GPL',
         packages=['warcprox'],
         install_requires=deps,
+        setup_requires=['pytest-runner'],
         tests_require=['mock', 'pytest', 'warcio'],
-        cmdclass = {'test': PyTest},
-        test_suite='warcprox.tests',
         entry_points={
             'console_scripts': [
                 'warcprox=warcprox.main:main',
