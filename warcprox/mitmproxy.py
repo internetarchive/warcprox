@@ -260,8 +260,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 context.verify_mode = ssl.CERT_NONE
                 context.ciphers = DEFAULT_CIPHERS
                 self._remote_server_sock = context.wrap_socket(
-                        self._remote_server_sock, server_hostname=self.hostname,
-                        )
+                        self._remote_server_sock, server_hostname=self.hostname)
             except AttributeError:
                 try:
                     self._remote_server_sock = ssl.wrap_socket(
