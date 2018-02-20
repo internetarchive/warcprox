@@ -1224,10 +1224,16 @@ def test_limit_large_resource(archiving_proxies, http_daemon, warcprox_):
     soon as it passes the 200000 limit. As warcprox read() chunk size is 65536,
     the expected result size is 65536*4=262144.
     """
+    urls_before = warcprox_.proxy.running_stats.urls
+
     url = 'http://localhost:%s/300k-content' % http_daemon.server_port
     response = requests.get(
         url, proxies=archiving_proxies, verify=False, timeout=10)
     assert len(response.content) == 262144
+
+    # wait for processing of this url to finish so that it doesn't interfere
+    # with subsequent tests
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
 
 def test_method_filter(
         warcprox_, https_daemon, http_daemon, archiving_proxies,
