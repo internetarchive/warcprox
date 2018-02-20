@@ -181,6 +181,12 @@ class _TestHttpRequestHandler(http_server.BaseHTTPRequestHandler):
                     +  b'Content-Type: text/plain\r\n'
                     +  b'\r\n')
             payload = b'This response is missing a Content-Length http header.'
+        elif self.path == '/300k-content':
+            payload = b'0123456789' * 30000
+            headers = (b'HTTP/1.1 200 OK\r\n'
+                    +  b'Content-Type: text/plain\r\n'
+                    +  b'Content-Length: ' + str(len(payload)).encode('ascii') + b'\r\n'
+                    +  b'\r\n')
         elif self.path.startswith('/test_payload_digest-'):
             content_body = (
                     b'Hello. How are you. I am the test_payload_digest '
@@ -365,7 +371,8 @@ def warcprox_(request):
             '--playback-port=0',
             '--onion-tor-socks-proxy=localhost:9050',
             '--crawl-log-dir=crawl-logs',
-            '--socket-timeout=4']
+            '--socket-timeout=4',
+            '--max-resource-size=200000']
     if request.config.getoption('--rethinkdb-dedup-url'):
         argv.append('--rethinkdb-dedup-url=%s' % request.config.getoption('--rethinkdb-dedup-url'))
         # test these here only
@@ -1210,6 +1217,17 @@ def test_missing_content_length(archiving_proxies, http_daemon, https_daemon, wa
 
     # wait for postfetch chain
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 2)
+
+def test_limit_large_resource(archiving_proxies, http_daemon, warcprox_):
+    """We try to load a 300k response but we use --max-resource-size=200000 in
+    `warcprox_` so it will be truncated. We expect it to limit the result as
+    soon as it passes the 200000 limit. As warcprox read() chunk size is 65536,
+    the expected result size is 65536*4=262144.
+    """
+    url = 'http://localhost:%s/300k-content' % http_daemon.server_port
+    response = requests.get(
+        url, proxies=archiving_proxies, verify=False, timeout=10)
+    assert len(response.content) == 262144
 
 def test_method_filter(
         warcprox_, https_daemon, http_daemon, archiving_proxies,

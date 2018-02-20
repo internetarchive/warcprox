@@ -221,7 +221,8 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 timestamp=timestamp, host=self.hostname,
                 duration=datetime.datetime.utcnow()-timestamp,
                 referer=self.headers.get('referer'),
-                payload_digest=prox_rec_res.payload_digest)
+                payload_digest=prox_rec_res.payload_digest,
+                truncated=prox_rec_res.truncated)
         self.server.recorded_url_q.put(recorded_url)
 
         return recorded_url
@@ -330,7 +331,7 @@ class RecordedUrl:
             warcprox_meta=None, content_type=None, custom_type=None,
             status=None, size=None, client_ip=None, method=None,
             timestamp=None, host=None, duration=None, referer=None,
-            payload_digest=None, warc_records=None):
+            payload_digest=None, truncated=None, warc_records=None):
         # XXX should test what happens with non-ascii url (when does
         # url-encoding happen?)
         if type(url) is not bytes:
@@ -369,6 +370,7 @@ class RecordedUrl:
         self.duration = duration
         self.referer = referer
         self.payload_digest = payload_digest
+        self.truncated = truncated
         self.warc_records = warc_records
 
 # inherit from object so that multiple inheritance from this class works
@@ -399,6 +401,8 @@ class SingleThreadedWarcProxy(http_server.HTTPServer, object):
 
         if options.socket_timeout:
             WarcProxyHandler._socket_timeout = options.socket_timeout
+        if options.max_resource_size:
+            WarcProxyHandler._max_resource_size = options.max_resource_size
 
         http_server.HTTPServer.__init__(
                 self, server_address, WarcProxyHandler, bind_and_activate=True)
