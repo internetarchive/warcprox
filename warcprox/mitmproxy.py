@@ -161,6 +161,7 @@ class ProxyingRecordingHTTPResponse(http_client.HTTPResponse):
         self.fp = self.recorder
 
         self.payload_digest = None
+        self.truncated = None
 
     def begin(self, extra_response_headers={}):
         http_client.HTTPResponse.begin(self)  # reads status line, headers
@@ -207,6 +208,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
     '''
     logger = logging.getLogger("warcprox.mitmproxy.MitmProxyHandler")
     _socket_timeout = 60
+    _max_resource_size = None
 
     def __init__(self, request, client_address, server):
         threading.current_thread().name = 'MitmProxyHandler(tid={},started={},client={}:{})'.format(warcprox.gettid(), datetime.datetime.utcnow().isoformat(), client_address[0], client_address[1])
@@ -431,6 +433,13 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             buf = prox_rec_res.read(65536)
             while buf != b'':
                 buf = prox_rec_res.read(65536)
+                if self._max_resource_size:
+                    if prox_rec_res.recorder.len > self._max_resource_size:
+                        prox_rec_res.truncated = b'length'
+                        self.logger.error(
+                            'Max resource size %d bytes exceeded for URL %s',
+                            self._max_resource_size, self.url)
+                        break
 
             self.log_request(prox_rec_res.status, prox_rec_res.recorder.len)
         finally:

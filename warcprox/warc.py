@@ -67,7 +67,8 @@ class WarcRecordBuilder:
                     content_type=hanzo.httptools.ResponseMessage.CONTENT_TYPE,
                     remote_ip=recorded_url.remote_ip,
                     payload_digest=warcprox.digest_str(
-                        recorded_url.payload_digest, self.base32))
+                        recorded_url.payload_digest, self.base32),
+                    truncated=recorded_url.truncated)
 
     def build_warc_records(self, recorded_url):
         """Returns a tuple of hanzo.warctools.warc.WarcRecord (principal_record, ...)"""
@@ -91,7 +92,7 @@ class WarcRecordBuilder:
     def build_warc_record(self, url, warc_date=None, recorder=None, data=None,
         concurrent_to=None, warc_type=None, content_type=None, remote_ip=None,
         profile=None, refers_to=None, refers_to_target_uri=None,
-        refers_to_date=None, payload_digest=None):
+        refers_to_date=None, payload_digest=None, truncated=None):
 
         if warc_date is None:
             warc_date = warctools.warc.warc_datetime_str(datetime.datetime.utcnow())
@@ -120,6 +121,9 @@ class WarcRecordBuilder:
             headers.append((warctools.WarcRecord.CONTENT_TYPE, content_type))
         if payload_digest is not None:
             headers.append((warctools.WarcRecord.PAYLOAD_DIGEST, payload_digest))
+        # truncated value may be 'length' or 'time'
+        if truncated is not None:
+            headers.append((b'WARC-Truncated', truncated))
 
         if recorder is not None:
             headers.append((warctools.WarcRecord.CONTENT_LENGTH, str(len(recorder)).encode('latin1')))
