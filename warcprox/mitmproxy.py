@@ -206,6 +206,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
     man-in-the-middle in order to peek at the content of https transactions,
     and records the bytes in transit as it proxies them.
     '''
+    protocol_version = 'HTTP/1.1'
     logger = logging.getLogger("warcprox.mitmproxy.MitmProxyHandler")
     _socket_timeout = 60
     _max_resource_size = None
