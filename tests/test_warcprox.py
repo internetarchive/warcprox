@@ -1176,6 +1176,13 @@ def test_tor_onion(archiving_proxies, warcprox_):
     # wait for postfetch chain
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 2)
 
+def test_do_not_archive(warcprox_):
+    recorded_url = warcprox.RecordedUrl
+    assert warcprox_._should_archive(recorded_url) == True
+
+    recorded_url.do_not_archive = True
+    assert warcprox_._should_archive(recorded_url) == False
+
 def test_missing_content_length(archiving_proxies, http_daemon, https_daemon, warcprox_):
     urls_before = warcprox_.proxy.running_stats.urls
 
@@ -1427,7 +1434,7 @@ def test_controller_with_defaults():
     assert wwp.writer_pool.default_warc_writer.record_builder.digest_algorithm == 'sha1'
 
 
-class TestEarlyPlugin(warcprox.BasePostfetchProcessor):
+class MyEarlyPlugin(warcprox.BasePostfetchProcessor):
     CHAIN_POSITION = 'early'
 
     def _get_process_put(self):
@@ -1440,7 +1447,7 @@ def test_load_plugin():
         'warcprox.stats.RunningStats',
         'warcprox.BaseStandardPostfetchProcessor',
         'warcprox.BaseBatchPostfetchProcessor',
-        '__main__.TestEarlyPlugin',])
+        '__main__.MyEarlyPlugin',])
     controller = warcprox.controller.WarcproxController(options)
     assert isinstance(
             controller._postfetch_chain[-1],
@@ -1463,7 +1470,7 @@ def test_load_plugin():
             warcprox.stats.RunningStats)
     assert isinstance(
             controller._postfetch_chain[-5],
-            __main__.TestEarlyPlugin)
+            __main__.MyEarlyPlugin)
 
 def test_choose_a_port_for_me(warcprox_):
     options = warcprox.Options()
