@@ -1176,13 +1176,6 @@ def test_tor_onion(archiving_proxies, warcprox_):
     # wait for postfetch chain
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 2)
 
-def test_do_not_archive(warcprox_):
-    recorded_url = warcprox.RecordedUrl
-    assert warcprox_._should_archive(recorded_url) == True
-
-    recorded_url.do_not_archive = True
-    assert warcprox_._should_archive(recorded_url) == False
-
 def test_missing_content_length(archiving_proxies, http_daemon, https_daemon, warcprox_):
     urls_before = warcprox_.proxy.running_stats.urls
 
