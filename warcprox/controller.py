@@ -213,7 +213,7 @@ class WarcproxController(object):
                         warcprox.ListenerPostfetchProcessor(
                             plugin, self.options))
             elif hasattr(plugin, 'CHAIN_POSITION') and plugin.CHAIN_POSITION == 'early':
-                self._postfetch_chain.insert(0, plugin) # or insert early but later than 0?
+                self._postfetch_chain.insert(0, plugin)
             else:
                 self._postfetch_chain.append(plugin)
 
