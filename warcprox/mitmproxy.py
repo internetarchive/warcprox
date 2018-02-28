@@ -64,7 +64,6 @@ import urlcanon
 import time
 import collections
 import cProfile
-from urllib3.util.ssl_ import DEFAULT_CIPHERS
 
 class ProxyingRecorder(object):
     """
@@ -260,7 +259,6 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 context = ssl.create_default_context()
                 context.check_hostname = False
                 context.verify_mode = ssl.CERT_NONE
-                context.ciphers = DEFAULT_CIPHERS
                 self._remote_server_sock = context.wrap_socket(
                         self._remote_server_sock, server_hostname=self.hostname)
             except AttributeError:
@@ -278,7 +276,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         return self._remote_server_sock
 
     def _transition_to_ssl(self):
-        certfile = self.server.ca.cert_for_host(self.hostname)
+        certfile = self.server.ca.get_wildcard_cert(self.hostname)
         self.request = self.connection = ssl.wrap_socket(
                 self.connection, server_side=True, certfile=certfile)
         # logging.info('self.hostname=%s certfile=%s', self.hostname, certfile)

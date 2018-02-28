@@ -169,9 +169,12 @@ class TroughClient(object):
     def write(self, segment_id, sql_tmpl, values=(), schema_id='default'):
         write_url = self.write_url(segment_id, schema_id)
         sql = sql_tmpl % tuple(self.sql_value(v) for v in values)
+        sql_bytes = sql.encode('utf-8')
 
         try:
-            response = requests.post(write_url, sql, timeout=600)
+            response = requests.post(
+                    write_url, sql_bytes, timeout=600,
+                    headers={'content-type': 'application/sql;charset=utf-8'})
             if response.status_code != 200:
                 raise Exception(
                     'Received %s: %r in response to POST %s with data %r' % (
@@ -199,8 +202,11 @@ class TroughClient(object):
         if not read_url:
             return None
         sql = sql_tmpl % tuple(self.sql_value(v) for v in values)
+        sql_bytes = sql.encode('utf-8')
         try:
-            response = requests.post(read_url, sql, timeout=600)
+            response = requests.post(
+                    read_url, sql_bytes, timeout=600,
+                    headers={'content-type': 'application/sql;charset=utf-8'})
         except:
             self._read_url_cache.pop(segment_id, None)
             self.logger.error(

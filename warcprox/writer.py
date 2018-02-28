@@ -37,11 +37,12 @@ except ImportError:
 import contextlib
 
 class _OneWritableWarc:
-    logger = logging.getLogger('warcprox.writer._OneWritableWarc')
-
     '''
     Utility class used by WarcWriter
     '''
+
+    logger = logging.getLogger('warcprox.writer._OneWritableWarc')
+
     def __init__(self, options=warcprox.Options(), randomtoken='0'):
         self.f = None
         self.path = None
