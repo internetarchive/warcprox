@@ -331,7 +331,8 @@ class RecordedUrl:
             warcprox_meta=None, content_type=None, custom_type=None,
             status=None, size=None, client_ip=None, method=None,
             timestamp=None, host=None, duration=None, referer=None,
-            payload_digest=None, truncated=None, warc_records=None):
+            payload_digest=None, truncated=None, warc_records=None,
+            do_not_archive=False):
         # XXX should test what happens with non-ascii url (when does
         # url-encoding happen?)
         if type(url) is not bytes:
@@ -372,6 +373,7 @@ class RecordedUrl:
         self.payload_digest = payload_digest
         self.truncated = truncated
         self.warc_records = warc_records
+        self.do_not_archive = do_not_archive
 
 # inherit from object so that multiple inheritance from this class works
 # properly in python 2
