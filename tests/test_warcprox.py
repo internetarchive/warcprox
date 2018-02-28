@@ -1427,15 +1427,9 @@ def test_controller_with_defaults():
     assert wwp.writer_pool.default_warc_writer.record_builder.digest_algorithm == 'sha1'
 
 
-<<<<<<< HEAD
-class MyEarlyPlugin(warcprox.BaseStandardPostfetchProcessor):
-    CHAIN_POSITION = 'early'
-    def _process_put(self):
-=======
 class EarlyPlugin(warcprox.BaseStandardPostfetchProcessor):
     CHAIN_POSITION = 'early'
     def _process_url(self):
->>>>>>> do_not_archive
         pass
 
 
