@@ -45,9 +45,12 @@ class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
         self.batch = set()
 
     def _get_process_put(self):
-        recorded_url = self.inq.get(block=True, timeout=0.5)
-        self.batch.add(recorded_url)
-        self.pool.submit(self._process_url, recorded_url)
+        try:
+            recorded_url = self.inq.get(block=True, timeout=0.5)
+            self.batch.add(recorded_url)
+            self.pool.submit(self._process_url, recorded_url)
+        finally:
+            self.writer_pool.maybe_idle_rollover()
 
     def _process_url(self, recorded_url):
         try:
@@ -67,7 +70,6 @@ class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
             self.batch.remove(recorded_url)
             if self.outq:
                 self.outq.put(recorded_url)
-            self.writer_pool.maybe_idle_rollover()
 
     def _filter_accepts(self, recorded_url):
         if not self.method_filter:
