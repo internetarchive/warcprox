@@ -163,6 +163,47 @@ def test_special_dont_write_prefix():
             wwt.join()
 
 
+def test_do_not_archive():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        logging.debug('cd %s', tmpdir)
+        os.chdir(tmpdir)
+
+        wwt = warcprox.writerthread.WarcWriterProcessor(
+                Options(writer_threads=1))
+        wwt.inq = warcprox.TimestampedQueue(maxsize=1)
+        wwt.outq = warcprox.TimestampedQueue(maxsize=1)
+        try:
+            wwt.start()
+            # to be written -- default do_not_archive False
+            recorder = ProxyingRecorder(io.BytesIO(b'some payload'), None)
+            recorder.read()
+            wwt.inq.put(RecordedUrl(
+                url='http://example.com/yes', content_type='text/plain',
+                status=200, client_ip='127.0.0.2', request_data=b'abc',
+                response_recorder=recorder, remote_ip='127.0.0.3',
+                timestamp=datetime.utcnow(),
+                payload_digest=recorder.block_digest))
+            # not to be written -- do_not_archive set True
+            recorder = ProxyingRecorder(io.BytesIO(b'some payload'), None)
+            recorder.read()
+            wwt.inq.put(RecordedUrl(
+                url='http://example.com/no', content_type='text/plain',
+                status=200, client_ip='127.0.0.2', request_data=b'abc',
+                response_recorder=recorder, remote_ip='127.0.0.3',
+                timestamp=datetime.utcnow(),
+                payload_digest=recorder.block_digest,
+                warcprox_meta={'warc-prefix': '-'},
+                do_not_archive=True))
+            recorded_url = wwt.outq.get(timeout=10)
+            assert recorded_url.warc_records
+            recorded_url = wwt.outq.get(timeout=10)
+            assert not recorded_url.warc_records
+            assert wwt.outq.empty()
+        finally:
+            wwt.stop.set()
+            wwt.join()
+
+
 def test_warc_writer_filename(tmpdir):
     """Test if WarcWriter is writing WARC files with custom filenames.
     """
