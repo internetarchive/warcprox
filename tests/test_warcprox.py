@@ -1427,11 +1427,10 @@ def test_controller_with_defaults():
     assert wwp.writer_pool.default_warc_writer.record_builder.digest_algorithm == 'sha1'
 
 
-class MyEarlyPlugin(warcprox.BasePostfetchProcessor):
+class MyEarlyPlugin(warcprox.BaseStandardPostfetchProcessor):
     CHAIN_POSITION = 'early'
 
     def _get_process_put(self):
-        recorded_url = self.inq.get(block=True, timeout=0.5)
         pass
 
 
@@ -1461,9 +1460,9 @@ def test_load_plugin():
     assert isinstance(
             controller._postfetch_chain[-4].listener,
             warcprox.stats.RunningStats)
-    assert isinstance(
+    assert issubclass(
             controller._postfetch_chain[-5],
-            (__name__, MyEarlyPlugin.__name__))
+            warcprox.BaseStandardPostfetchProcessor)
 
 def test_choose_a_port_for_me(warcprox_):
     options = warcprox.Options()
