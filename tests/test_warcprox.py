@@ -1459,10 +1459,9 @@ def test_load_plugin():
     assert isinstance(
             controller._postfetch_chain[-4].listener,
             warcprox.stats.RunningStats)
-    # EarlyPlugin
     assert isinstance(
             controller._postfetch_chain[0],
-            warcprox.BaseStandardPostfetchProcessor)
+            EarlyPlugin)
 
 def test_choose_a_port_for_me(warcprox_):
     options = warcprox.Options()
