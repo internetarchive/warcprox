@@ -282,7 +282,6 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                                 "upgrading to python >= 2.7.9 or python 3.4",
                                 self.hostname)
                     raise
-
         return self._remote_server_conn.sock
 
     def _transition_to_ssl(self):
@@ -458,7 +457,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             if prox_rec_res:
                 prox_rec_res.close()
             if connection_is_fine:
-                self._conn_pool._put_conn(self._remote_conn)
+                self._conn_pool._put_conn(self._remote_server_conn)
             else:
                 self._remote_server_conn.sock.close()
 
