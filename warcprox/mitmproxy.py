@@ -64,6 +64,7 @@ import urlcanon
 import time
 import collections
 import cProfile
+from urllib3.util import is_connection_dropped
 
 class ProxyingRecorder(object):
     """
@@ -456,7 +457,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             # put it back in the pool to reuse it later.
             if prox_rec_res:
                 prox_rec_res.close()
-            if connection_is_fine:
+            if connection_is_fine and not is_connection_dropped(self._remote_server_conn):
                 self._conn_pool._put_conn(self._remote_server_conn)
             else:
                 self._remote_server_conn.sock.close()
