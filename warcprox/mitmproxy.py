@@ -65,8 +65,6 @@ import time
 import collections
 import cProfile
 
-
-
 class ProxyingRecorder(object):
     """
     Wraps a socket._fileobject, recording the bytes as they are read,
