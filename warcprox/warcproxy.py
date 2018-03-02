@@ -43,6 +43,7 @@ import warcprox
 import datetime
 import urlcanon
 import os
+from urllib3 import PoolManager
 
 class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
     '''
@@ -173,7 +174,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         limits and block rules in the Warcprox-Meta request header, if any.
         Raises `warcprox.RequestBlockedByRule` if a rule has been enforced.
         Otherwise calls `MitmProxyHandler._connect_to_remote_server`, which
-        initializes `self._remote_server_sock`.
+        initializes `self._remote_server_conn`.
         '''
         if 'Warcprox-Meta' in self.headers:
             warcprox_meta = json.loads(self.headers['Warcprox-Meta'])
@@ -192,7 +193,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
             warcprox_meta = json.loads(raw_warcprox_meta)
             del self.headers['Warcprox-Meta']
 
-        remote_ip = self._remote_server_sock.getpeername()[0]
+        remote_ip = self._remote_server_conn.sock.getpeername()[0]
         timestamp = datetime.datetime.utcnow()
         extra_response_headers = {}
         if warcprox_meta and 'accept' in warcprox_meta and \
@@ -387,7 +388,7 @@ class SingleThreadedWarcProxy(http_server.HTTPServer, object):
         self.status_callback = status_callback
         self.stats_db = stats_db
         self.options = options
-
+        self.remote_connection_pool = PoolManager(num_pools=2000)
         server_address = (
                 options.address or 'localhost',
                 options.port if options.port is not None else 8000)
