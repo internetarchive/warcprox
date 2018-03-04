@@ -462,7 +462,7 @@ class PooledMixIn(socketserver.ThreadingMixIn):
         If max_threads is not supplied, calculates a reasonable value based
         on system resource limits.
         '''
-        self.active_requests = set()
+        self.active_requests = 0
         self.unaccepted_requests = 0
         if not max_threads:
             # man getrlimit: "RLIMIT_NPROC The maximum number of processes (or,
@@ -495,20 +495,22 @@ class PooledMixIn(socketserver.ThreadingMixIn):
             result = {}
         result.update({
             'threads': self.pool._max_workers,
-            'active_requests': len(self.active_requests),
+            'active_requests': self.active_requests,
             'unaccepted_requests': self.unaccepted_requests})
         return result
 
+    def reduct_active_requests(self):
+        self.active_requests -= 1
+
     def process_request(self, request, client_address):
-        self.active_requests.add(request)
+        self.active_requests += 1
         future = self.pool.submit(
                 self.process_request_thread, request, client_address)
-        future.add_done_callback(
-                lambda f: self.active_requests.discard(request))
+        future.add_done_callback(lambda f: self.reduct_active_requests())
         if future.done():
             # avoid theoretical timing issue, in case process_request_thread
             # managed to finish before future.add_done_callback() ran
-            self.active_requests.discard(request)
+            self.active_requests -= 1
 
     def get_request(self):
         '''
@@ -526,15 +528,11 @@ class PooledMixIn(socketserver.ThreadingMixIn):
         start = time.time()
         self.logger.trace(
                 'someone is connecting active_requests=%s',
-                len(self.active_requests))
-        self.unaccepted_requests += 1
-        while len(self.active_requests) > self.max_threads:
-            time.sleep(0.05)
+                self.active_requests)
         res = self.socket.accept()
         self.logger.trace(
                 'accepted after %.1f sec active_requests=%s socket=%s',
-                time.time() - start, len(self.active_requests), res[0])
-        self.unaccepted_requests -= 1
+                time.time() - start, self.active_requests, res[0])
         return res
 
 class MitmProxy(http_server.HTTPServer):
