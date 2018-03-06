@@ -46,7 +46,7 @@ have a method `notify(self, recorded_url, records)` or should subclass
 `warcprox.BasePostfetchProcessor`. More than one plugin can be configured by
 specifying `--plugin` multiples times.
 
-XXX example?
+`A minimal example <https://github.com/internetarchive/warcprox/blob/318405e795ac0ab8760988a1a482cf0a17697148/warcprox/__init__.py#L165>`__
 
 Usage
 ~~~~~
