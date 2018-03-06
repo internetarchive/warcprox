@@ -46,7 +46,7 @@ have a method `notify(self, recorded_url, records)` or should subclass
 `warcprox.BasePostfetchProcessor`. More than one plugin can be configured by
 specifying `--plugin` multiples times.
 
-XXX example?
+TODO: Add examples...
 
 Usage
 ~~~~~
