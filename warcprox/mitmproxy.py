@@ -250,7 +250,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             pool_kwargs={'maxsize': 100})
 
         self._remote_server_conn = self._conn_pool._get_conn()
-        if self._remote_server_conn.sock is None:
+        if is_connection_dropped(self._remote_server_conn):
             if self.onion_tor_socks_proxy_host and self.hostname.endswith('.onion'):
                 self.logger.info(
                         "using tor socks proxy at %s:%s to connect to %s",
