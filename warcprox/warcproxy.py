@@ -405,6 +405,8 @@ class SingleThreadedWarcProxy(http_server.HTTPServer, object):
             WarcProxyHandler._socket_timeout = options.socket_timeout
         if options.max_resource_size:
             WarcProxyHandler._max_resource_size = options.max_resource_size
+        if options.tmp_file_max_memory_size:
+            WarcProxyHandler._tmp_file_max_memory_size = options.tmp_file_max_memory_size
 
         http_server.HTTPServer.__init__(
                 self, server_address, WarcProxyHandler, bind_and_activate=True)

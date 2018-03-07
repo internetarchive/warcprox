@@ -166,6 +166,10 @@ def _build_arg_parser(prog='warcprox'):
     arg_parser.add_argument(
             '--socket-timeout', dest='socket_timeout', type=float,
             default=None, help=argparse.SUPPRESS)
+    # Increasing this value increases memory usage but reduces /tmp disk I/O.
+    arg_parser.add_argument(
+            '--tmp-file-max-memory-size', dest='tmp_file_max_memory_size',
+            type=int, default=512*1024, help=argparse.SUPPRESS)
     arg_parser.add_argument(
             '--max-resource-size', dest='max_resource_size', type=int,
             default=None, help='maximum resource size limit in bytes')
