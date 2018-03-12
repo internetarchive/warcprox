@@ -73,10 +73,11 @@ class ProxyingRecorder(object):
 
     logger = logging.getLogger("warcprox.mitmproxy.ProxyingRecorder")
 
-    def __init__(self, fp, proxy_client, digest_algorithm='sha1', url=None):
+    def __init__(self, fp, proxy_client, digest_algorithm='sha1', url=None,
+                 tmp_file_max_memory_size=524288):
         self.fp = fp
         # "The file has no name, and will cease to exist when it is closed."
-        self.tempfile = tempfile.SpooledTemporaryFile(max_size=512*1024)
+        self.tempfile = tempfile.SpooledTemporaryFile(max_size=tmp_file_max_memory_size)
         self.digest_algorithm = digest_algorithm
         self.block_digest = hashlib.new(digest_algorithm)
         self.payload_offset = None
@@ -146,7 +147,7 @@ class ProxyingRecordingHTTPResponse(http_client.HTTPResponse):
     '''
     def __init__(
             self, sock, debuglevel=0, method=None, proxy_client=None,
-            digest_algorithm='sha1', url=None):
+            digest_algorithm='sha1', url=None, tmp_file_max_memory_size=None):
         http_client.HTTPResponse.__init__(
                 self, sock, debuglevel=debuglevel, method=method)
         self.proxy_client = proxy_client
@@ -156,7 +157,8 @@ class ProxyingRecordingHTTPResponse(http_client.HTTPResponse):
         # Keep around extra reference to self.fp because HTTPResponse sets
         # self.fp=None after it finishes reading, but we still need it
         self.recorder = ProxyingRecorder(
-                self.fp, proxy_client, digest_algorithm, url=url)
+                self.fp, proxy_client, digest_algorithm, url=url,
+                tmp_file_max_memory_size=tmp_file_max_memory_size)
         self.fp = self.recorder
 
         self.payload_digest = None
@@ -208,6 +210,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
     logger = logging.getLogger("warcprox.mitmproxy.MitmProxyHandler")
     _socket_timeout = 60
     _max_resource_size = None
+    _tmp_file_max_memory_size = 512 * 1024
 
     def __init__(self, request, client_address, server):
         threading.current_thread().name = 'MitmProxyHandler(tid={},started={},client={}:{})'.format(warcprox.gettid(), datetime.datetime.utcnow().isoformat(), client_address[0], client_address[1])
@@ -425,7 +428,8 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             prox_rec_res = ProxyingRecordingHTTPResponse(
                     self._remote_server_sock, proxy_client=self.connection,
                     digest_algorithm=self.server.digest_algorithm,
-                    url=self.url, method=self.command)
+                    url=self.url, method=self.command,
+                    tmp_file_max_memory_size=self._tmp_file_max_memory_size)
             prox_rec_res.begin(extra_response_headers=extra_response_headers)
 
             buf = prox_rec_res.read(65536)
