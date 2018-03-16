@@ -176,7 +176,7 @@ class ProxyingRecordingHTTPResponse(http_client.HTTPResponse):
 
         for k,v in self.msg.items():
             if k.lower() not in (
-                    'connection', 'proxy-connection', 'keep-alive',
+                    'connection', 'proxy-connection',
                     'proxy-authenticate', 'proxy-authorization', 'upgrade',
                     'strict-transport-security'):
                 status_and_headers += '{}: {}\r\n'.format(k, v)
@@ -247,7 +247,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         '''
         self._conn_pool = self.server.remote_connection_pool.connection_from_host(
             host=self.hostname, port=int(self.port), scheme='http',
-            pool_kwargs={'maxsize': 100})
+            pool_kwargs={'maxsize': 30})
 
         self._remote_server_conn = self._conn_pool._get_conn()
         if is_connection_dropped(self._remote_server_conn):
@@ -257,7 +257,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                         self.onion_tor_socks_proxy_host,
                         self.onion_tor_socks_proxy_port or 1080, self.hostname)
                 self._remote_server_conn.sock = socks.socksocket()
-                self._remote_server_sock.set_proxy(
+                self._remote_server_conn.sock.set_proxy(
                         socks.SOCKS5, addr=self.onion_tor_socks_proxy_host,
                         port=self.onion_tor_socks_proxy_port, rdns=True)
             else:
