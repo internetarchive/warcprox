@@ -176,7 +176,7 @@ class ProxyingRecordingHTTPResponse(http_client.HTTPResponse):
 
         for k,v in self.msg.items():
             if k.lower() not in (
-                    'connection', 'proxy-connection',
+                    'connection', 'proxy-connection', 'keep-alive',
                     'proxy-authenticate', 'proxy-authorization', 'upgrade',
                     'strict-transport-security'):
                 status_and_headers += '{}: {}\r\n'.format(k, v)
@@ -247,7 +247,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         '''
         self._conn_pool = self.server.remote_connection_pool.connection_from_host(
             host=self.hostname, port=int(self.port), scheme='http',
-            pool_kwargs={'maxsize': 30})
+            pool_kwargs={'maxsize': 6})
 
         self._remote_server_conn = self._conn_pool._get_conn()
         if is_connection_dropped(self._remote_server_conn):
@@ -426,7 +426,6 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             req += self.rfile.read(int(self.headers['Content-Length']))
 
         prox_rec_res = None
-        connection_is_fine = False
         try:
             self.logger.debug('sending to remote server req=%r', req)
 
@@ -450,17 +449,16 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                             self._max_resource_size, self.url)
                         break
 
-            connection_is_fine = True
             self.log_request(prox_rec_res.status, prox_rec_res.recorder.len)
-        finally:
             # Let's close off the remote end. If remote connection is fine,
             # put it back in the pool to reuse it later.
+            if not is_connection_dropped(self._remote_server_conn):
+                self._conn_pool._put_conn(self._remote_server_conn)
+        except:
+            self._remote_server_conn.sock.close()
+        finally:
             if prox_rec_res:
                 prox_rec_res.close()
-            if connection_is_fine and not is_connection_dropped(self._remote_server_conn):
-                self._conn_pool._put_conn(self._remote_server_conn)
-            else:
-                self._remote_server_conn.sock.close()
 
         return req, prox_rec_res
 

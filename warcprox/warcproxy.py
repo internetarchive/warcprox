@@ -389,7 +389,7 @@ class SingleThreadedWarcProxy(http_server.HTTPServer, object):
         self.stats_db = stats_db
         self.options = options
         self.remote_connection_pool = PoolManager(
-            num_pools=max(options.max_threads, 500) if options.max_threads else 500)
+            num_pools=max(round(options.max_threads / 6), 200) if options.max_threads else 200)
         server_address = (
                 options.address or 'localhost',
                 options.port if options.port is not None else 8000)
