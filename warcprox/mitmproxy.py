@@ -64,6 +64,7 @@ import urlcanon
 import time
 import collections
 import cProfile
+from urllib3.util import is_connection_dropped
 
 class ProxyingRecorder(object):
     """
@@ -73,10 +74,11 @@ class ProxyingRecorder(object):
 
     logger = logging.getLogger("warcprox.mitmproxy.ProxyingRecorder")
 
-    def __init__(self, fp, proxy_client, digest_algorithm='sha1', url=None):
+    def __init__(self, fp, proxy_client, digest_algorithm='sha1', url=None,
+                 tmp_file_max_memory_size=524288):
         self.fp = fp
         # "The file has no name, and will cease to exist when it is closed."
-        self.tempfile = tempfile.SpooledTemporaryFile(max_size=512*1024)
+        self.tempfile = tempfile.SpooledTemporaryFile(max_size=tmp_file_max_memory_size)
         self.digest_algorithm = digest_algorithm
         self.block_digest = hashlib.new(digest_algorithm)
         self.payload_offset = None
@@ -146,7 +148,7 @@ class ProxyingRecordingHTTPResponse(http_client.HTTPResponse):
     '''
     def __init__(
             self, sock, debuglevel=0, method=None, proxy_client=None,
-            digest_algorithm='sha1', url=None):
+            digest_algorithm='sha1', url=None, tmp_file_max_memory_size=None):
         http_client.HTTPResponse.__init__(
                 self, sock, debuglevel=debuglevel, method=method)
         self.proxy_client = proxy_client
@@ -156,7 +158,8 @@ class ProxyingRecordingHTTPResponse(http_client.HTTPResponse):
         # Keep around extra reference to self.fp because HTTPResponse sets
         # self.fp=None after it finishes reading, but we still need it
         self.recorder = ProxyingRecorder(
-                self.fp, proxy_client, digest_algorithm, url=url)
+                self.fp, proxy_client, digest_algorithm, url=url,
+                tmp_file_max_memory_size=tmp_file_max_memory_size)
         self.fp = self.recorder
 
         self.payload_digest = None
@@ -208,6 +211,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
     logger = logging.getLogger("warcprox.mitmproxy.MitmProxyHandler")
     _socket_timeout = 60
     _max_resource_size = None
+    _tmp_file_max_memory_size = 512 * 1024
 
     def __init__(self, request, client_address, server):
         threading.current_thread().name = 'MitmProxyHandler(tid={},started={},client={}:{})'.format(warcprox.gettid(), datetime.datetime.utcnow().isoformat(), client_address[0], client_address[1])
@@ -236,44 +240,55 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         self.hostname = urlcanon.normalize_host(host).decode('ascii')
 
     def _connect_to_remote_server(self):
-        # Connect to destination
-        if self.onion_tor_socks_proxy_host and self.hostname.endswith('.onion'):
-            self.logger.info(
-                    "using tor socks proxy at %s:%s to connect to %s",
-                    self.onion_tor_socks_proxy_host,
-                    self.onion_tor_socks_proxy_port or 1080, self.hostname)
-            self._remote_server_sock = socks.socksocket()
-            self._remote_server_sock.set_proxy(
-                    socks.SOCKS5, addr=self.onion_tor_socks_proxy_host,
-                    port=self.onion_tor_socks_proxy_port, rdns=True)
-        else:
-            self._remote_server_sock = socket.socket()
-            self._remote_server_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        '''
+        Connect to destination.
+        Note that connection_from_host has hard-coded `scheme='http'`
+        to avoid internal urllib3 logic when scheme is https. We handle ssl and
+        socks inside the current method.
+        self._conn_pool._get_conn() will either return an existing connection
+        or a new one. If its new, it needs initialization.
+        '''
+        self._conn_pool = self.server.remote_connection_pool.connection_from_host(
+            host=self.hostname, port=int(self.port), scheme='http',
+            pool_kwargs={'maxsize': 6})
 
-        self._remote_server_sock.settimeout(self._socket_timeout)
-        self._remote_server_sock.connect((self.hostname, int(self.port)))
+        self._remote_server_conn = self._conn_pool._get_conn()
+        if is_connection_dropped(self._remote_server_conn):
+            if self.onion_tor_socks_proxy_host and self.hostname.endswith('.onion'):
+                self.logger.info(
+                        "using tor socks proxy at %s:%s to connect to %s",
+                        self.onion_tor_socks_proxy_host,
+                        self.onion_tor_socks_proxy_port or 1080, self.hostname)
+                self._remote_server_conn.sock = socks.socksocket()
+                self._remote_server_conn.sock.set_proxy(
+                        socks.SOCKS5, addr=self.onion_tor_socks_proxy_host,
+                        port=self.onion_tor_socks_proxy_port, rdns=True)
+                self._remote_server_conn.timeout = self._socket_timeout
+                self._remote_server_conn.sock.connect((self.hostname, int(self.port)))
+            else:
+                self._remote_server_conn.timeout = self._socket_timeout
+                self._remote_server_conn.connect()
 
-        # Wrap socket if SSL is required
-        if self.is_connect:
-            try:
-                context = ssl.create_default_context()
-                context.check_hostname = False
-                context.verify_mode = ssl.CERT_NONE
-                self._remote_server_sock = context.wrap_socket(
-                        self._remote_server_sock, server_hostname=self.hostname)
-            except AttributeError:
+            # Wrap socket if SSL is required
+            if self.is_connect:
                 try:
-                    self._remote_server_sock = ssl.wrap_socket(
-                            self._remote_server_sock)
-                except ssl.SSLError:
-                    self.logger.warn(
-                            "failed to establish ssl connection to %s; python "
-                            "ssl library does not support SNI, considering "
-                            "upgrading to python >= 2.7.9 or python 3.4",
-                            self.hostname)
+                    context = ssl.create_default_context()
+                    context.check_hostname = False
+                    context.verify_mode = ssl.CERT_NONE
+                    self._remote_server_conn.sock = context.wrap_socket(
+                            self._remote_server_conn.sock, server_hostname=self.hostname)
+                except AttributeError:
+                    try:
+                        self._remote_server_conn.sock = ssl.wrap_socket(
+                                self._remote_server_conn.sock)
+                    except ssl.SSLError:
+                        self.logger.warn(
+                                "failed to establish ssl connection to %s; python "
+                                "ssl library does not support SNI, considering "
+                                "upgrading to python >= 2.7.9 or python 3.4",
+                                self.hostname)
                     raise
-
-        return self._remote_server_sock
+        return self._remote_server_conn.sock
 
     def _transition_to_ssl(self):
         certfile = self.server.ca.get_wildcard_cert(self.hostname)
@@ -420,12 +435,13 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             self.logger.debug('sending to remote server req=%r', req)
 
             # Send it down the pipe!
-            self._remote_server_sock.sendall(req)
+            self._remote_server_conn.sock.sendall(req)
 
             prox_rec_res = ProxyingRecordingHTTPResponse(
-                    self._remote_server_sock, proxy_client=self.connection,
+                    self._remote_server_conn.sock, proxy_client=self.connection,
                     digest_algorithm=self.server.digest_algorithm,
-                    url=self.url, method=self.command)
+                    url=self.url, method=self.command,
+                    tmp_file_max_memory_size=self._tmp_file_max_memory_size)
             prox_rec_res.begin(extra_response_headers=extra_response_headers)
 
             buf = prox_rec_res.read(65536)
@@ -440,11 +456,15 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                         break
 
             self.log_request(prox_rec_res.status, prox_rec_res.recorder.len)
+            # Let's close off the remote end. If remote connection is fine,
+            # put it back in the pool to reuse it later.
+            if not is_connection_dropped(self._remote_server_conn):
+                self._conn_pool._put_conn(self._remote_server_conn)
+        except:
+            self._remote_server_conn.sock.close()
         finally:
-            # Let's close off the remote end
             if prox_rec_res:
                 prox_rec_res.close()
-            self._remote_server_sock.close()
 
         return req, prox_rec_res
 

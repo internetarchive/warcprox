@@ -235,7 +235,7 @@ class ListenerPostfetchProcessor(BaseStandardPostfetchProcessor):
                 self.listener.stop()
             except:
                 self.logger.error(
-                        '%s raised exception', listener.stop, exc_info=True)
+                        '%s raised exception', self.listener.stop, exc_info=True)
 
 def timestamp17():
     now = datetime.datetime.utcnow()
