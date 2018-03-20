@@ -260,6 +260,8 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 self._remote_server_conn.sock.set_proxy(
                         socks.SOCKS5, addr=self.onion_tor_socks_proxy_host,
                         port=self.onion_tor_socks_proxy_port, rdns=True)
+                self._remote_server_conn.timeout = self._socket_timeout
+                self._remote_server_conn.sock.connect((self.hostname, int(self.port)))
             else:
                 self._remote_server_conn.timeout = self._socket_timeout
                 self._remote_server_conn.connect()
