@@ -64,6 +64,7 @@ import urlcanon
 import time
 import collections
 import cProfile
+from urllib3.util import is_connection_dropped
 
 class ProxyingRecorder(object):
     """
@@ -239,44 +240,55 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         self.hostname = urlcanon.normalize_host(host).decode('ascii')
 
     def _connect_to_remote_server(self):
-        # Connect to destination
-        if self.onion_tor_socks_proxy_host and self.hostname.endswith('.onion'):
-            self.logger.info(
-                    "using tor socks proxy at %s:%s to connect to %s",
-                    self.onion_tor_socks_proxy_host,
-                    self.onion_tor_socks_proxy_port or 1080, self.hostname)
-            self._remote_server_sock = socks.socksocket()
-            self._remote_server_sock.set_proxy(
-                    socks.SOCKS5, addr=self.onion_tor_socks_proxy_host,
-                    port=self.onion_tor_socks_proxy_port, rdns=True)
-        else:
-            self._remote_server_sock = socket.socket()
-            self._remote_server_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        '''
+        Connect to destination.
+        Note that connection_from_host has hard-coded `scheme='http'`
+        to avoid internal urllib3 logic when scheme is https. We handle ssl and
+        socks inside the current method.
+        self._conn_pool._get_conn() will either return an existing connection
+        or a new one. If its new, it needs initialization.
+        '''
+        self._conn_pool = self.server.remote_connection_pool.connection_from_host(
+            host=self.hostname, port=int(self.port), scheme='http',
+            pool_kwargs={'maxsize': 6})
 
-        self._remote_server_sock.settimeout(self._socket_timeout)
-        self._remote_server_sock.connect((self.hostname, int(self.port)))
+        self._remote_server_conn = self._conn_pool._get_conn()
+        if is_connection_dropped(self._remote_server_conn):
+            if self.onion_tor_socks_proxy_host and self.hostname.endswith('.onion'):
+                self.logger.info(
+                        "using tor socks proxy at %s:%s to connect to %s",
+                        self.onion_tor_socks_proxy_host,
+                        self.onion_tor_socks_proxy_port or 1080, self.hostname)
+                self._remote_server_conn.sock = socks.socksocket()
+                self._remote_server_conn.sock.set_proxy(
+                        socks.SOCKS5, addr=self.onion_tor_socks_proxy_host,
+                        port=self.onion_tor_socks_proxy_port, rdns=True)
+                self._remote_server_conn.timeout = self._socket_timeout
+                self._remote_server_conn.sock.connect((self.hostname, int(self.port)))
+            else:
+                self._remote_server_conn.timeout = self._socket_timeout
+                self._remote_server_conn.connect()
 
-        # Wrap socket if SSL is required
-        if self.is_connect:
-            try:
-                context = ssl.create_default_context()
-                context.check_hostname = False
-                context.verify_mode = ssl.CERT_NONE
-                self._remote_server_sock = context.wrap_socket(
-                        self._remote_server_sock, server_hostname=self.hostname)
-            except AttributeError:
+            # Wrap socket if SSL is required
+            if self.is_connect:
                 try:
-                    self._remote_server_sock = ssl.wrap_socket(
-                            self._remote_server_sock)
-                except ssl.SSLError:
-                    self.logger.warn(
-                            "failed to establish ssl connection to %s; python "
-                            "ssl library does not support SNI, considering "
-                            "upgrading to python >= 2.7.9 or python 3.4",
-                            self.hostname)
+                    context = ssl.create_default_context()
+                    context.check_hostname = False
+                    context.verify_mode = ssl.CERT_NONE
+                    self._remote_server_conn.sock = context.wrap_socket(
+                            self._remote_server_conn.sock, server_hostname=self.hostname)
+                except AttributeError:
+                    try:
+                        self._remote_server_conn.sock = ssl.wrap_socket(
+                                self._remote_server_conn.sock)
+                    except ssl.SSLError:
+                        self.logger.warn(
+                                "failed to establish ssl connection to %s; python "
+                                "ssl library does not support SNI, considering "
+                                "upgrading to python >= 2.7.9 or python 3.4",
+                                self.hostname)
                     raise
-
-        return self._remote_server_sock
+        return self._remote_server_conn.sock
 
     def _transition_to_ssl(self):
         certfile = self.server.ca.get_wildcard_cert(self.hostname)
@@ -423,10 +435,10 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             self.logger.debug('sending to remote server req=%r', req)
 
             # Send it down the pipe!
-            self._remote_server_sock.sendall(req)
+            self._remote_server_conn.sock.sendall(req)
 
             prox_rec_res = ProxyingRecordingHTTPResponse(
-                    self._remote_server_sock, proxy_client=self.connection,
+                    self._remote_server_conn.sock, proxy_client=self.connection,
                     digest_algorithm=self.server.digest_algorithm,
                     url=self.url, method=self.command,
                     tmp_file_max_memory_size=self._tmp_file_max_memory_size)
@@ -444,11 +456,15 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                         break
 
             self.log_request(prox_rec_res.status, prox_rec_res.recorder.len)
+            # Let's close off the remote end. If remote connection is fine,
+            # put it back in the pool to reuse it later.
+            if not is_connection_dropped(self._remote_server_conn):
+                self._conn_pool._put_conn(self._remote_server_conn)
+        except:
+            self._remote_server_conn.sock.close()
         finally:
-            # Let's close off the remote end
             if prox_rec_res:
                 prox_rec_res.close()
-            self._remote_server_sock.close()
 
         return req, prox_rec_res
 
