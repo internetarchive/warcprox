@@ -83,6 +83,8 @@ class ProxyingRecorder(object):
         self.block_digest = hashlib.new(digest_algorithm)
         self.payload_offset = None
         self.proxy_client = proxy_client
+        self.proxy_client.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 65536)
+        self.proxy_client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self._proxy_client_conn_open = bool(self.proxy_client)
         self.len = 0
         self.url = url
