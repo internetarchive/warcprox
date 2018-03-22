@@ -327,7 +327,7 @@ class Document(dict, object):
                             'unexpected result %s from rethinkdb query %s' % (
                                 result, query))
             if not should_insert and self._deletes:
-                query = self.rr.table(self.table).replace(
+                query = self.rr.table(self.table).get(self.pk_value).replace(
                         r.row.without(self._deletes))
                 result = query.run()
                 if result['errors']:   # primary key not found
