@@ -306,3 +306,26 @@ def test_default_values(rr):
     q.refresh()
     assert q.age == 50
 
+def test_dumb_bug_fixed(rr):
+    class Foo(doublethink.Document):
+        pass
+    Foo.table_ensure(rr)
+    f = Foo(rr, {})
+    f.id = 1
+    f.blah = 'toot'
+    f.save()
+    assert list(rr.table(Foo.table).order_by('id').run()) == [
+            {'id': 1, 'blah': 'toot'}]
+
+    g = Foo(rr, {})
+    g.id = 2
+    g.blah = 'moof'
+    g.save()
+    assert list(rr.table(Foo.table).order_by('id').run()) == [
+            {'blah': 'toot', 'id': 1}, {'blah': 'moof', 'id': 2}]
+
+    del f['blah']
+    f.save()
+    assert list(rr.table(Foo.table).order_by('id').run()) == [
+            {'id': 1}, {'blah': 'moof', 'id': 2}]
+
