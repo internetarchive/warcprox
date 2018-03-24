@@ -282,8 +282,14 @@ class CdxServerDedupLoader(warcprox.BaseBatchPostfetchProcessor):
 
     def _get_process_put(self):
         recorded_url = self.inq.get(block=True, timeout=0.5)
-        self.batch.add(recorded_url)
-        self.pool.submit(self._process_url, recorded_url)
+        if (recorded_url.response_recorder
+                and recorded_url.payload_digest
+                and recorded_url.response_recorder.payload_size() > 0):
+            self.batch.add(recorded_url)
+            self.pool.submit(self._process_url, recorded_url)
+        else:
+            if self.outq:
+                self.outq.put(recorded_url)
 
     def _process_url(self, recorded_url):
         try:
