@@ -44,6 +44,10 @@ class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
         self.pool = futures.ThreadPoolExecutor(max_workers=options.writer_threads or 1)
         self.batch = set()
 
+    def _startup(self):
+        self.logger.info('%s threads', self.pool._max_workers)
+        warcprox.BaseStandardPostfetchProcessor._startup(self)
+
     def _get_process_put(self):
         try:
             recorded_url = self.inq.get(block=True, timeout=0.5)

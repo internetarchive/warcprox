@@ -130,7 +130,7 @@ class BasePostfetchProcessor(threading.Thread):
         raise Exception('not implemented')
 
     def _run(self):
-        logging.info('%s starting up', self)
+        self.logger.info('%s starting up', self)
         self._startup()
         while not self.stop.is_set():
             try:
@@ -140,7 +140,7 @@ class BasePostfetchProcessor(threading.Thread):
                     except queue.Empty:
                         if self.stop.is_set():
                             break
-                logging.info('%s shutting down', self)
+                self.logger.info('%s shutting down', self)
                 self._shutdown()
             except Exception as e:
                 if isinstance(e, OSError) and e.errno == 28:
