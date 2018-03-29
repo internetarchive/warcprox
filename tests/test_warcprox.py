@@ -1792,6 +1792,18 @@ def test_payload_digest(warcprox_, http_daemon):
             self.server = warcprox_.proxy
             self.command = 'GET'
             self.connection = mock.Mock()
+    def send_response_only(self, code, message=None):
+        try:
+            warcprox.mitmproxy.MitmProxyHandler.send_response_only(
+                    self, code, message)
+        except:
+            logging.error(
+                    '''self=%r hasattr(self,'_headers_buffer')=%r''', self,
+                    hasattr(self,'_headers_buffer'))
+            if hasattr(self,'_headers_buffer'):
+                logging.error(
+                        'self._headers_buffer=%r', self._headers_buffer)
+            raise
 
     PLAIN_SHA1 = b'sha1:881289333370aa4e3214505f1173423cc5a896b7'
     GZIP_SHA1 = b'sha1:634e25de71ae01edb5c5d9e2e99c4836bbe94129'
