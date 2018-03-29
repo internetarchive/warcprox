@@ -1792,6 +1792,20 @@ def test_payload_digest(warcprox_, http_daemon):
             self.server = warcprox_.proxy
             self.command = 'GET'
             self.connection = mock.Mock()
+        def do_GET(self):
+            try:
+                return super().do_COMMAND()
+            except:
+                logging.debug(
+                        'WTF: vars(http_daemon)=%r', vars(http_daemon), exc_info=True)
+                url = 'http://localhost:%s/a/b' % http_daemon.server_port
+                try:
+                    response = requests.get(url)
+                    logging.debug(
+                            'WTF: %s returned %s', url, response.status_code)
+                except:
+                    logging.debug(
+                            'WTF: exception fetching %s', url, exc_info=True)
 
     PLAIN_SHA1 = b'sha1:881289333370aa4e3214505f1173423cc5a896b7'
     GZIP_SHA1 = b'sha1:634e25de71ae01edb5c5d9e2e99c4836bbe94129'
@@ -1824,21 +1838,7 @@ def test_payload_digest(warcprox_, http_daemon):
 
     # chunked content-type: application/gzip
     mitm = HalfMockedMitm('http://localhost:%s/test_payload_digest-gzip-te-chunked' % http_daemon.server_port)
-    try:
-        req, prox_rec_res = mitm.do_GET()
-    except:
-        logging.debug('WTF: vars(http_daemon)=%r', vars(http_daemon))
-        try:
-            response = requests.get(
-                    'http://localhost:%s/' % http_daemon.server_port)
-            logging.debug(
-                    'WTF: %s returned %s', response.url, response.status_code)
-        except:
-            logging.debug(
-                    'WTF: exception fetching %s',
-                    'http://localhost:%s/' % http_daemon.server_port,
-                    exc_info=True)
-        raise
+    req, prox_rec_res = mitm.do_GET()
     assert warcprox.digest_str(prox_rec_res.payload_digest) == GZIP_SHA1
 
     # chunked content-encoding: gzip
