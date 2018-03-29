@@ -462,6 +462,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 self._conn_pool._put_conn(self._remote_server_conn)
         except:
             self._remote_server_conn.sock.close()
+            raise
         finally:
             if prox_rec_res:
                 prox_rec_res.close()
