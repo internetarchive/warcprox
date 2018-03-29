@@ -387,7 +387,18 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             self.logger.error(
                     'error from remote server(?) %r: %r',
                     self.requestline, e, exc_info=True)
-            self.send_error(502, str(e))
+
+            try:
+                self.send_error(502, str(e))
+            except:
+                self.logger.error(
+                        '''WTF: self=%r hasattr(self,'_headers_buffer')=%r''',
+                        self, hasattr(self,'_headers_buffer'))
+                if hasattr(self,'_headers_buffer'):
+                    self.logger.error(
+                            'WTF: self._headers_buffer=%r', self._headers_buffer)
+                pass
+
             return
 
     def _proxy_request(self, extra_response_headers={}):
