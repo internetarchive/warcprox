@@ -1809,13 +1809,14 @@ def test_payload_digest(warcprox_, http_daemon):
                             'WTF: exception fetching %s', url, exc_info=True)
 
                 try:
-                    response = requests.get(self.path)
+                    url = 'http://localhost:%s%s' % (
+                            http_daemon.server_port, self.path)
+                    response = requests.get(url)
                     logging.debug(
-                            'WTF: %s returned %s', self.path,
-                            response.status_code)
+                            'WTF: %s returned %s', url, response.status_code)
                 except:
                     logging.debug(
-                            'WTF: exception fetching %s', self.path, exc_info=True)
+                            'WTF: exception fetching %s', url, exc_info=True)
             return result
 
     PLAIN_SHA1 = b'sha1:881289333370aa4e3214505f1173423cc5a896b7'
