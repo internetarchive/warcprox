@@ -398,7 +398,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         # but we sometimes see self._headers_buffer == None
         # (This happened before! see commit dc9fdc34125dd2357)
         # Workaround:
-        if hasattr(self._headers_buffer) and not self._headers_buffer:
+        if hasattr(self, '_headers_buffer') and not self._headers_buffer:
             self._headers_buffer = []
         try:
             return http_server.BaseHTTPRequestHandler.send_error(
