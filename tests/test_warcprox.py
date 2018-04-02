@@ -315,6 +315,28 @@ def cert(request):
     finally:
         f.close()
 
+class MonkeyHTTPServer(http_server.HTTPServer):
+    def _handle_request_noblock(self):
+        # XXX warcprox: copied and pasted from socketserver.py, mods noted
+        try:
+            request, client_address = self.get_request()
+        except OSError:
+            # XXX warcprox: begin mods
+            logging.error('self.get_request() raised exception', exc_info=True)
+            # XXX warcprox: end mods
+            return
+        if self.verify_request(request, client_address):
+            try:
+                self.process_request(request, client_address)
+            except Exception:
+                self.handle_error(request, client_address)
+                self.shutdown_request(request)
+            except:
+                self.shutdown_request(request)
+                raise
+        else:
+            self.shutdown_request(request)
+
 @pytest.fixture(scope="module")
 def http_daemon(request):
     http_daemon = http_server.HTTPServer(
@@ -1797,8 +1819,7 @@ def test_payload_digest(warcprox_, http_daemon):
             if not result or len(result) != 2:
                 logging.debug('WTF: result=%r', result)
                 logging.debug(
-                        'WTF: vars(http_daemon)=%r', vars(http_daemon),
-                        exc_info=True)
+                        'WTF: vars(http_daemon)=%r', vars(http_daemon))
                 url = 'http://localhost:%s/a/b' % http_daemon.server_port
                 try:
                     response = requests.get(url)
