@@ -205,17 +205,18 @@ class CdxServerDedup(DedupDb):
     cookies = None
 
     def __init__(self, cdx_url="https://web.archive.org/cdx/search",
-                 maxsize=200, options=warcprox.Options()):
+                 maxsize=400, options=warcprox.Options()):
         """Initialize cdx server connection pool and related parameters.
         Use low timeout value and no retries to avoid blocking warcprox
         operation by a slow CDX server.
         """
         self.cdx_url = cdx_url
         self.options = options
-        self.http_pool = urllib3.PoolManager(maxsize=maxsize, retries=0,
-                                             timeout=2.0)
+        headers = {'user-agent': 'warcprox', 'accept': 'gzip/deflate'}
         if options.cdxserver_dedup_cookies:
-            self.cookies = options.cdxserver_dedup_cookies
+            headers['Cookie'] = options.cdxserver_dedup_cookies
+        self.http_pool = urllib3.PoolManager(maxsize=maxsize, retries=0,
+                                             timeout=2.0, headers=headers)
 
     def loader(self, *args, **kwargs):
         return CdxServerDedupLoader(self, self.options)
@@ -245,10 +246,9 @@ class CdxServerDedup(DedupDb):
         """
         u = url.decode("utf-8") if isinstance(url, bytes) else url
         try:
-            headers = {'Cookie': self.cookies} if self.cookies else {}
             result = self.http_pool.request('GET', self.cdx_url, fields=dict(
                 url=u, fl="timestamp,digest", filter="!mimetype:warc/revisit",
-                limit=-1), headers=headers)
+                limit=-1))
             assert result.status == 200
             if isinstance(digest_key, bytes):
                 dkey = digest_key
@@ -276,7 +276,7 @@ class CdxServerDedup(DedupDb):
 class CdxServerDedupLoader(warcprox.BaseBatchPostfetchProcessor):
     def __init__(self, cdx_dedup, options=warcprox.Options()):
         warcprox.BaseBatchPostfetchProcessor.__init__(self, options)
-        self.pool = futures.ThreadPoolExecutor(max_workers=200)
+        self.pool = futures.ThreadPoolExecutor(max_workers=400)
         self.batch = set()
         self.cdx_dedup = cdx_dedup
 
