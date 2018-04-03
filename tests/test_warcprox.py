@@ -315,9 +315,17 @@ def cert(request):
     finally:
         f.close()
 
+class UhhhServer(http_server.HTTPServer):
+    def get_request(self):
+        try:
+            return self.socket.accept()
+        except:
+            logging.error('socket.accept() raised exception', exc_info=True)
+            raise
+
 @pytest.fixture(scope="module")
 def http_daemon(request):
-    http_daemon = http_server.HTTPServer(
+    http_daemon = UhhhServer(
             ('localhost', 0), RequestHandlerClass=_TestHttpRequestHandler)
     logging.info('starting http://{}:{}'.format(http_daemon.server_address[0], http_daemon.server_address[1]))
     http_daemon_thread = threading.Thread(name='HttpDaemonThread',
