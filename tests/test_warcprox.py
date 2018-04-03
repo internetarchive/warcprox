@@ -1800,6 +1800,31 @@ def test_payload_digest(warcprox_, http_daemon):
             self.server = warcprox_.proxy
             self.command = 'GET'
             self.connection = mock.Mock()
+        def do_GET(self):
+            result = super().do_COMMAND()
+            if not result or len(result) != 2:
+                logging.debug('WTF: result=%r', result)
+                logging.debug(
+                        'WTF: vars(http_daemon)=%r', vars(http_daemon))
+                url = 'http://localhost:%s/a/b' % http_daemon.server_port
+                try:
+                    response = requests.get(url)
+                    logging.debug(
+                            'WTF: %s returned %s', url, response.status_code)
+                except:
+                    logging.debug(
+                            'WTF: exception fetching %s', url, exc_info=True)
+
+                try:
+                    url = 'http://localhost:%s%s' % (
+                            http_daemon.server_port, self.path)
+                    response = requests.get(url)
+                    logging.debug(
+                            'WTF: %s returned %s', url, response.status_code)
+                except:
+                    logging.debug(
+                            'WTF: exception fetching %s', url, exc_info=True)
+            return result
 
     PLAIN_SHA1 = b'sha1:881289333370aa4e3214505f1173423cc5a896b7'
     GZIP_SHA1 = b'sha1:634e25de71ae01edb5c5d9e2e99c4836bbe94129'
