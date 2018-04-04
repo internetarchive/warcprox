@@ -279,6 +279,11 @@ class _TestHttpRequestHandler(http_server.BaseHTTPRequestHandler):
         headers, payload = self.build_response()
         self.connection.sendall(headers)
         self.connection.sendall(payload)
+        if self.path == '/missing-content-length':
+            # response without content-length (and not chunked) must close the
+            # connection, else client has no idea if there is more data coming
+            self.connection.shutdown(socket.SHUT_RDWR)
+            self.connection.close()
 
     def do_HEAD(self):
         logging.info('HEAD {}'.format(self.path))
@@ -364,8 +369,11 @@ def https_daemon(request, cert):
 
     return https_daemon
 
+# specify http_daemon and https_daemon as dependencies so that their finalizers
+# run after warcprox is shut down, otherwise warcprox holds connections open
+# and prevents the servers from shutting down
 @pytest.fixture(scope="module")
-def warcprox_(request):
+def warcprox_(request, http_daemon, https_daemon):
     orig_dir = os.getcwd()
     work_dir = tempfile.mkdtemp()
     logging.info('changing to working directory %r', work_dir)
@@ -971,6 +979,14 @@ def test_domain_doc_soft_limit(
         http_daemon, https_daemon, warcprox_, archiving_proxies):
     urls_before = warcprox_.proxy.running_stats.urls
 
+    # we need to clear the connection pool here because
+    # - connection pool already may already have an open connection localhost
+    # - we're about to make a connection to foo.localhost
+    # - but our test server, which handles all the hosts, is single threaded
+    # - so it will fail to connect (socket timeout)
+    # must close connections before each connection to a different hostname
+    warcprox_.proxy.remote_connection_pool.clear()
+
     request_meta = {
         "stats": {"buckets": [{"bucket":"test_domain_doc_limit_bucket","tally-domains":["foo.localhost"]}]},
         "soft-limits": {"test_domain_doc_limit_bucket:foo.localhost/total/urls":10},
@@ -988,6 +1004,8 @@ def test_domain_doc_soft_limit(
     # wait for postfetch chain
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
 
+    warcprox_.proxy.remote_connection_pool.clear()
+
     # make sure stats from different domain don't count
     url = 'http://bar.localhost:{}/o/p'.format(http_daemon.server_port)
     for i in range(10):
@@ -1000,6 +1018,8 @@ def test_domain_doc_soft_limit(
     # wait for postfetch chain
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 11)
 
+    warcprox_.proxy.remote_connection_pool.clear()
+
     # (2) same host but different scheme and port: domain limit applies
     url = 'https://foo.localhost:{}/o/p'.format(https_daemon.server_port)
     response = requests.get(
@@ -1008,6 +1028,8 @@ def test_domain_doc_soft_limit(
     assert response.status_code == 200
     assert response.headers['warcprox-test-header'] == 'o!'
     assert response.content == b'I am the warcprox test payload! pppppppppp!\n'
+
+    warcprox_.proxy.remote_connection_pool.clear()
 
     # (3-9) different subdomain: host limit applies
     url = 'https://baz.foo.localhost:{}/o/p'.format(https_daemon.server_port)
@@ -1037,6 +1059,8 @@ def test_domain_doc_soft_limit(
     # wait for postfetch chain
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 20)
 
+    warcprox_.proxy.remote_connection_pool.clear()
+
     # (11) back to http, and this is the 11th request
     url = 'http://zuh.foo.localhost:{}/o/p'.format(http_daemon.server_port)
     response = requests.get(
@@ -1047,6 +1071,8 @@ def test_domain_doc_soft_limit(
     assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
     assert response.headers["content-type"] == "text/plain;charset=utf-8"
     assert response.raw.data == b"request rejected by warcprox: reached soft limit test_domain_doc_limit_bucket:foo.localhost/total/urls=10\n"
+
+    warcprox_.proxy.remote_connection_pool.clear()
 
     # make sure limit doesn't get applied to a different domain
     url = 'https://localhost:{}/o/p'.format(https_daemon.server_port)
@@ -1060,6 +1086,8 @@ def test_domain_doc_soft_limit(
     # wait for postfetch chain
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 21)
 
+    warcprox_.proxy.remote_connection_pool.clear()
+
     # https also blocked
     url = 'https://zuh.foo.localhost:{}/o/p'.format(https_daemon.server_port)
     response = requests.get(
@@ -1071,6 +1099,8 @@ def test_domain_doc_soft_limit(
     assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
     assert response.headers["content-type"] == "text/plain;charset=utf-8"
     assert response.raw.data == b"request rejected by warcprox: reached soft limit test_domain_doc_limit_bucket:foo.localhost/total/urls=10\n"
+
+    warcprox_.proxy.remote_connection_pool.clear()
 
     # same host, different capitalization still blocked
     url = 'https://HEHEHE.fOO.lOcALhoST:{}/o/p'.format(https_daemon.server_port)
@@ -1096,6 +1126,8 @@ def test_domain_data_soft_limit(
     }
     headers = {"Warcprox-Meta": json.dumps(request_meta)}
 
+    warcprox_.proxy.remote_connection_pool.clear()
+
     url = 'http://ÞZz.localhost:{}/y/z'.format(http_daemon.server_port)
     response = requests.get(
             url, proxies=archiving_proxies, headers=headers, stream=True)
@@ -1105,6 +1137,8 @@ def test_domain_data_soft_limit(
 
     # wait for postfetch chain
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
+
+    warcprox_.proxy.remote_connection_pool.clear()
 
     # duplicate, does not count toward limit
     url = 'https://baz.Þzz.localhost:{}/y/z'.format(https_daemon.server_port)
@@ -1118,6 +1152,8 @@ def test_domain_data_soft_limit(
     # wait for postfetch chain
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 2)
 
+    warcprox_.proxy.remote_connection_pool.clear()
+
     # novel, pushes stats over the limit
     url = 'https://muh.XN--Zz-2Ka.locALHOst:{}/z/~'.format(https_daemon.server_port)
     response = requests.get(
@@ -1130,6 +1166,8 @@ def test_domain_data_soft_limit(
     # wait for postfetch chain
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 3)
 
+    warcprox_.proxy.remote_connection_pool.clear()
+
     # make sure limit doesn't get applied to a different host
     url = 'http://baz.localhost:{}/z/~'.format(http_daemon.server_port)
     response = requests.get(
@@ -1140,6 +1178,8 @@ def test_domain_data_soft_limit(
 
     # wait for postfetch chain
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 4)
+
+    warcprox_.proxy.remote_connection_pool.clear()
 
     # blocked because we're over the limit now
     url = 'http://lOl.wHut.ÞZZ.lOcALHOst:{}/y/z'.format(http_daemon.server_port)
