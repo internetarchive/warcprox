@@ -1276,14 +1276,23 @@ def test_limit_large_resource(archiving_proxies, http_daemon, warcprox_):
     """
     urls_before = warcprox_.proxy.running_stats.urls
 
+    # this should be truncated
     url = 'http://localhost:%s/300k-content' % http_daemon.server_port
     response = requests.get(
         url, proxies=archiving_proxies, verify=False, timeout=10)
     assert len(response.content) == 262144
 
+    # test that the connection is cleaned up properly after truncating a
+    # response (no hang or timeout)
+    url = 'http://localhost:%s/' % http_daemon.server_port
+    response = requests.get(
+        url, proxies=archiving_proxies, verify=False, timeout=10)
+    assert response.status_code == 404
+    assert response.content == b'404 Not Found\n'
+
     # wait for processing of this url to finish so that it doesn't interfere
     # with subsequent tests
-    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 2)
 
 def test_method_filter(
         warcprox_, https_daemon, http_daemon, archiving_proxies,
