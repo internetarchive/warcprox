@@ -323,17 +323,229 @@ def cert(request):
     finally:
         f.close()
 
-class UhhhServer(http_server.HTTPServer):
-    def get_request(self):
+class HTTPServerTracer(http_server.HTTPServer):
+    logger = logging.getLogger("HTTPServerTracer")
+    def __init__(
+            self, *args, **kwargs):
+        self.logger.trace(
+                'before __init__(args=%r, kwargs=%r)', args, kwargs)
         try:
-            return self.socket.accept()
+            return super().__init__(*args, **kwargs)
         except:
-            logging.error('socket.accept() raised exception', exc_info=True)
+            self.logger.trace(
+                    '__init__ raised exception', exc_info=True)
             raise
+        finally:
+            self.logger.trace('after __init__')
+    def _handle_request_noblock(
+            self, *args, **kwargs):
+        self.logger.trace(
+                'before _handle_request_noblock(args=%r, kwargs=%r)', args, kwargs)
+        try:
+            return super()._handle_request_noblock(*args, **kwargs)
+        except:
+            self.logger.trace(
+                    '_handle_request_noblock raised exception', exc_info=True)
+            raise
+        finally:
+            self.logger.trace('after _handle_request_noblock')
+    def close_request(
+            self, *args, **kwargs):
+        self.logger.trace(
+                'before close_request(args=%r, kwargs=%r)', args, kwargs)
+        try:
+            return super().close_request(*args, **kwargs)
+        except:
+            self.logger.trace(
+                    'close_request raised exception', exc_info=True)
+            raise
+        finally:
+            self.logger.trace('after close_request')
+    def fileno(
+            self, *args, **kwargs):
+        self.logger.trace(
+                'before fileno(args=%r, kwargs=%r)', args, kwargs)
+        try:
+            return super().fileno(*args, **kwargs)
+        except:
+            self.logger.trace(
+                    'fileno raised exception', exc_info=True)
+            raise
+        finally:
+            self.logger.trace('after fileno')
+    def finish_request(
+            self, *args, **kwargs):
+        self.logger.trace(
+                'before finish_request(args=%r, kwargs=%r)', args, kwargs)
+        try:
+            return super().finish_request(*args, **kwargs)
+        except:
+            self.logger.trace(
+                    'finish_request raised exception', exc_info=True)
+            raise
+        finally:
+            self.logger.trace('after finish_request')
+    def get_request(
+            self, *args, **kwargs):
+        self.logger.trace(
+                'before get_request(args=%r, kwargs=%r)', args, kwargs)
+        try:
+            return super().get_request(*args, **kwargs)
+        except:
+            self.logger.trace(
+                    'get_request raised exception', exc_info=True)
+            raise
+        finally:
+            self.logger.trace('after get_request')
+    def handle_error(
+            self, *args, **kwargs):
+        self.logger.trace(
+                'before handle_error(args=%r, kwargs=%r)', args, kwargs)
+        try:
+            return super().handle_error(*args, **kwargs)
+        except:
+            self.logger.trace(
+                    'handle_error raised exception', exc_info=True)
+            raise
+        finally:
+            self.logger.trace('after handle_error')
+    def handle_request(
+            self, *args, **kwargs):
+        self.logger.trace(
+                'before handle_request(args=%r, kwargs=%r)', args, kwargs)
+        try:
+            return super().handle_request(*args, **kwargs)
+        except:
+            self.logger.trace(
+                    'handle_request raised exception', exc_info=True)
+            raise
+        finally:
+            self.logger.trace('after handle_request')
+    def handle_timeout(
+            self, *args, **kwargs):
+        self.logger.trace(
+                'before handle_timeout(args=%r, kwargs=%r)', args, kwargs)
+        try:
+            return super().handle_timeout(*args, **kwargs)
+        except:
+            self.logger.trace(
+                    'handle_timeout raised exception', exc_info=True)
+            raise
+        finally:
+            self.logger.trace('after handle_timeout')
+    def process_request(
+            self, *args, **kwargs):
+        self.logger.trace(
+                'before process_request(args=%r, kwargs=%r)', args, kwargs)
+        try:
+            return super().process_request(*args, **kwargs)
+        except:
+            self.logger.trace(
+                    'process_request raised exception', exc_info=True)
+            raise
+        finally:
+            self.logger.trace('after process_request')
+    def serve_forever(
+            self, *args, **kwargs):
+        self.logger.trace(
+                'before serve_forever(args=%r, kwargs=%r)', args, kwargs)
+        try:
+            return super().serve_forever(*args, **kwargs)
+        except:
+            self.logger.trace(
+                    'serve_forever raised exception', exc_info=True)
+            raise
+        finally:
+            self.logger.trace('after serve_forever')
+    def server_activate(
+            self, *args, **kwargs):
+        self.logger.trace(
+                'before server_activate(args=%r, kwargs=%r)', args, kwargs)
+        try:
+            return super().server_activate(*args, **kwargs)
+        except:
+            self.logger.trace(
+                    'server_activate raised exception', exc_info=True)
+            raise
+        finally:
+            self.logger.trace('after server_activate')
+    def server_bind(
+            self, *args, **kwargs):
+        self.logger.trace(
+                'before server_bind(args=%r, kwargs=%r)', args, kwargs)
+        try:
+            return super().server_bind(*args, **kwargs)
+        except:
+            self.logger.trace(
+                    'server_bind raised exception', exc_info=True)
+            raise
+        finally:
+            self.logger.trace('after server_bind')
+    def server_close(
+            self, *args, **kwargs):
+        self.logger.trace(
+                'before server_close(args=%r, kwargs=%r)', args, kwargs)
+        try:
+            return super().server_close(*args, **kwargs)
+        except:
+            self.logger.trace(
+                    'server_close raised exception', exc_info=True)
+            raise
+        finally:
+            self.logger.trace('after server_close')
+    def service_actions(
+            self, *args, **kwargs):
+        self.logger.trace(
+                'before service_actions(args=%r, kwargs=%r)', args, kwargs)
+        try:
+            return super().service_actions(*args, **kwargs)
+        except:
+            self.logger.trace(
+                    'service_actions raised exception', exc_info=True)
+            raise
+        finally:
+            self.logger.trace('after service_actions')
+    def shutdown(
+            self, *args, **kwargs):
+        self.logger.trace(
+                'before shutdown(args=%r, kwargs=%r)', args, kwargs)
+        try:
+            return super().shutdown(*args, **kwargs)
+        except:
+            self.logger.trace(
+                    'shutdown raised exception', exc_info=True)
+            raise
+        finally:
+            self.logger.trace('after shutdown')
+    def shutdown_request(
+            self, *args, **kwargs):
+        self.logger.trace(
+                'before shutdown_request(args=%r, kwargs=%r)', args, kwargs)
+        try:
+            return super().shutdown_request(*args, **kwargs)
+        except:
+            self.logger.trace(
+                    'shutdown_request raised exception', exc_info=True)
+            raise
+        finally:
+            self.logger.trace('after shutdown_request')
+    def verify_request(
+            self, *args, **kwargs):
+        self.logger.trace(
+                'before verify_request(args=%r, kwargs=%r)', args, kwargs)
+        try:
+            return super().verify_request(*args, **kwargs)
+        except:
+            self.logger.trace(
+                    'verify_request raised exception', exc_info=True)
+            raise
+        finally:
+            self.logger.trace('after verify_request')
+
 
 @pytest.fixture(scope="module")
 def http_daemon(request):
-    http_daemon = UhhhServer(
+    http_daemon = HTTPServerTracer(
             ('localhost', 0), RequestHandlerClass=_TestHttpRequestHandler)
     logging.info('starting http://{}:{}'.format(http_daemon.server_address[0], http_daemon.server_address[1]))
     http_daemon_thread = threading.Thread(name='HttpDaemonThread',
