@@ -88,6 +88,7 @@ class _OneWritableWarc:
             os.mkdir(self.directory)
 
         self.finalname = self.next_filename(serial)
+        self.logger.trace('opening %s', self.finalname)
         self.path = os.path.sep.join(
                 [self.directory, self.finalname + self.open_suffix])
 
