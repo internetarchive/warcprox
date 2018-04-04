@@ -166,6 +166,9 @@ def chunkify(buf, chunk_size=13):
 #         return outbuf.getvalue()
 
 class _TestHttpRequestHandler(http_server.BaseHTTPRequestHandler):
+    # enable keepalive
+    protocol_version = 'HTTP/1.1'
+
     def build_response(self):
         m = re.match(r'^/([^/]+)/([^/]+)$', self.path)
         if m is not None:
@@ -558,7 +561,6 @@ def https_daemon(request, cert):
     # http://www.piware.de/2011/01/creating-an-https-server-in-python/
     https_daemon = http_server.HTTPServer(('localhost', 0),
             RequestHandlerClass=_TestHttpRequestHandler)
-    # https_daemon.socket = ssl.wrap_socket(httpd.socket, certfile='path/to/localhost.pem', server_side=True)
     https_daemon.socket = ssl.wrap_socket(https_daemon.socket, certfile=cert, server_side=True)
     logging.info('starting https://{}:{}'.format(https_daemon.server_address[0], https_daemon.server_address[1]))
     https_daemon_thread = threading.Thread(name='HttpsDaemonThread',
