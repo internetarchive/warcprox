@@ -405,11 +405,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                     self, code, message, explain)
         except:
             self.logger.error(
-                    '''WTF: self=%r hasattr(self,'_headers_buffer')=%r''',
-                    self, hasattr(self,'_headers_buffer'))
-            if hasattr(self,'_headers_buffer'):
-                self.logger.error(
-                        'WTF: self._headers_buffer=%r', self._headers_buffer)
+                    'send_error(%r, %r, %r) raised exception', exc_info=True)
             return None
 
     def _proxy_request(self, extra_response_headers={}):
