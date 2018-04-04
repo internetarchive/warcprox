@@ -212,7 +212,7 @@ class CdxServerDedup(DedupDb):
         """
         self.cdx_url = cdx_url
         self.options = options
-        headers = {'user-agent': 'warcprox', 'accept': 'gzip/deflate'}
+        headers = {'User-Agent': 'warcprox', 'Accept-Encoding': 'gzip, deflate'}
         if options.cdxserver_dedup_cookies:
             headers['Cookie'] = options.cdxserver_dedup_cookies
         self.http_pool = urllib3.PoolManager(maxsize=maxsize, retries=0,
