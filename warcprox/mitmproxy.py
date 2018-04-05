@@ -480,7 +480,15 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             # Let's close off the remote end. If remote connection is fine,
             # put it back in the pool to reuse it later.
             if not is_connection_dropped(self._remote_server_conn):
+                self.logger.trace(
+                        'returning connection to pool: %r',
+                        self._remote_server_conn)
                 self._conn_pool._put_conn(self._remote_server_conn)
+            else:
+                self.logger.trace(
+                        'is_connection_dropped returned true: '
+                        'not returning connection to pool: %r',
+                        self._remote_server_conn)
         except:
             self._remote_server_conn.sock.shutdown(socket.SHUT_RDWR)
             self._remote_server_conn.sock.close()
