@@ -279,9 +279,9 @@ class _TestHttpRequestHandler(http_server.BaseHTTPRequestHandler):
         headers, payload = self.build_response()
         self.connection.sendall(headers)
         self.connection.sendall(payload)
-        if self.path == '/missing-content-length':
-            # response without content-length (and not chunked) must close the
-            # connection, else client has no idea if there is more data coming
+        if self.path in ('/missing-content-length', '/empty-response'):
+            # server must close the connection, else client has no idea if
+            # there is more data coming
             self.connection.shutdown(socket.SHUT_RDWR)
             self.connection.close()
 
@@ -1822,6 +1822,14 @@ def test_socket_timeout_response(
     url = 'http://localhost:%s/slow-response' % http_daemon.server_port
     response = requests.get(url, proxies=archiving_proxies, verify=False)
     assert response.status_code == 502
+
+    # test that the connection is cleaned up properly after truncating a
+    # response (no hang or timeout)
+    url = 'http://localhost:%s/' % http_daemon.server_port
+    response = requests.get(
+        url, proxies=archiving_proxies, verify=False, timeout=10)
+    assert response.status_code == 404
+    assert response.content == b'404 Not Found\n'
 
 def test_empty_response(
         warcprox_, http_daemon, https_daemon, archiving_proxies,

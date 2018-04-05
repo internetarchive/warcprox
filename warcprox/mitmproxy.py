@@ -468,6 +468,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 if (self._max_resource_size and
                         prox_rec_res.recorder.len > self._max_resource_size):
                     prox_rec_res.truncated = b'length'
+                    self._remote_server_conn.sock.shutdown(socket.SHUT_RDWR)
                     self._remote_server_conn.sock.close()
                     self.logger.info(
                             'truncating response because max resource size %d '
@@ -481,6 +482,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             if not is_connection_dropped(self._remote_server_conn):
                 self._conn_pool._put_conn(self._remote_server_conn)
         except:
+            self._remote_server_conn.sock.shutdown(socket.SHUT_RDWR)
             self._remote_server_conn.sock.close()
             raise
         finally:
