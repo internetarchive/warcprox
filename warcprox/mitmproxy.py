@@ -252,7 +252,12 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             host=self.hostname, port=int(self.port), scheme='http',
             pool_kwargs={'maxsize': 6})
 
+        self.logger.trace(
+                'getting connection to %s:%s from pool %r',
+                self.hostname, self.port, self._conn_pool)
         self._remote_server_conn = self._conn_pool._get_conn()
+        self.logger.trace('got connection to %s:%s %r',
+                self.hostname, self.port, self._remote_server_conn)
         if is_connection_dropped(self._remote_server_conn):
             if self.onion_tor_socks_proxy_host and self.hostname.endswith('.onion'):
                 self.logger.info(
