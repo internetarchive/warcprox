@@ -50,6 +50,7 @@ import io
 import gzip
 import mock
 import email.message
+import socketserver
 
 try:
     import http.server as http_server
@@ -323,17 +324,20 @@ def cert(request):
     finally:
         f.close()
 
-class UhhhServer(http_server.HTTPServer):
-    def get_request(self):
-        try:
-            return self.socket.accept()
-        except:
-            logging.error('socket.accept() raised exception', exc_info=True)
-            raise
+# We need this test server to accept multiple simultaneous connections in order
+# to avoid mysterious looking test failures like these:
+# https://travis-ci.org/internetarchive/warcprox/builds/362892231
+# This is because we can't guarantee (without jumping through hoops) that
+# MitmProxyHandler._proxy_request() returns the connection to the pool before
+# the next request tries to get a connection from the pool in
+# MitmProxyHandler._connect_to_remote_server(). (Unless we run warcprox
+# single-threaded for these tests, which maybe we should consider?)
+class ThreadedHTTPServer(socketserver.ThreadingMixIn, http_server.HTTPServer):
+    pass
 
 @pytest.fixture(scope="module")
 def http_daemon(request):
-    http_daemon = UhhhServer(
+    http_daemon = ThreadedHTTPServer(
             ('localhost', 0), RequestHandlerClass=_TestHttpRequestHandler)
     logging.info('starting http://{}:{}'.format(http_daemon.server_address[0], http_daemon.server_address[1]))
     http_daemon_thread = threading.Thread(name='HttpDaemonThread',
@@ -352,7 +356,7 @@ def http_daemon(request):
 @pytest.fixture(scope="module")
 def https_daemon(request, cert):
     # http://www.piware.de/2011/01/creating-an-https-server-in-python/
-    https_daemon = http_server.HTTPServer(('localhost', 0),
+    https_daemon = ThreadedHTTPServer(('localhost', 0),
             RequestHandlerClass=_TestHttpRequestHandler)
     https_daemon.socket = ssl.wrap_socket(https_daemon.socket, certfile=cert, server_side=True)
     logging.info('starting https://{}:{}'.format(https_daemon.server_address[0], https_daemon.server_address[1]))
