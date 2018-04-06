@@ -323,17 +323,9 @@ def cert(request):
     finally:
         f.close()
 
-class UhhhServer(http_server.HTTPServer):
-    def get_request(self):
-        try:
-            return self.socket.accept()
-        except:
-            logging.error('socket.accept() raised exception', exc_info=True)
-            raise
-
 @pytest.fixture(scope="module")
 def http_daemon(request):
-    http_daemon = UhhhServer(
+    http_daemon = http_server.HTTPServer(
             ('localhost', 0), RequestHandlerClass=_TestHttpRequestHandler)
     logging.info('starting http://{}:{}'.format(http_daemon.server_address[0], http_daemon.server_address[1]))
     http_daemon_thread = threading.Thread(name='HttpDaemonThread',
@@ -390,7 +382,15 @@ def warcprox_(request, http_daemon, https_daemon):
             '--onion-tor-socks-proxy=localhost:9050',
             '--crawl-log-dir=crawl-logs',
             '--socket-timeout=4',
-            '--max-resource-size=200000']
+            '--max-resource-size=200000',
+            '--max-threads=1']
+    # "--max-threads=1" to avoid mysterious looking test failures like these:
+    # https://travis-ci.org/internetarchive/warcprox/builds/362892231
+    # If proxy is multi-threaded and test servers (`http_daemon()` and
+    # `https_daemon()`) are single-threaded, we can't guarantee (without
+    # jumping through hoops) that MitmProxyHandler._proxy_request() returns the
+    # connection to the pool before the next request tries to get a connection
+    # from the pool in MitmProxyHandler._connect_to_remote_server().
     if request.config.getoption('--rethinkdb-dedup-url'):
         argv.append('--rethinkdb-dedup-url=%s' % request.config.getoption('--rethinkdb-dedup-url'))
         # test these here only
