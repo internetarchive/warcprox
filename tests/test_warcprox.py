@@ -50,6 +50,7 @@ import io
 import gzip
 import mock
 import email.message
+import socketserver
 
 try:
     import http.server as http_server
@@ -323,7 +324,7 @@ def cert(request):
     finally:
         f.close()
 
-class HTTPServerTracer(http_server.HTTPServer):
+class HTTPServerTracer(socketserver.ThreadingMixIn, http_server.HTTPServer):
     logger = logging.getLogger("HTTPServerTracer")
     def __init__(
             self, *args, **kwargs):
