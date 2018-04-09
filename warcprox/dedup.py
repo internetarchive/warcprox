@@ -37,6 +37,20 @@ from concurrent import futures
 
 urllib3.disable_warnings()
 
+class DedupableMixin(object):
+    def __init__(self, options=warcprox.Options()):
+        self.min_text_size = options.dedup_min_text_size
+        self.min_binary_size = options.dedup_min_binary_size
+
+    def is_dedupable(self, recorded_url):
+        """Check if we should try to run dedup on resource based on payload
+        size compared with min text/binary dedup size options. Return Boolean.
+        """
+        if recorded_url.is_text():
+            return recorded_url.response_recorder.payload_size() > self.min_text_size
+        else:
+            return recorded_url.response_recorder.payload_size() > self.min_binary_size
+
 class DedupLoader(warcprox.BaseStandardPostfetchProcessor):
     def __init__(self, dedup_db, options=warcprox.Options()):
         warcprox.BaseStandardPostfetchProcessor.__init__(self, options=options)
@@ -273,9 +287,10 @@ class CdxServerDedup(DedupDb):
         """
         pass
 
-class CdxServerDedupLoader(warcprox.BaseBatchPostfetchProcessor):
+class CdxServerDedupLoader(warcprox.BaseBatchPostfetchProcessor, DedupableMixin):
     def __init__(self, cdx_dedup, options=warcprox.Options()):
         warcprox.BaseBatchPostfetchProcessor.__init__(self, options)
+        DedupableMixin.__init__(self, options)
         self.pool = futures.ThreadPoolExecutor(max_workers=400)
         self.batch = set()
         self.cdx_dedup = cdx_dedup
@@ -284,7 +299,7 @@ class CdxServerDedupLoader(warcprox.BaseBatchPostfetchProcessor):
         recorded_url = self.inq.get(block=True, timeout=0.5)
         if (recorded_url.response_recorder
                 and recorded_url.payload_digest
-                and recorded_url.response_recorder.payload_size() > 0):
+                and self.is_dedupable(recorded_url)):
             self.batch.add(recorded_url)
             self.pool.submit(self._process_url, recorded_url)
         else:
