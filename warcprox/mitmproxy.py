@@ -91,7 +91,6 @@ class ProxyingRecorder(object):
         self.payload_offset = self.len
 
     def _update(self, hunk):
-        self.block_digest.update(hunk)
         self.tempfile.write(hunk)
 
         if self.payload_offset is not None and self._proxy_client_conn_open:
@@ -129,6 +128,11 @@ class ProxyingRecorder(object):
         return self.fp.flush()
 
     def close(self):
+        """Update block_digest when closing ProxyingRecorder and the tempfile
+        is complete. Read 1MB chunks for faster performance.
+        """
+        for hunk in iter(lambda: self.tempfile.read(1048576), b''):
+            self.block_digest.update(hunk)
         return self.fp.close()
 
     def __len__(self):
