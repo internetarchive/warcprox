@@ -41,7 +41,13 @@ class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
         warcprox.BaseStandardPostfetchProcessor.__init__(self, options=options)
         self.writer_pool = warcprox.writer.WarcWriterPool(options)
         self.method_filter = set(method.upper() for method in self.options.method_filter or [])
-        self.pool = futures.ThreadPoolExecutor(max_workers=options.writer_threads or 1)
+
+        # set max_queued small, because self.inq is already handling queueing
+        # for us; but give it a little breathing room to make sure it can keep
+        # worker threads busy
+        self.pool = warcprox.ThreadPoolExecutor(
+                max_workers=options.writer_threads or 1,
+                max_queued=10 * (options.writer_threads or 1))
         self.batch = set()
 
     def _startup(self):
