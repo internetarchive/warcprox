@@ -439,3 +439,18 @@ class WarcproxController(object):
                 self.logger.notice(
                         'performance profile of %s:\n%s', processor,
                         buf.getvalue())
+
+                if hasattr(processor, 'thread_profilers'):
+                    files = []
+                    for th_id, profiler in processor.thread_profilers.items():
+                        file = os.path.join(tmpdir, '%s.dat' % th_id)
+                        profiler.dump_stats(file)
+                        files.append(file)
+                    buf = io.StringIO()
+                    stats = pstats.Stats(*files, stream=buf)
+                    stats.sort_stats('cumulative')
+                    stats.print_stats(0.1)
+                    self.logger.notice(
+                            'aggregate performance profile of %s worker '
+                            'threads of %s:\n%s',
+                            len(files), processor, buf.getvalue())
