@@ -164,8 +164,7 @@ class WarcproxController(object):
                 queued += len(processor.batch)
 
             result['postfetch_chain'].append({
-                'processor': name,
-                'queued_urls': len(processor.inq.queue)})
+                'processor': name, 'queued_urls': queued})
         return result
 
     def chain(self, processor0, processor1):
