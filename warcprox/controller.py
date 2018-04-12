@@ -141,11 +141,9 @@ class WarcproxController(object):
         self.playback_proxy = Factory.playback_proxy(
             self.proxy.ca, self.options)
 
-        # default number of warc writer threads = sqrt(proxy.max_threads)
-        # pulled out of thin air because it strikes me as reasonable
-        # 1=>1 2=>1 5=>2 10=>3 50=>7 100=>10 200=>14 500=>22 1000=>32 2000=>45
+        # https://github.com/internetarchive/warcprox/wiki/benchmarking-number-of-threads
         if not self.options.writer_threads:
-            self.options.writer_threads = int(self.proxy.max_threads ** 0.5)
+            self.options.writer_threads = 1
 
         self.build_postfetch_chain(self.proxy.recorded_url_q)
 

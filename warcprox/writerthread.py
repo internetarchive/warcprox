@@ -54,7 +54,7 @@ class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
         self.batch = set()
 
     def _startup(self):
-        self.logger.info('%s threads', self.pool._max_workers)
+        self.logger.info('%s warc writer threads', self.pool._max_workers)
         warcprox.BaseStandardPostfetchProcessor._startup(self)
 
     def _get_process_put(self):

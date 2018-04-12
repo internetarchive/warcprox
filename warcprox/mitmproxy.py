@@ -501,35 +501,14 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
 class PooledMixIn(socketserver.ThreadingMixIn):
     logger = logging.getLogger("warcprox.mitmproxy.PooledMixIn")
     def __init__(self, max_threads=None):
-        '''
-        If max_threads is not supplied, calculates a reasonable value based
-        on system resource limits.
-        '''
         self.active_requests = set()
         self.unaccepted_requests = 0
-        if not max_threads:
-            # man getrlimit: "RLIMIT_NPROC The maximum number of processes (or,
-            # more precisely on Linux, threads) that can be created for the
-            # real user ID of the calling process."
-            try:
-                import resource
-                rlimit_nproc = resource.getrlimit(resource.RLIMIT_NPROC)[0]
-                rlimit_nofile = resource.getrlimit(resource.RLIMIT_NOFILE)[0]
-                max_threads = min(rlimit_nofile // 10, rlimit_nproc // 2)
-                # resource.RLIM_INFINITY == -1 which can result in max_threads == 0
-                if max_threads <= 0 or max_threads > 5000:
-                    max_threads = 5000
-                self.logger.info(
-                        "max_threads=%s (rlimit_nproc=%s, rlimit_nofile=%s)",
-                        max_threads, rlimit_nproc, rlimit_nofile)
-            except Exception as e:
-                self.logger.warn(
-                        "unable to calculate optimal number of threads based "
-                        "on resource limits due to %s", e)
-                max_threads = 100
-                self.logger.info("max_threads=%s", max_threads)
-        self.max_threads = max_threads
-        self.pool = concurrent.futures.ThreadPoolExecutor(max_threads)
+        if max_threads:
+            self.max_threads = max_threads
+        else:
+            self.max_threads = 100
+        self.pool = concurrent.futures.ThreadPoolExecutor(self.max_threads)
+        self.logger.info("%s proxy threads", self.max_threads)
 
     def status(self):
         if hasattr(super(), 'status'):
