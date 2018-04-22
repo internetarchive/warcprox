@@ -113,7 +113,8 @@ class DedupDb(object):
 
     def notify(self, recorded_url, records):
         if (records and records[0].type == b'response'
-                and recorded_url.response_recorder.payload_size() > 0):
+                and recorded_url.response_recorder.payload_size() > 0
+                and recorded_url.warcprox_meta and "warc-prefix" in recorded_url.warcprox_meta):
             digest_key = warcprox.digest_str(
                     recorded_url.payload_digest, self.options.base32)
             if recorded_url.warcprox_meta and "captures-bucket" in recorded_url.warcprox_meta:
@@ -126,7 +127,8 @@ class DedupDb(object):
 def decorate_with_dedup_info(dedup_db, recorded_url, base32=False):
     if (recorded_url.response_recorder
             and recorded_url.payload_digest
-            and recorded_url.response_recorder.payload_size() > 0):
+            and recorded_url.response_recorder.payload_size() > 0
+            and recorded_url.warcprox_meta and "warc-prefix" in recorded_url.warcprox_meta):
         digest_key = warcprox.digest_str(recorded_url.payload_digest, base32)
         if recorded_url.warcprox_meta and "captures-bucket" in recorded_url.warcprox_meta:
             recorded_url.dedup_info = dedup_db.lookup(
@@ -190,7 +192,8 @@ class RethinkDedupDb(DedupDb):
 
     def notify(self, recorded_url, records):
         if (records and records[0].type == b'response'
-                and recorded_url.response_recorder.payload_size() > 0):
+                and recorded_url.response_recorder.payload_size() > 0
+                and recorded_url.warcprox_meta and "warc-prefix" in recorded_url.warcprox_meta):
             digest_key = warcprox.digest_str(
                     recorded_url.payload_digest, self.options.base32)
             if recorded_url.warcprox_meta and "captures-bucket" in recorded_url.warcprox_meta:
@@ -284,7 +287,8 @@ class CdxServerDedupLoader(warcprox.BaseBatchPostfetchProcessor):
         recorded_url = self.inq.get(block=True, timeout=0.5)
         if (recorded_url.response_recorder
                 and recorded_url.payload_digest
-                and recorded_url.response_recorder.payload_size() > 0):
+                and recorded_url.response_recorder.payload_size() > 0
+                and recorded_url.warcprox_meta and "warc-prefix" in recorded_url.warcprox_meta):
             self.batch.add(recorded_url)
             self.pool.submit(self._process_url, recorded_url)
         else:
@@ -320,7 +324,8 @@ class BatchTroughStorer(warcprox.BaseBatchPostfetchProcessor):
         for recorded_url in batch:
             if (recorded_url.warc_records
                     and recorded_url.warc_records[0].type == b'response'
-                    and recorded_url.response_recorder.payload_size() > 0):
+                    and recorded_url.response_recorder.payload_size() > 0
+                    and recorded_url.warcprox_meta and "warc-prefix" in recorded_url.warcprox_meta):
                 if (recorded_url.warcprox_meta
                         and 'captures-bucket' in recorded_url.warcprox_meta):
                     bucket = recorded_url.warcprox_meta['captures-bucket']
@@ -369,7 +374,8 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
         for recorded_url in batch:
             if (recorded_url.response_recorder
                     and recorded_url.payload_digest
-                    and recorded_url.response_recorder.payload_size() > 0):
+                    and recorded_url.response_recorder.payload_size() > 0
+                    and recorded_url.warcprox_meta and "warc-prefix" in recorded_url.warcprox_meta):
                 if (recorded_url.warcprox_meta
                         and 'captures-bucket' in recorded_url.warcprox_meta):
                     bucket = recorded_url.warcprox_meta['captures-bucket']
@@ -518,7 +524,8 @@ class TroughDedupDb(DedupDb):
 
     def notify(self, recorded_url, records):
         if (records and records[0].type == b'response'
-                and recorded_url.response_recorder.payload_size() > 0):
+                and recorded_url.response_recorder.payload_size() > 0
+                and recorded_url.warcprox_meta and "warc-prefix" in recorded_url.warcprox_meta):
             digest_key = warcprox.digest_str(
                     recorded_url.payload_digest, self.options.base32)
             if recorded_url.warcprox_meta and 'captures-bucket' in recorded_url.warcprox_meta:
