@@ -51,14 +51,24 @@ class DedupableMixin(object):
         else:
             return recorded_url.response_recorder.payload_size() > self.min_binary_size
 
-class DedupLoader(warcprox.BaseStandardPostfetchProcessor):
+class DedupLoader(warcprox.BaseStandardPostfetchProcessor, DedupableMixin):
     def __init__(self, dedup_db, options=warcprox.Options()):
         warcprox.BaseStandardPostfetchProcessor.__init__(self, options=options)
+        DedupableMixin.__init__(self, options)
         self.dedup_db = dedup_db
 
     def _process_url(self, recorded_url):
-        decorate_with_dedup_info(
-                self.dedup_db, recorded_url, self.options.base32)
+        if (recorded_url.response_recorder
+                and recorded_url.payload_digest
+                and self.should_dedup(recorded_url)):
+            digest_key = warcprox.digest_str(recorded_url.payload_digest, self.options.base32)
+            if recorded_url.warcprox_meta and "captures-bucket" in recorded_url.warcprox_meta:
+                recorded_url.dedup_info = self.dedup_db.lookup(
+                    digest_key, recorded_url.warcprox_meta["captures-bucket"],
+                    recorded_url.url)
+            else:
+                recorded_url.dedup_info = self.dedup_db.lookup(
+                    digest_key, url=recorded_url.url)
 
 class DedupDb(DedupableMixin):
     logger = logging.getLogger("warcprox.dedup.DedupDb")
@@ -137,19 +147,6 @@ class DedupDb(DedupableMixin):
                         bucket=recorded_url.warcprox_meta["captures-bucket"])
             else:
                 self.save(digest_key, records[0])
-
-def decorate_with_dedup_info(dedup_db, recorded_url, base32=False):
-    if (recorded_url.response_recorder
-            and recorded_url.payload_digest
-            and recorded_url.response_recorder.payload_size() > 0):
-        digest_key = warcprox.digest_str(recorded_url.payload_digest, base32)
-        if recorded_url.warcprox_meta and "captures-bucket" in recorded_url.warcprox_meta:
-            recorded_url.dedup_info = dedup_db.lookup(
-                digest_key, recorded_url.warcprox_meta["captures-bucket"],
-                recorded_url.url)
-        else:
-            recorded_url.dedup_info = dedup_db.lookup(
-                digest_key, url=recorded_url.url)
 
 class RethinkDedupDb(DedupDb, DedupableMixin):
     logger = logging.getLogger("warcprox.dedup.RethinkDedupDb")
