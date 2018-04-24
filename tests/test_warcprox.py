@@ -615,46 +615,6 @@ def test_dedup_http(http_daemon, warcprox_, archiving_proxies, playback_proxies)
     assert response.content == b'I am the warcprox test payload! ffffffffff!\n'
     # XXX how to check dedup was used?
 
-def test_dedup_min_size(http_daemon, warcprox_, archiving_proxies, playback_proxies):
-    """We use options --dedup-min-text-size=3 --dedup-min-binary-size=5 and we
-    try to download content smaller than these limits to make sure that it is
-    not deduplicated. We create the digest_str with the following code:
-    ```
-    payload_digest = hashlib.new('sha1')
-    payload_digest.update(b'aa')
-    warcprox.digest_str(payload_digest)
-    ```
-    """
-    url = 'http://localhost:%s/text-2bytes' % http_daemon.server_port
-    response = requests.get(
-        url, proxies=archiving_proxies, verify=False, timeout=10)
-    assert len(response.content) == 2
-    dedup_lookup = warcprox_.dedup_db.lookup(
-            b'sha1:e0c9035898dd52fc65c41454cec9c4d2611bfb37')
-    assert dedup_lookup is None
-    time.sleep(3)
-    response = requests.get(
-        url, proxies=archiving_proxies, verify=False, timeout=10)
-    dedup_lookup = warcprox_.dedup_db.lookup(
-            b'sha1:e0c9035898dd52fc65c41454cec9c4d2611bfb37')
-    # This would return dedup data if payload_size > dedup-min-text-size
-    assert dedup_lookup is None
-
-    url = 'http://localhost:%s/binary-4bytes' % http_daemon.server_port
-    response = requests.get(
-        url, proxies=archiving_proxies, verify=False, timeout=10)
-    assert len(response.content) == 4
-    dedup_lookup = warcprox_.dedup_db.lookup(
-            b'sha1:70c881d4a26984ddce795f6f71817c9cf4480e79')
-    assert dedup_lookup is None
-    time.sleep(3)
-    response = requests.get(
-        url, proxies=archiving_proxies, verify=False, timeout=10)
-    dedup_lookup = warcprox_.dedup_db.lookup(
-            b'sha1:70c881d4a26984ddce795f6f71817c9cf4480e79')
-    # This would return dedup data if payload_size > dedup-min-binary-size
-    assert dedup_lookup is None
-
 # test dedup of same https url with same payload
 def test_dedup_https(https_daemon, warcprox_, archiving_proxies, playback_proxies):
     urls_before = warcprox_.proxy.running_stats.urls
@@ -1979,6 +1939,47 @@ def test_trough_segment_promotion(warcprox_):
     promoted = []
     time.sleep(3)
     assert promoted == []
+
+def test_dedup_min_size(http_daemon, warcprox_, archiving_proxies, playback_proxies):
+    """We use options --dedup-min-text-size=3 --dedup-min-binary-size=5 and we
+    try to download content smaller than these limits to make sure that it is
+    not deduplicated. We create the digest_str with the following code:
+    ```
+    payload_digest = hashlib.new('sha1')
+    payload_digest.update(b'aa')
+    warcprox.digest_str(payload_digest)
+    ```
+    """
+    url = 'http://localhost:%s/text-2bytes' % http_daemon.server_port
+    response = requests.get(
+        url, proxies=archiving_proxies, verify=False, timeout=10)
+    assert len(response.content) == 2
+    dedup_lookup = warcprox_.dedup_db.lookup(
+            b'sha1:e0c9035898dd52fc65c41454cec9c4d2611bfb37')
+    assert dedup_lookup is None
+    time.sleep(3)
+    response = requests.get(
+        url, proxies=archiving_proxies, verify=False, timeout=10)
+    dedup_lookup = warcprox_.dedup_db.lookup(
+            b'sha1:e0c9035898dd52fc65c41454cec9c4d2611bfb37')
+    # This would return dedup data if payload_size > dedup-min-text-size
+    assert dedup_lookup is None
+
+    url = 'http://localhost:%s/binary-4bytes' % http_daemon.server_port
+    response = requests.get(
+        url, proxies=archiving_proxies, verify=False, timeout=10)
+    assert len(response.content) == 4
+    dedup_lookup = warcprox_.dedup_db.lookup(
+            b'sha1:70c881d4a26984ddce795f6f71817c9cf4480e79')
+    assert dedup_lookup is None
+    time.sleep(3)
+    response = requests.get(
+        url, proxies=archiving_proxies, verify=False, timeout=10)
+    dedup_lookup = warcprox_.dedup_db.lookup(
+            b'sha1:70c881d4a26984ddce795f6f71817c9cf4480e79')
+    # This would return dedup data if payload_size > dedup-min-binary-size
+    assert dedup_lookup is None
+
 
 if __name__ == '__main__':
     pytest.main()
