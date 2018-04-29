@@ -86,6 +86,7 @@ class ProxyingRecorder(object):
         self._proxy_client_conn_open = bool(self.proxy_client)
         self.len = 0
         self.url = url
+        self.start_time = time.time()
 
     def payload_starts_now(self):
         self.payload_offset = self.len
@@ -133,6 +134,10 @@ class ProxyingRecorder(object):
 
     def __len__(self):
         return self.len
+
+    @property
+    def duration(self):
+        return round(time.time() - self.start_time, 3)
 
     def payload_size(self):
         if self.payload_offset is not None:
@@ -211,6 +216,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
     logger = logging.getLogger("warcprox.mitmproxy.MitmProxyHandler")
     _socket_timeout = 60
     _max_resource_size = None
+    _max_request_duration = None
     _tmp_file_max_memory_size = 512 * 1024
 
     def __init__(self, request, client_address, server):
@@ -474,6 +480,16 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                             'truncating response because max resource size %d '
                             'bytes exceeded for URL %s',
                             self._max_resource_size, self.url)
+                    break
+                if (self._max_request_duration and
+                        prox_rec_res.recorder.duration > self._max_request_duration):
+                    prox_rec_res.truncated = b'time'
+                    self._remote_server_conn.sock.shutdown(socket.SHUT_RDWR)
+                    self._remote_server_conn.sock.close()
+                    self.logger.info(
+                            'truncating response because max request time %d '
+                            'seconds exceeded for URL %s',
+                            self._max_request_duration, self.url)
                     break
 
             self.log_request(prox_rec_res.status, prox_rec_res.recorder.len)
