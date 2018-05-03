@@ -135,10 +135,6 @@ class ProxyingRecorder(object):
     def __len__(self):
         return self.len
 
-    @property
-    def duration(self):
-        return round(time.time() - self.start_time, 3)
-
     def payload_size(self):
         if self.payload_offset is not None:
             return self.len - self.payload_offset
@@ -425,6 +421,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         It may contain extra HTTP headers such as ``Warcprox-Meta`` which
         are written in the WARC record for this request.
         '''
+        start = time.time()
         # Build request
         req_str = '{} {} {}\r\n'.format(
                 self.command, self.path, self.request_version)
@@ -482,7 +479,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                             self._max_resource_size, self.url)
                     break
                 if (self._max_request_duration and
-                        prox_rec_res.recorder.duration > self._max_request_duration):
+                        time.time() - start > self._max_request_duration):
                     prox_rec_res.truncated = b'time'
                     self._remote_server_conn.sock.shutdown(socket.SHUT_RDWR)
                     self._remote_server_conn.sock.close()
