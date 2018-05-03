@@ -191,6 +191,18 @@ class _TestHttpRequestHandler(http_server.BaseHTTPRequestHandler):
                     +  b'Content-Type: text/plain\r\n'
                     +  b'Content-Length: ' + str(len(payload)).encode('ascii') + b'\r\n'
                     +  b'\r\n')
+        elif self.path == '/text-2bytes':
+            payload = b'aa'
+            headers = (b'HTTP/1.1 200 OK\r\n'
+                    +  b'Content-Type: text/plain\r\n'
+                    +  b'Content-Length: ' + str(len(payload)).encode('ascii') + b'\r\n'
+                    +  b'\r\n')
+        elif self.path == '/binary-4bytes':
+            payload = b'aaaa'
+            headers = (b'HTTP/1.1 200 OK\r\n'
+                    +  b'Content-Type: application/octet-stream\r\n'
+                    +  b'Content-Length: ' + str(len(payload)).encode('ascii') + b'\r\n'
+                    +  b'\r\n')
         elif self.path.startswith('/test_payload_digest-'):
             content_body = (
                     b'Hello. How are you. I am the test_payload_digest '
@@ -394,7 +406,9 @@ def warcprox_(request, http_daemon, https_daemon):
             '--onion-tor-socks-proxy=localhost:9050',
             '--crawl-log-dir=crawl-logs',
             '--socket-timeout=4',
-            '--max-resource-size=200000']
+            '--max-resource-size=200000',
+            '--dedup-min-text-size=3',
+            '--dedup-min-binary-size=5']
     if request.config.getoption('--rethinkdb-dedup-url'):
         argv.append('--rethinkdb-dedup-url=%s' % request.config.getoption('--rethinkdb-dedup-url'))
         # test these here only
@@ -1925,6 +1939,47 @@ def test_trough_segment_promotion(warcprox_):
     promoted = []
     time.sleep(3)
     assert promoted == []
+
+def test_dedup_min_size(http_daemon, warcprox_, archiving_proxies, playback_proxies):
+    """We use options --dedup-min-text-size=3 --dedup-min-binary-size=5 and we
+    try to download content smaller than these limits to make sure that it is
+    not deduplicated. We create the digest_str with the following code:
+    ```
+    payload_digest = hashlib.new('sha1')
+    payload_digest.update(b'aa')
+    warcprox.digest_str(payload_digest)
+    ```
+    """
+    url = 'http://localhost:%s/text-2bytes' % http_daemon.server_port
+    response = requests.get(
+        url, proxies=archiving_proxies, verify=False, timeout=10)
+    assert len(response.content) == 2
+    dedup_lookup = warcprox_.dedup_db.lookup(
+            b'sha1:e0c9035898dd52fc65c41454cec9c4d2611bfb37')
+    assert dedup_lookup is None
+    time.sleep(3)
+    response = requests.get(
+        url, proxies=archiving_proxies, verify=False, timeout=10)
+    dedup_lookup = warcprox_.dedup_db.lookup(
+            b'sha1:e0c9035898dd52fc65c41454cec9c4d2611bfb37')
+    # This would return dedup data if payload_size > dedup-min-text-size
+    assert dedup_lookup is None
+
+    url = 'http://localhost:%s/binary-4bytes' % http_daemon.server_port
+    response = requests.get(
+        url, proxies=archiving_proxies, verify=False, timeout=10)
+    assert len(response.content) == 4
+    dedup_lookup = warcprox_.dedup_db.lookup(
+            b'sha1:70c881d4a26984ddce795f6f71817c9cf4480e79')
+    assert dedup_lookup is None
+    time.sleep(3)
+    response = requests.get(
+        url, proxies=archiving_proxies, verify=False, timeout=10)
+    dedup_lookup = warcprox_.dedup_db.lookup(
+            b'sha1:70c881d4a26984ddce795f6f71817c9cf4480e79')
+    # This would return dedup data if payload_size > dedup-min-binary-size
+    assert dedup_lookup is None
+
 
 if __name__ == '__main__':
     pytest.main()
