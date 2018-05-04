@@ -44,8 +44,12 @@ class DedupableMixin(object):
 
     def should_dedup(self, recorded_url):
         """Check if we should try to run dedup on resource based on payload
-        size compared with min text/binary dedup size options. Return Boolean.
+        size compared with min text/binary dedup size options.
+        `dedup-bucket` is required in Warcprox-Meta to perform dedup.
+        Return Boolean.
         """
+        if "dedup-bucket" not in recorded_url.warcprox_meta:
+            return False
         if recorded_url.is_text():
             return recorded_url.response_recorder.payload_size() > self.min_text_size
         else:
