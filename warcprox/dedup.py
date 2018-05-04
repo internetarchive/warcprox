@@ -37,20 +37,45 @@ from concurrent import futures
 
 urllib3.disable_warnings()
 
-class DedupLoader(warcprox.BaseStandardPostfetchProcessor):
+class DedupableMixin(object):
+    def __init__(self, options=warcprox.Options()):
+        self.min_text_size = options.dedup_min_text_size
+        self.min_binary_size = options.dedup_min_binary_size
+
+    def should_dedup(self, recorded_url):
+        """Check if we should try to run dedup on resource based on payload
+        size compared with min text/binary dedup size options. Return Boolean.
+        """
+        if recorded_url.is_text():
+            return recorded_url.response_recorder.payload_size() > self.min_text_size
+        else:
+            return recorded_url.response_recorder.payload_size() > self.min_binary_size
+
+class DedupLoader(warcprox.BaseStandardPostfetchProcessor, DedupableMixin):
     def __init__(self, dedup_db, options=warcprox.Options()):
         warcprox.BaseStandardPostfetchProcessor.__init__(self, options=options)
+        DedupableMixin.__init__(self, options)
         self.dedup_db = dedup_db
 
     def _process_url(self, recorded_url):
-        decorate_with_dedup_info(
-                self.dedup_db, recorded_url, self.options.base32)
+        if (recorded_url.response_recorder
+                and recorded_url.payload_digest
+                and self.should_dedup(recorded_url)):
+            digest_key = warcprox.digest_str(recorded_url.payload_digest, self.options.base32)
+            if recorded_url.warcprox_meta and "captures-bucket" in recorded_url.warcprox_meta:
+                recorded_url.dedup_info = self.dedup_db.lookup(
+                    digest_key, recorded_url.warcprox_meta["captures-bucket"],
+                    recorded_url.url)
+            else:
+                recorded_url.dedup_info = self.dedup_db.lookup(
+                    digest_key, url=recorded_url.url)
 
-class DedupDb(object):
+class DedupDb(DedupableMixin):
     logger = logging.getLogger("warcprox.dedup.DedupDb")
 
     def __init__(
             self, file='./warcprox.sqlite', options=warcprox.Options()):
+        DedupableMixin.__init__(self, options)
         self.file = file
         self.options = options
 
@@ -113,7 +138,7 @@ class DedupDb(object):
 
     def notify(self, recorded_url, records):
         if (records and records[0].type == b'response'
-                and recorded_url.response_recorder.payload_size() > 0):
+                and self.should_dedup(recorded_url)):
             digest_key = warcprox.digest_str(
                     recorded_url.payload_digest, self.options.base32)
             if recorded_url.warcprox_meta and "captures-bucket" in recorded_url.warcprox_meta:
@@ -123,23 +148,11 @@ class DedupDb(object):
             else:
                 self.save(digest_key, records[0])
 
-def decorate_with_dedup_info(dedup_db, recorded_url, base32=False):
-    if (recorded_url.response_recorder
-            and recorded_url.payload_digest
-            and recorded_url.response_recorder.payload_size() > 0):
-        digest_key = warcprox.digest_str(recorded_url.payload_digest, base32)
-        if recorded_url.warcprox_meta and "captures-bucket" in recorded_url.warcprox_meta:
-            recorded_url.dedup_info = dedup_db.lookup(
-                digest_key, recorded_url.warcprox_meta["captures-bucket"],
-                recorded_url.url)
-        else:
-            recorded_url.dedup_info = dedup_db.lookup(
-                digest_key, url=recorded_url.url)
-
-class RethinkDedupDb(DedupDb):
+class RethinkDedupDb(DedupDb, DedupableMixin):
     logger = logging.getLogger("warcprox.dedup.RethinkDedupDb")
 
     def __init__(self, options=warcprox.Options()):
+        DedupableMixin.__init__(self, options)
         parsed = doublethink.parse_rethinkdb_url(options.rethinkdb_dedup_url)
         self.rr = doublethink.Rethinker(
                 servers=parsed.hosts, db=parsed.database)
@@ -190,7 +203,7 @@ class RethinkDedupDb(DedupDb):
 
     def notify(self, recorded_url, records):
         if (records and records[0].type == b'response'
-                and recorded_url.response_recorder.payload_size() > 0):
+                and self.should_dedup(recorded_url)):
             digest_key = warcprox.digest_str(
                     recorded_url.payload_digest, self.options.base32)
             if recorded_url.warcprox_meta and "captures-bucket" in recorded_url.warcprox_meta:
@@ -273,9 +286,10 @@ class CdxServerDedup(DedupDb):
         """
         pass
 
-class CdxServerDedupLoader(warcprox.BaseBatchPostfetchProcessor):
+class CdxServerDedupLoader(warcprox.BaseBatchPostfetchProcessor, DedupableMixin):
     def __init__(self, cdx_dedup, options=warcprox.Options()):
         warcprox.BaseBatchPostfetchProcessor.__init__(self, options)
+        DedupableMixin.__init__(self, options)
         self.pool = futures.ThreadPoolExecutor(max_workers=400)
         self.batch = set()
         self.cdx_dedup = cdx_dedup
@@ -284,7 +298,7 @@ class CdxServerDedupLoader(warcprox.BaseBatchPostfetchProcessor):
         recorded_url = self.inq.get(block=True, timeout=0.5)
         if (recorded_url.response_recorder
                 and recorded_url.payload_digest
-                and recorded_url.response_recorder.payload_size() > 0):
+                and self.should_dedup(recorded_url)):
             self.batch.add(recorded_url)
             self.pool.submit(self._process_url, recorded_url)
         else:
@@ -306,9 +320,10 @@ class CdxServerDedupLoader(warcprox.BaseBatchPostfetchProcessor):
             if self.outq:
                 self.outq.put(recorded_url)
 
-class BatchTroughStorer(warcprox.BaseBatchPostfetchProcessor):
+class BatchTroughStorer(warcprox.BaseBatchPostfetchProcessor, DedupableMixin):
     def __init__(self, trough_dedup_db, options=warcprox.Options()):
         warcprox.BaseBatchPostfetchProcessor.__init__(self, options)
+        DedupableMixin.__init__(self, options)
         self.trough_dedup_db = trough_dedup_db
 
     def _filter_and_bucketize(self, batch):
@@ -320,7 +335,7 @@ class BatchTroughStorer(warcprox.BaseBatchPostfetchProcessor):
         for recorded_url in batch:
             if (recorded_url.warc_records
                     and recorded_url.warc_records[0].type == b'response'
-                    and recorded_url.response_recorder.payload_size() > 0):
+                    and self.should_dedup(recorded_url)):
                 if (recorded_url.warcprox_meta
                         and 'captures-bucket' in recorded_url.warcprox_meta):
                     bucket = recorded_url.warcprox_meta['captures-bucket']
@@ -352,9 +367,10 @@ class BatchTroughStorer(warcprox.BaseBatchPostfetchProcessor):
                 logging.warn(
                     'timed out saving dedup info to trough', exc_info=True)
 
-class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
+class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor, DedupableMixin):
     def __init__(self, trough_dedup_db, options=warcprox.Options()):
         warcprox.BaseBatchPostfetchProcessor.__init__(self, options)
+        DedupableMixin.__init__(self, options)
         self.trough_dedup_db = trough_dedup_db
 
     def _startup(self):
@@ -369,7 +385,7 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
         for recorded_url in batch:
             if (recorded_url.response_recorder
                     and recorded_url.payload_digest
-                    and recorded_url.response_recorder.payload_size() > 0):
+                    and self.should_dedup(recorded_url)):
                 if (recorded_url.warcprox_meta
                         and 'captures-bucket' in recorded_url.warcprox_meta):
                     bucket = recorded_url.warcprox_meta['captures-bucket']
@@ -429,7 +445,7 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
                 logging.warn(
                     'timed out loading dedup info from trough', exc_info=True)
 
-class TroughDedupDb(DedupDb):
+class TroughDedupDb(DedupDb, DedupableMixin):
     '''
     https://github.com/internetarchive/trough
     '''
@@ -446,6 +462,7 @@ class TroughDedupDb(DedupDb):
                       'values (%s, %s, %s, %s);')
 
     def __init__(self, options=warcprox.Options()):
+        DedupableMixin.__init__(self, options)
         self.options = options
         self._trough_cli = warcprox.trough.TroughClient(
                 options.rethinkdb_trough_db_url, promotion_interval=60*60)
@@ -518,7 +535,7 @@ class TroughDedupDb(DedupDb):
 
     def notify(self, recorded_url, records):
         if (records and records[0].type == b'response'
-                and recorded_url.response_recorder.payload_size() > 0):
+                and self.should_dedup(recorded_url)):
             digest_key = warcprox.digest_str(
                     recorded_url.payload_digest, self.options.base32)
             if recorded_url.warcprox_meta and 'captures-bucket' in recorded_url.warcprox_meta:
