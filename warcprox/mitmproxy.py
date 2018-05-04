@@ -110,14 +110,19 @@ class ProxyingRecorder(object):
         self.len += len(hunk)
 
     def read(self, size=-1):
+        # this is called from inside http.client.HTTPResponse.read1() in
+        # case of chunked response
         hunk = self.fp.read(size)
         self._update(hunk)
         return hunk
 
     def readinto(self, b):
-        n = self.fp.readinto(b)
-        self._update(b[:n])
-        return n
+        raise Exception("don't use me?!?")
+
+    def read1(self, size):
+        hunk = self.fp.read1(size)
+        self._update(hunk)
+        return hunk
 
     def readline(self, size=-1):
         # XXX depends on implementation details of self.fp.readline(), in
@@ -190,7 +195,10 @@ class ProxyingRecordingHTTPResponse(http_client.HTTPResponse):
         self.payload_digest = hashlib.new(self.digest_algorithm)
 
     def read(self, amt=None):
-        buf = http_client.HTTPResponse.read(self, amt)
+        raise Exception("don't use me?!?")
+
+    def read1(self, amt=None):
+        buf = http_client.HTTPResponse.read1(self, amt)
         self.payload_digest.update(buf)
         return buf
 
@@ -465,9 +473,8 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                     tmp_file_max_memory_size=self._tmp_file_max_memory_size)
             prox_rec_res.begin(extra_response_headers=extra_response_headers)
 
-            buf = prox_rec_res.read(65536)
+            buf = prox_rec_res.read1(65536)
             while buf != b'':
-                buf = prox_rec_res.read(65536)
                 if (self._max_resource_size and
                         prox_rec_res.recorder.len > self._max_resource_size):
                     prox_rec_res.truncated = b'length'
@@ -488,6 +495,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                             'seconds exceeded for URL %s',
                             self._max_request_duration, self.url)
                     break
+                buf = prox_rec_res.read1(65536)
 
             self.log_request(prox_rec_res.status, prox_rec_res.recorder.len)
             # Let's close off the remote end. If remote connection is fine,
