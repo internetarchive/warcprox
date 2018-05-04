@@ -1311,10 +1311,10 @@ def test_limit_large_resource(archiving_proxies, http_daemon, warcprox_):
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 2)
 
 def test_limit_request_duration(archiving_proxies, http_daemon, warcprox_):
-    """We try to load a 300k response but we use --max-resource-size=200000 in
-    `warcprox_` so it will be truncated. We expect it to limit the result as
-    soon as it passes the 200000 limit. As warcprox read() chunk size is 65536,
-    the expected result size is 65536*4=262144.
+    """We try to load a gradual response which runs for 20 sec and downloads
+    20k. We use --max-request-duration=15 in `warcprox_` so it will be
+    truncated and download less.
+    WARNING this crashes with a socket exception
     """
     urls_before = warcprox_.proxy.running_stats.urls
 
