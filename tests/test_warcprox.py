@@ -277,9 +277,20 @@ class _TestHttpRequestHandler(http_server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         logging.info('GET {}'.format(self.path))
-        headers, payload = self.build_response()
-        self.connection.sendall(headers)
-        self.connection.sendall(payload)
+        if self.path == '/slow-gradual-response':
+            if self.path == '/slow-gradual-response':
+                headers = (b'HTTP/1.1 200 OK\r\n'
+                        +  b'Content-Type: text/plain\r\n'
+                        +  b'Content-Length: 20000\r\n'
+                        +  b'\r\n')
+                self.connection.sendall(headers)
+                for i in range(20):
+                    time.sleep(1)
+                    self.connection.send(b'x' * 1000)
+        else:
+            headers, payload = self.build_response()
+            self.connection.sendall(headers)
+            self.connection.sendall(payload)
         if self.path in ('/missing-content-length', '/empty-response'):
             # server must close the connection, else client has no idea if
             # there is more data coming
@@ -394,7 +405,8 @@ def warcprox_(request, http_daemon, https_daemon):
             '--onion-tor-socks-proxy=localhost:9050',
             '--crawl-log-dir=crawl-logs',
             '--socket-timeout=4',
-            '--max-resource-size=200000']
+            '--max-resource-size=200000',
+            '--max-request-duration=15']
     if request.config.getoption('--rethinkdb-dedup-url'):
         argv.append('--rethinkdb-dedup-url=%s' % request.config.getoption('--rethinkdb-dedup-url'))
         # test these here only
@@ -1297,6 +1309,33 @@ def test_limit_large_resource(archiving_proxies, http_daemon, warcprox_):
     # wait for processing of this url to finish so that it doesn't interfere
     # with subsequent tests
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 2)
+
+def test_limit_request_duration(archiving_proxies, http_daemon, warcprox_):
+    """We try to load a 300k response but we use --max-resource-size=200000 in
+    `warcprox_` so it will be truncated. We expect it to limit the result as
+    soon as it passes the 200000 limit. As warcprox read() chunk size is 65536,
+    the expected result size is 65536*4=262144.
+    """
+    urls_before = warcprox_.proxy.running_stats.urls
+
+    # this should be truncated
+    url = 'http://localhost:%s/slow-gradual-response' % http_daemon.server_port
+    response = requests.get(
+        url, proxies=archiving_proxies, verify=False, timeout=30)
+    assert len(response.content) < 20000
+
+    # test that the connection is cleaned up properly after truncating a
+    # response (no hang or timeout)
+    url = 'http://localhost:%s/' % http_daemon.server_port
+    response = requests.get(
+        url, proxies=archiving_proxies, verify=False, timeout=10)
+    assert response.status_code == 404
+    assert response.content == b'404 Not Found\n'
+
+    # wait for processing of this url to finish so that it doesn't interfere
+    # with subsequent tests
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 2)
+
 
 def test_method_filter(
         warcprox_, https_daemon, http_daemon, archiving_proxies,
