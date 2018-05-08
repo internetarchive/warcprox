@@ -41,11 +41,17 @@ class DedupableMixin(object):
     def __init__(self, options=warcprox.Options()):
         self.min_text_size = options.dedup_min_text_size
         self.min_binary_size = options.dedup_min_binary_size
+        self.dedup_only_with_bucket = options.dedup_only_with_bucket
 
     def should_dedup(self, recorded_url):
         """Check if we should try to run dedup on resource based on payload
-        size compared with min text/binary dedup size options. Return Boolean.
+        size compared with min text/binary dedup size options.
+        When we use option --dedup-only-with-bucket, `dedup-bucket` is required
+        in Warcprox-Meta to perform dedup.
+        Return Boolean.
         """
+        if self.dedup_only_with_bucket and "dedup-bucket" not in recorded_url.warcprox_meta:
+            return False
         if recorded_url.is_text():
             return recorded_url.response_recorder.payload_size() > self.min_text_size
         else:
@@ -62,9 +68,9 @@ class DedupLoader(warcprox.BaseStandardPostfetchProcessor, DedupableMixin):
                 and recorded_url.payload_digest
                 and self.should_dedup(recorded_url)):
             digest_key = warcprox.digest_str(recorded_url.payload_digest, self.options.base32)
-            if recorded_url.warcprox_meta and "captures-bucket" in recorded_url.warcprox_meta:
+            if recorded_url.warcprox_meta and "dedup-bucket" in recorded_url.warcprox_meta:
                 recorded_url.dedup_info = self.dedup_db.lookup(
-                    digest_key, recorded_url.warcprox_meta["captures-bucket"],
+                    digest_key, recorded_url.warcprox_meta["dedup-bucket"],
                     recorded_url.url)
             else:
                 recorded_url.dedup_info = self.dedup_db.lookup(
@@ -141,10 +147,10 @@ class DedupDb(DedupableMixin):
                 and self.should_dedup(recorded_url)):
             digest_key = warcprox.digest_str(
                     recorded_url.payload_digest, self.options.base32)
-            if recorded_url.warcprox_meta and "captures-bucket" in recorded_url.warcprox_meta:
+            if recorded_url.warcprox_meta and "dedup-bucket" in recorded_url.warcprox_meta:
                 self.save(
                         digest_key, records[0],
-                        bucket=recorded_url.warcprox_meta["captures-bucket"])
+                        bucket=recorded_url.warcprox_meta["dedup-bucket"])
             else:
                 self.save(digest_key, records[0])
 
@@ -206,8 +212,8 @@ class RethinkDedupDb(DedupDb, DedupableMixin):
                 and self.should_dedup(recorded_url)):
             digest_key = warcprox.digest_str(
                     recorded_url.payload_digest, self.options.base32)
-            if recorded_url.warcprox_meta and "captures-bucket" in recorded_url.warcprox_meta:
-                self.save(digest_key, records[0], bucket=recorded_url.warcprox_meta["captures-bucket"])
+            if recorded_url.warcprox_meta and "dedup-bucket" in recorded_url.warcprox_meta:
+                self.save(digest_key, records[0], bucket=recorded_url.warcprox_meta["dedup-bucket"])
             else:
                 self.save(digest_key, records[0])
 
@@ -337,8 +343,8 @@ class BatchTroughStorer(warcprox.BaseBatchPostfetchProcessor, DedupableMixin):
                     and recorded_url.warc_records[0].type == b'response'
                     and self.should_dedup(recorded_url)):
                 if (recorded_url.warcprox_meta
-                        and 'captures-bucket' in recorded_url.warcprox_meta):
-                    bucket = recorded_url.warcprox_meta['captures-bucket']
+                        and 'dedup-bucket' in recorded_url.warcprox_meta):
+                    bucket = recorded_url.warcprox_meta['dedup-bucket']
                 else:
                     bucket = '__unspecified__'
                 buckets[bucket].append(recorded_url)
@@ -387,8 +393,8 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor, DedupableMixin):
                     and recorded_url.payload_digest
                     and self.should_dedup(recorded_url)):
                 if (recorded_url.warcprox_meta
-                        and 'captures-bucket' in recorded_url.warcprox_meta):
-                    bucket = recorded_url.warcprox_meta['captures-bucket']
+                        and 'dedup-bucket' in recorded_url.warcprox_meta):
+                    bucket = recorded_url.warcprox_meta['dedup-bucket']
                 else:
                     bucket = '__unspecified__'
                 buckets[bucket].append(recorded_url)
@@ -538,9 +544,9 @@ class TroughDedupDb(DedupDb, DedupableMixin):
                 and self.should_dedup(recorded_url)):
             digest_key = warcprox.digest_str(
                     recorded_url.payload_digest, self.options.base32)
-            if recorded_url.warcprox_meta and 'captures-bucket' in recorded_url.warcprox_meta:
+            if recorded_url.warcprox_meta and 'dedup-bucket' in recorded_url.warcprox_meta:
                 self.save(
                         digest_key, records[0],
-                        bucket=recorded_url.warcprox_meta['captures-bucket'])
+                        bucket=recorded_url.warcprox_meta['dedup-bucket'])
             else:
                 self.save(digest_key, records[0])

@@ -157,8 +157,8 @@ class RethinkCaptures:
             sha1base32 = base64.b32encode(digest.digest()).decode("utf-8")
 
         if (recorded_url.warcprox_meta
-                and "captures-bucket" in recorded_url.warcprox_meta):
-            bucket = recorded_url.warcprox_meta["captures-bucket"]
+                and "dedup-bucket" in recorded_url.warcprox_meta):
+            bucket = recorded_url.warcprox_meta["dedup-bucket"]
         else:
             bucket = "__unspecified__"
 
