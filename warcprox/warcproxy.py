@@ -350,6 +350,10 @@ class RecordedUrl:
         self.response_recorder = response_recorder
 
         if warcprox_meta:
+            if 'captures-bucket' in warcprox_meta:
+                # backward compatibility
+                warcprox_meta['dedup-bucket'] = warcprox_meta['captures-bucket']
+                del warcprox_meta['captures-bucket']
             self.warcprox_meta = warcprox_meta
         else:
             self.warcprox_meta = {}
@@ -375,6 +379,18 @@ class RecordedUrl:
         self.truncated = truncated
         self.warc_records = warc_records
         self.do_not_archive = do_not_archive
+
+    def is_text(self):
+        """Ref: https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types/Complete_list_of_MIME_types
+        Alternative method: try to decode('ascii') first N bytes to make sure
+        its text.
+        """
+        if self.mimetype:
+            return self.mimetype[:5] == "text/" or self.mimetype in (
+                "application/xml", "application/javascript", "application/json",
+                "application/xhtml+xml", "application/typescript",
+                "image/svg+xml")
+        return False
 
 # inherit from object so that multiple inheritance from this class works
 # properly in python 2
@@ -483,6 +499,7 @@ class WarcProxy(SingleThreadedWarcProxy, warcprox.mitmproxy.PooledMitmProxy):
     def server_close(self):
         self.logger.info('shutting down')
         http_server.HTTPServer.server_close(self)
+        self.remote_connection_pool.clear()
 
     def handle_error(self, request, client_address):
         self.logger.warn(

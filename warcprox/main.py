@@ -148,6 +148,16 @@ def _build_arg_parser(prog='warcprox'):
     # optional cookie values to pass to CDX Server; e.g. "cookie1=val1;cookie2=val2"
     arg_parser.add_argument('--cdxserver-dedup-cookies', dest='cdxserver_dedup_cookies',
             help=argparse.SUPPRESS)
+    arg_parser.add_argument('--dedup-min-text-size', dest='dedup_min_text_size',
+                            type=int, default=0,
+                            help=('try to dedup text resources with payload size over this limit in bytes'))
+    arg_parser.add_argument('--dedup-min-binary-size', dest='dedup_min_binary_size',
+                            type=int, default=0, help=(
+                            'try to dedup binary resources with payload size over this limit in bytes'))
+    # optionally, dedup request only when `dedup-bucket` is available in
+    # Warcprox-Meta HTTP header. By default, we dedup all requests.
+    arg_parser.add_argument('--dedup-only-with-bucket', dest='dedup_only_with_bucket',
+                            action='store_true', default=False, help=argparse.SUPPRESS)
     arg_parser.add_argument('--queue-size', dest='queue_size', type=int,
             default=500, help=argparse.SUPPRESS)
     arg_parser.add_argument('--max-threads', dest='max_threads', type=int,

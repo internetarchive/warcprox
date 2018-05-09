@@ -390,6 +390,24 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             self.send_error(502, str(e))
             return
 
+    def send_error(self, code, message=None, explain=None):
+        # BaseHTTPRequestHandler.send_response_only() in http/server.py
+        # does this:
+        #     if not hasattr(self, '_headers_buffer'):
+        #         self._headers_buffer = []
+        # but we sometimes see self._headers_buffer == None
+        # (This happened before! see commit dc9fdc34125dd2357)
+        # Workaround:
+        if hasattr(self, '_headers_buffer') and not self._headers_buffer:
+            self._headers_buffer = []
+        try:
+            return http_server.BaseHTTPRequestHandler.send_error(
+                    self, code, message, explain)
+        except:
+            self.logger.error(
+                    'send_error(%r, %r, %r) raised exception', exc_info=True)
+            return None
+
     def _proxy_request(self, extra_response_headers={}):
         '''
         Sends the request to the remote server, then uses a ProxyingRecorder to
@@ -447,13 +465,16 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             buf = prox_rec_res.read(65536)
             while buf != b'':
                 buf = prox_rec_res.read(65536)
-                if self._max_resource_size:
-                    if prox_rec_res.recorder.len > self._max_resource_size:
-                        prox_rec_res.truncated = b'length'
-                        self.logger.error(
-                            'Max resource size %d bytes exceeded for URL %s',
+                if (self._max_resource_size and
+                        prox_rec_res.recorder.len > self._max_resource_size):
+                    prox_rec_res.truncated = b'length'
+                    self._remote_server_conn.sock.shutdown(socket.SHUT_RDWR)
+                    self._remote_server_conn.sock.close()
+                    self.logger.info(
+                            'truncating response because max resource size %d '
+                            'bytes exceeded for URL %s',
                             self._max_resource_size, self.url)
-                        break
+                    break
 
             self.log_request(prox_rec_res.status, prox_rec_res.recorder.len)
             # Let's close off the remote end. If remote connection is fine,
@@ -461,6 +482,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             if not is_connection_dropped(self._remote_server_conn):
                 self._conn_pool._put_conn(self._remote_server_conn)
         except:
+            self._remote_server_conn.sock.shutdown(socket.SHUT_RDWR)
             self._remote_server_conn.sock.close()
             raise
         finally:
@@ -479,35 +501,14 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
 class PooledMixIn(socketserver.ThreadingMixIn):
     logger = logging.getLogger("warcprox.mitmproxy.PooledMixIn")
     def __init__(self, max_threads=None):
-        '''
-        If max_threads is not supplied, calculates a reasonable value based
-        on system resource limits.
-        '''
         self.active_requests = set()
         self.unaccepted_requests = 0
-        if not max_threads:
-            # man getrlimit: "RLIMIT_NPROC The maximum number of processes (or,
-            # more precisely on Linux, threads) that can be created for the
-            # real user ID of the calling process."
-            try:
-                import resource
-                rlimit_nproc = resource.getrlimit(resource.RLIMIT_NPROC)[0]
-                rlimit_nofile = resource.getrlimit(resource.RLIMIT_NOFILE)[0]
-                max_threads = min(rlimit_nofile // 10, rlimit_nproc // 2)
-                # resource.RLIM_INFINITY == -1 which can result in max_threads == 0
-                if max_threads <= 0 or max_threads > 5000:
-                    max_threads = 5000
-                self.logger.info(
-                        "max_threads=%s (rlimit_nproc=%s, rlimit_nofile=%s)",
-                        max_threads, rlimit_nproc, rlimit_nofile)
-            except Exception as e:
-                self.logger.warn(
-                        "unable to calculate optimal number of threads based "
-                        "on resource limits due to %s", e)
-                max_threads = 100
-                self.logger.info("max_threads=%s", max_threads)
-        self.max_threads = max_threads
-        self.pool = concurrent.futures.ThreadPoolExecutor(max_threads)
+        if max_threads:
+            self.max_threads = max_threads
+        else:
+            self.max_threads = 100
+        self.pool = concurrent.futures.ThreadPoolExecutor(self.max_threads)
+        self.logger.info("%s proxy threads", self.max_threads)
 
     def status(self):
         if hasattr(super(), 'status'):

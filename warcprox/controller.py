@@ -141,11 +141,9 @@ class WarcproxController(object):
         self.playback_proxy = Factory.playback_proxy(
             self.proxy.ca, self.options)
 
-        # default number of warc writer threads = sqrt(proxy.max_threads)
-        # pulled out of thin air because it strikes me as reasonable
-        # 1=>1 2=>1 5=>2 10=>3 50=>7 100=>10 200=>14 500=>22 1000=>32 2000=>45
+        # https://github.com/internetarchive/warcprox/wiki/benchmarking-number-of-threads
         if not self.options.writer_threads:
-            self.options.writer_threads = int(self.proxy.max_threads ** 0.5)
+            self.options.writer_threads = 1
 
         self.build_postfetch_chain(self.proxy.recorded_url_q)
 
@@ -164,8 +162,7 @@ class WarcproxController(object):
                 queued += len(processor.batch)
 
             result['postfetch_chain'].append({
-                'processor': name,
-                'queued_urls': len(processor.inq.queue)})
+                'processor': name, 'queued_urls': queued})
         return result
 
     def chain(self, processor0, processor1):
@@ -440,3 +437,18 @@ class WarcproxController(object):
                 self.logger.notice(
                         'performance profile of %s:\n%s', processor,
                         buf.getvalue())
+
+                if hasattr(processor, 'thread_profilers'):
+                    files = []
+                    for th_id, profiler in processor.thread_profilers.items():
+                        file = os.path.join(tmpdir, '%s.dat' % th_id)
+                        profiler.dump_stats(file)
+                        files.append(file)
+                    buf = io.StringIO()
+                    stats = pstats.Stats(*files, stream=buf)
+                    stats.sort_stats('cumulative')
+                    stats.print_stats(0.1)
+                    self.logger.notice(
+                            'aggregate performance profile of %s worker '
+                            'threads of %s:\n%s',
+                            len(files), processor, buf.getvalue())

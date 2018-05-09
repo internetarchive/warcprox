@@ -26,11 +26,13 @@ import time
 import logging
 from argparse import Namespace as _Namespace
 from pkg_resources import get_distribution as _get_distribution
-__version__ = _get_distribution('warcprox').version
+import concurrent.futures
 try:
     import queue
 except ImportError:
     import Queue as queue
+
+__version__ = _get_distribution('warcprox').version
 
 def digest_str(hash_obj, base32=False):
     import base64
@@ -44,6 +46,17 @@ class Options(_Namespace):
             return super(Options, self).__getattr__(self, name)
         except AttributeError:
             return None
+
+class ThreadPoolExecutor(concurrent.futures.ThreadPoolExecutor):
+    '''
+    `concurrent.futures.ThreadPoolExecutor` supporting a queue of limited size.
+
+    If `max_queued` is set, calls to `submit()` will block if necessary until a
+    free slot is available.
+    '''
+    def __init__(self, max_queued=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._work_queue = queue.Queue(maxsize=max_queued or 0)
 
 class TimestampedQueue(queue.Queue):
     """

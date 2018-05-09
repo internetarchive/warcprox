@@ -50,6 +50,7 @@ import io
 import gzip
 import mock
 import email.message
+import socketserver
 
 try:
     import http.server as http_server
@@ -166,6 +167,9 @@ def chunkify(buf, chunk_size=13):
 #         return outbuf.getvalue()
 
 class _TestHttpRequestHandler(http_server.BaseHTTPRequestHandler):
+    # enable keepalive
+    protocol_version = 'HTTP/1.1'
+
     def build_response(self):
         m = re.match(r'^/([^/]+)/([^/]+)$', self.path)
         if m is not None:
@@ -185,6 +189,18 @@ class _TestHttpRequestHandler(http_server.BaseHTTPRequestHandler):
             payload = b'0123456789' * 30000
             headers = (b'HTTP/1.1 200 OK\r\n'
                     +  b'Content-Type: text/plain\r\n'
+                    +  b'Content-Length: ' + str(len(payload)).encode('ascii') + b'\r\n'
+                    +  b'\r\n')
+        elif self.path == '/text-2bytes':
+            payload = b'aa'
+            headers = (b'HTTP/1.1 200 OK\r\n'
+                    +  b'Content-Type: text/plain\r\n'
+                    +  b'Content-Length: ' + str(len(payload)).encode('ascii') + b'\r\n'
+                    +  b'\r\n')
+        elif self.path == '/binary-4bytes':
+            payload = b'aaaa'
+            headers = (b'HTTP/1.1 200 OK\r\n'
+                    +  b'Content-Type: application/octet-stream\r\n'
                     +  b'Content-Length: ' + str(len(payload)).encode('ascii') + b'\r\n'
                     +  b'\r\n')
         elif self.path.startswith('/test_payload_digest-'):
@@ -276,6 +292,11 @@ class _TestHttpRequestHandler(http_server.BaseHTTPRequestHandler):
         headers, payload = self.build_response()
         self.connection.sendall(headers)
         self.connection.sendall(payload)
+        if self.path in ('/missing-content-length', '/empty-response'):
+            # server must close the connection, else client has no idea if
+            # there is more data coming
+            self.connection.shutdown(socket.SHUT_RDWR)
+            self.connection.close()
 
     def do_HEAD(self):
         logging.info('HEAD {}'.format(self.path))
@@ -315,9 +336,20 @@ def cert(request):
     finally:
         f.close()
 
+# We need this test server to accept multiple simultaneous connections in order
+# to avoid mysterious looking test failures like these:
+# https://travis-ci.org/internetarchive/warcprox/builds/362892231
+# This is because we can't guarantee (without jumping through hoops) that
+# MitmProxyHandler._proxy_request() returns the connection to the pool before
+# the next request tries to get a connection from the pool in
+# MitmProxyHandler._connect_to_remote_server(). (Unless we run warcprox
+# single-threaded for these tests, which maybe we should consider?)
+class ThreadedHTTPServer(socketserver.ThreadingMixIn, http_server.HTTPServer):
+    pass
+
 @pytest.fixture(scope="module")
 def http_daemon(request):
-    http_daemon = http_server.HTTPServer(
+    http_daemon = ThreadedHTTPServer(
             ('localhost', 0), RequestHandlerClass=_TestHttpRequestHandler)
     logging.info('starting http://{}:{}'.format(http_daemon.server_address[0], http_daemon.server_address[1]))
     http_daemon_thread = threading.Thread(name='HttpDaemonThread',
@@ -336,9 +368,8 @@ def http_daemon(request):
 @pytest.fixture(scope="module")
 def https_daemon(request, cert):
     # http://www.piware.de/2011/01/creating-an-https-server-in-python/
-    https_daemon = http_server.HTTPServer(('localhost', 0),
+    https_daemon = ThreadedHTTPServer(('localhost', 0),
             RequestHandlerClass=_TestHttpRequestHandler)
-    # https_daemon.socket = ssl.wrap_socket(httpd.socket, certfile='path/to/localhost.pem', server_side=True)
     https_daemon.socket = ssl.wrap_socket(https_daemon.socket, certfile=cert, server_side=True)
     logging.info('starting https://{}:{}'.format(https_daemon.server_address[0], https_daemon.server_address[1]))
     https_daemon_thread = threading.Thread(name='HttpsDaemonThread',
@@ -354,8 +385,11 @@ def https_daemon(request, cert):
 
     return https_daemon
 
+# specify http_daemon and https_daemon as dependencies so that their finalizers
+# run after warcprox is shut down, otherwise warcprox holds connections open
+# and prevents the servers from shutting down
 @pytest.fixture(scope="module")
-def warcprox_(request):
+def warcprox_(request, http_daemon, https_daemon):
     orig_dir = os.getcwd()
     work_dir = tempfile.mkdtemp()
     logging.info('changing to working directory %r', work_dir)
@@ -372,7 +406,9 @@ def warcprox_(request):
             '--onion-tor-socks-proxy=localhost:9050',
             '--crawl-log-dir=crawl-logs',
             '--socket-timeout=4',
-            '--max-resource-size=200000']
+            '--max-resource-size=200000',
+            '--dedup-min-text-size=3',
+            '--dedup-min-binary-size=5']
     if request.config.getoption('--rethinkdb-dedup-url'):
         argv.append('--rethinkdb-dedup-url=%s' % request.config.getoption('--rethinkdb-dedup-url'))
         # test these here only
@@ -709,7 +745,7 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
     url2 = 'https://localhost:{}/k/l'.format(https_daemon.server_port)
 
     # archive url1 bucket_a
-    headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"test_dedup_buckets","captures-bucket":"bucket_a"})}
+    headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"test_dedup_buckets","dedup-bucket":"bucket_a"})}
     response = requests.get(url1, proxies=archiving_proxies, verify=False, headers=headers)
     assert response.status_code == 200
     assert response.headers['warcprox-test-header'] == 'k!'
@@ -735,7 +771,7 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
     assert dedup_lookup is None
 
     # archive url2 bucket_b
-    headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"test_dedup_buckets","captures-bucket":"bucket_b"})}
+    headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"test_dedup_buckets","dedup-bucket":"bucket_b"})}
     response = requests.get(url2, proxies=archiving_proxies, verify=False, headers=headers)
     assert response.status_code == 200
     assert response.headers['warcprox-test-header'] == 'k!'
@@ -764,7 +800,7 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 3)
 
     # archive url1 bucket_b
-    headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"test_dedup_buckets","captures-bucket":"bucket_b"})}
+    headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"test_dedup_buckets","dedup-bucket":"bucket_b"})}
     response = requests.get(url1, proxies=archiving_proxies, verify=False, headers=headers)
     assert response.status_code == 200
     assert response.headers['warcprox-test-header'] == 'k!'
@@ -961,6 +997,14 @@ def test_domain_doc_soft_limit(
         http_daemon, https_daemon, warcprox_, archiving_proxies):
     urls_before = warcprox_.proxy.running_stats.urls
 
+    # we need to clear the connection pool here because
+    # - connection pool already may already have an open connection localhost
+    # - we're about to make a connection to foo.localhost
+    # - but our test server, which handles all the hosts, is single threaded
+    # - so it will fail to connect (socket timeout)
+    # must close connections before each connection to a different hostname
+    warcprox_.proxy.remote_connection_pool.clear()
+
     request_meta = {
         "stats": {"buckets": [{"bucket":"test_domain_doc_limit_bucket","tally-domains":["foo.localhost"]}]},
         "soft-limits": {"test_domain_doc_limit_bucket:foo.localhost/total/urls":10},
@@ -978,6 +1022,8 @@ def test_domain_doc_soft_limit(
     # wait for postfetch chain
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
 
+    warcprox_.proxy.remote_connection_pool.clear()
+
     # make sure stats from different domain don't count
     url = 'http://bar.localhost:{}/o/p'.format(http_daemon.server_port)
     for i in range(10):
@@ -990,6 +1036,8 @@ def test_domain_doc_soft_limit(
     # wait for postfetch chain
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 11)
 
+    warcprox_.proxy.remote_connection_pool.clear()
+
     # (2) same host but different scheme and port: domain limit applies
     url = 'https://foo.localhost:{}/o/p'.format(https_daemon.server_port)
     response = requests.get(
@@ -998,6 +1046,8 @@ def test_domain_doc_soft_limit(
     assert response.status_code == 200
     assert response.headers['warcprox-test-header'] == 'o!'
     assert response.content == b'I am the warcprox test payload! pppppppppp!\n'
+
+    warcprox_.proxy.remote_connection_pool.clear()
 
     # (3-9) different subdomain: host limit applies
     url = 'https://baz.foo.localhost:{}/o/p'.format(https_daemon.server_port)
@@ -1027,6 +1077,8 @@ def test_domain_doc_soft_limit(
     # wait for postfetch chain
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 20)
 
+    warcprox_.proxy.remote_connection_pool.clear()
+
     # (11) back to http, and this is the 11th request
     url = 'http://zuh.foo.localhost:{}/o/p'.format(http_daemon.server_port)
     response = requests.get(
@@ -1037,6 +1089,8 @@ def test_domain_doc_soft_limit(
     assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
     assert response.headers["content-type"] == "text/plain;charset=utf-8"
     assert response.raw.data == b"request rejected by warcprox: reached soft limit test_domain_doc_limit_bucket:foo.localhost/total/urls=10\n"
+
+    warcprox_.proxy.remote_connection_pool.clear()
 
     # make sure limit doesn't get applied to a different domain
     url = 'https://localhost:{}/o/p'.format(https_daemon.server_port)
@@ -1050,6 +1104,8 @@ def test_domain_doc_soft_limit(
     # wait for postfetch chain
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 21)
 
+    warcprox_.proxy.remote_connection_pool.clear()
+
     # https also blocked
     url = 'https://zuh.foo.localhost:{}/o/p'.format(https_daemon.server_port)
     response = requests.get(
@@ -1061,6 +1117,8 @@ def test_domain_doc_soft_limit(
     assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
     assert response.headers["content-type"] == "text/plain;charset=utf-8"
     assert response.raw.data == b"request rejected by warcprox: reached soft limit test_domain_doc_limit_bucket:foo.localhost/total/urls=10\n"
+
+    warcprox_.proxy.remote_connection_pool.clear()
 
     # same host, different capitalization still blocked
     url = 'https://HEHEHE.fOO.lOcALhoST:{}/o/p'.format(https_daemon.server_port)
@@ -1086,6 +1144,8 @@ def test_domain_data_soft_limit(
     }
     headers = {"Warcprox-Meta": json.dumps(request_meta)}
 
+    warcprox_.proxy.remote_connection_pool.clear()
+
     url = 'http://ÞZz.localhost:{}/y/z'.format(http_daemon.server_port)
     response = requests.get(
             url, proxies=archiving_proxies, headers=headers, stream=True)
@@ -1095,6 +1155,8 @@ def test_domain_data_soft_limit(
 
     # wait for postfetch chain
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
+
+    warcprox_.proxy.remote_connection_pool.clear()
 
     # duplicate, does not count toward limit
     url = 'https://baz.Þzz.localhost:{}/y/z'.format(https_daemon.server_port)
@@ -1108,6 +1170,8 @@ def test_domain_data_soft_limit(
     # wait for postfetch chain
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 2)
 
+    warcprox_.proxy.remote_connection_pool.clear()
+
     # novel, pushes stats over the limit
     url = 'https://muh.XN--Zz-2Ka.locALHOst:{}/z/~'.format(https_daemon.server_port)
     response = requests.get(
@@ -1120,6 +1184,8 @@ def test_domain_data_soft_limit(
     # wait for postfetch chain
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 3)
 
+    warcprox_.proxy.remote_connection_pool.clear()
+
     # make sure limit doesn't get applied to a different host
     url = 'http://baz.localhost:{}/z/~'.format(http_daemon.server_port)
     response = requests.get(
@@ -1130,6 +1196,8 @@ def test_domain_data_soft_limit(
 
     # wait for postfetch chain
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 4)
+
+    warcprox_.proxy.remote_connection_pool.clear()
 
     # blocked because we're over the limit now
     url = 'http://lOl.wHut.ÞZZ.lOcALHOst:{}/y/z'.format(http_daemon.server_port)
@@ -1226,14 +1294,23 @@ def test_limit_large_resource(archiving_proxies, http_daemon, warcprox_):
     """
     urls_before = warcprox_.proxy.running_stats.urls
 
+    # this should be truncated
     url = 'http://localhost:%s/300k-content' % http_daemon.server_port
     response = requests.get(
         url, proxies=archiving_proxies, verify=False, timeout=10)
     assert len(response.content) == 262144
 
+    # test that the connection is cleaned up properly after truncating a
+    # response (no hang or timeout)
+    url = 'http://localhost:%s/' % http_daemon.server_port
+    response = requests.get(
+        url, proxies=archiving_proxies, verify=False, timeout=10)
+    assert response.status_code == 404
+    assert response.content == b'404 Not Found\n'
+
     # wait for processing of this url to finish so that it doesn't interfere
     # with subsequent tests
-    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 2)
 
 def test_method_filter(
         warcprox_, https_daemon, http_daemon, archiving_proxies,
@@ -1294,7 +1371,7 @@ def test_dedup_ok_flag(
     assert dedup_lookup is None
 
     # archive with dedup_ok:False
-    request_meta = {'captures-bucket':'test_dedup_ok_flag','dedup-ok':False}
+    request_meta = {'dedup-bucket':'test_dedup_ok_flag','dedup-ok':False}
     headers = {'Warcprox-Meta': json.dumps(request_meta)}
     response = requests.get(
             url, proxies=archiving_proxies, headers=headers, verify=False)
@@ -1312,7 +1389,7 @@ def test_dedup_ok_flag(
     assert dedup_lookup is None
 
     # archive without dedup_ok:False
-    request_meta = {'captures-bucket':'test_dedup_ok_flag'}
+    request_meta = {'dedup-bucket':'test_dedup_ok_flag'}
     headers = {'Warcprox-Meta': json.dumps(request_meta)}
     response = requests.get(
             url, proxies=archiving_proxies, headers=headers, verify=False)
@@ -1765,6 +1842,14 @@ def test_socket_timeout_response(
     response = requests.get(url, proxies=archiving_proxies, verify=False)
     assert response.status_code == 502
 
+    # test that the connection is cleaned up properly after truncating a
+    # response (no hang or timeout)
+    url = 'http://localhost:%s/' % http_daemon.server_port
+    response = requests.get(
+        url, proxies=archiving_proxies, verify=False, timeout=10)
+    assert response.status_code == 404
+    assert response.content == b'404 Not Found\n'
+
 def test_empty_response(
         warcprox_, http_daemon, https_daemon, archiving_proxies,
         playback_proxies):
@@ -1855,6 +1940,47 @@ def test_trough_segment_promotion(warcprox_):
     promoted = []
     time.sleep(3)
     assert promoted == []
+
+def test_dedup_min_size(http_daemon, warcprox_, archiving_proxies, playback_proxies):
+    """We use options --dedup-min-text-size=3 --dedup-min-binary-size=5 and we
+    try to download content smaller than these limits to make sure that it is
+    not deduplicated. We create the digest_str with the following code:
+    ```
+    payload_digest = hashlib.new('sha1')
+    payload_digest.update(b'aa')
+    warcprox.digest_str(payload_digest)
+    ```
+    """
+    url = 'http://localhost:%s/text-2bytes' % http_daemon.server_port
+    response = requests.get(
+        url, proxies=archiving_proxies, verify=False, timeout=10)
+    assert len(response.content) == 2
+    dedup_lookup = warcprox_.dedup_db.lookup(
+            b'sha1:e0c9035898dd52fc65c41454cec9c4d2611bfb37')
+    assert dedup_lookup is None
+    time.sleep(3)
+    response = requests.get(
+        url, proxies=archiving_proxies, verify=False, timeout=10)
+    dedup_lookup = warcprox_.dedup_db.lookup(
+            b'sha1:e0c9035898dd52fc65c41454cec9c4d2611bfb37')
+    # This would return dedup data if payload_size > dedup-min-text-size
+    assert dedup_lookup is None
+
+    url = 'http://localhost:%s/binary-4bytes' % http_daemon.server_port
+    response = requests.get(
+        url, proxies=archiving_proxies, verify=False, timeout=10)
+    assert len(response.content) == 4
+    dedup_lookup = warcprox_.dedup_db.lookup(
+            b'sha1:70c881d4a26984ddce795f6f71817c9cf4480e79')
+    assert dedup_lookup is None
+    time.sleep(3)
+    response = requests.get(
+        url, proxies=archiving_proxies, verify=False, timeout=10)
+    dedup_lookup = warcprox_.dedup_db.lookup(
+            b'sha1:70c881d4a26984ddce795f6f71817c9cf4480e79')
+    # This would return dedup data if payload_size > dedup-min-binary-size
+    assert dedup_lookup is None
+
 
 if __name__ == '__main__':
     pytest.main()

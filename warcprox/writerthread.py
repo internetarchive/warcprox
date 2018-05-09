@@ -31,6 +31,7 @@ import logging
 import time
 import warcprox
 from concurrent import futures
+import threading
 
 class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
     logger = logging.getLogger("warcprox.writerthread.WarcWriterProcessor")
@@ -41,20 +42,44 @@ class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
         warcprox.BaseStandardPostfetchProcessor.__init__(self, options=options)
         self.writer_pool = warcprox.writer.WarcWriterPool(options)
         self.method_filter = set(method.upper() for method in self.options.method_filter or [])
-        self.pool = futures.ThreadPoolExecutor(max_workers=options.writer_threads or 1)
+
+        # set max_queued small, because self.inq is already handling queueing
+        self.thread_local = threading.local()
+        self.thread_profilers = {}
+        # for us; but give it a little breathing room to make sure it can keep
+        # worker threads busy
+        self.pool = warcprox.ThreadPoolExecutor(
+                max_workers=options.writer_threads or 1,
+                max_queued=10 * (options.writer_threads or 1))
         self.batch = set()
 
     def _startup(self):
-        self.logger.info('%s threads', self.pool._max_workers)
+        self.logger.info('%s warc writer threads', self.pool._max_workers)
         warcprox.BaseStandardPostfetchProcessor._startup(self)
 
     def _get_process_put(self):
         try:
             recorded_url = self.inq.get(block=True, timeout=0.5)
             self.batch.add(recorded_url)
-            self.pool.submit(self._process_url, recorded_url)
+            self.pool.submit(self._wrap_process_url, recorded_url)
         finally:
             self.writer_pool.maybe_idle_rollover()
+
+    def _wrap_process_url(self, recorded_url):
+        if not getattr(self.thread_local, 'name_set', False):
+            threading.current_thread().name = 'WarcWriterThread(tid=%s)' % warcprox.gettid()
+            self.thread_local.name_set = True
+        if self.options.profile:
+            import cProfile
+            if not hasattr(self.thread_local, 'profiler'):
+                self.thread_local.profiler = cProfile.Profile()
+                tid = threading.current_thread().ident
+                self.thread_profilers[tid] = self.thread_local.profiler
+            self.thread_local.profiler.enable()
+            self._process_url(recorded_url)
+            self.thread_local.profiler.disable()
+        else:
+            self._process_url(recorded_url)
 
     def _process_url(self, recorded_url):
         try:

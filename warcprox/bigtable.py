@@ -34,6 +34,7 @@ import threading
 import datetime
 import doublethink
 import rethinkdb as r
+from warcprox.dedup import DedupableMixin
 
 class RethinkCaptures:
     """Inserts in batches every 0.5 seconds"""
@@ -156,8 +157,8 @@ class RethinkCaptures:
             sha1base32 = base64.b32encode(digest.digest()).decode("utf-8")
 
         if (recorded_url.warcprox_meta
-                and "captures-bucket" in recorded_url.warcprox_meta):
-            bucket = recorded_url.warcprox_meta["captures-bucket"]
+                and "dedup-bucket" in recorded_url.warcprox_meta):
+            bucket = recorded_url.warcprox_meta["dedup-bucket"]
         else:
             bucket = "__unspecified__"
 
@@ -215,10 +216,11 @@ class RethinkCaptures:
         if self._timer:
             self._timer.join()
 
-class RethinkCapturesDedup(warcprox.dedup.DedupDb):
+class RethinkCapturesDedup(warcprox.dedup.DedupDb, DedupableMixin):
     logger = logging.getLogger("warcprox.dedup.RethinkCapturesDedup")
 
     def __init__(self, options=warcprox.Options()):
+        DedupableMixin.__init__(self, options)
         self.captures_db = RethinkCaptures(options=options)
         self.options = options
 
@@ -251,5 +253,6 @@ class RethinkCapturesDedup(warcprox.dedup.DedupDb):
         self.captures_db.close()
 
     def notify(self, recorded_url, records):
-        self.captures_db.notify(recorded_url, records)
-
+        if (records and records[0].type == b'response'
+                and self.should_dedup(recorded_url)):
+            self.captures_db.notify(recorded_url, records)
