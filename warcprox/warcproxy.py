@@ -350,6 +350,10 @@ class RecordedUrl:
         self.response_recorder = response_recorder
 
         if warcprox_meta:
+            if 'captures-bucket' in warcprox_meta:
+                # backward compatibility
+                warcprox_meta['dedup-bucket'] = warcprox_meta['captures-bucket']
+                del warcprox_meta['captures-bucket']
             self.warcprox_meta = warcprox_meta
         else:
             self.warcprox_meta = {}

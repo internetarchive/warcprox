@@ -790,7 +790,7 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
     dedup_date = dedup_lookup['date']
 
     # archive url2 bucket_a
-    headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"test_dedup_buckets","dedup-bucket":"bucket_a"})}
+    headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"test_dedup_buckets","captures-bucket":"bucket_a"})}
     response = requests.get(url2, proxies=archiving_proxies, verify=False, headers=headers)
     assert response.status_code == 200
     assert response.headers['warcprox-test-header'] == 'k!'
