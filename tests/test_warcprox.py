@@ -289,9 +289,20 @@ class _TestHttpRequestHandler(http_server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         logging.info('GET {}'.format(self.path))
-        headers, payload = self.build_response()
-        self.connection.sendall(headers)
-        self.connection.sendall(payload)
+        if self.path == '/slow-gradual-response':
+            if self.path == '/slow-gradual-response':
+                headers = (b'HTTP/1.1 200 OK\r\n'
+                        +  b'Content-Type: text/plain\r\n'
+                        +  b'Content-Length: 20000\r\n'
+                        +  b'\r\n')
+                self.connection.sendall(headers)
+                for i in range(20):
+                    time.sleep(1)
+                    self.connection.send(b'x' * 1000)
+        else:
+            headers, payload = self.build_response()
+            self.connection.sendall(headers)
+            self.connection.sendall(payload)
         if self.path in ('/missing-content-length', '/empty-response'):
             # server must close the connection, else client has no idea if
             # there is more data coming
@@ -407,6 +418,7 @@ def warcprox_(request, http_daemon, https_daemon):
             '--crawl-log-dir=crawl-logs',
             '--socket-timeout=4',
             '--max-resource-size=200000',
+            '--max-request-duration=7',
             '--dedup-min-text-size=3',
             '--dedup-min-binary-size=5']
     if request.config.getoption('--rethinkdb-dedup-url'):
@@ -1311,6 +1323,32 @@ def test_limit_large_resource(archiving_proxies, http_daemon, warcprox_):
     # wait for processing of this url to finish so that it doesn't interfere
     # with subsequent tests
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 2)
+
+def test_limit_request_duration(archiving_proxies, http_daemon, warcprox_):
+    """We try to load a gradual response which runs for 20 sec and downloads
+    20k. We use --max-request-duration=7 in `warcprox_` so it will be
+    truncated and download less.
+    """
+    urls_before = warcprox_.proxy.running_stats.urls
+
+    # this should be truncated
+    url = 'http://localhost:%s/slow-gradual-response' % http_daemon.server_port
+    response = requests.get(
+        url, proxies=archiving_proxies, verify=False, timeout=30)
+    assert len(response.content) < 20000
+
+    # test that the connection is cleaned up properly after truncating a
+    # response (no hang or timeout)
+    url = 'http://localhost:%s/' % http_daemon.server_port
+    response = requests.get(
+        url, proxies=archiving_proxies, verify=False, timeout=10)
+    assert response.status_code == 404
+    assert response.content == b'404 Not Found\n'
+
+    # wait for processing of this url to finish so that it doesn't interfere
+    # with subsequent tests
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 2)
+
 
 def test_method_filter(
         warcprox_, https_daemon, http_daemon, archiving_proxies,

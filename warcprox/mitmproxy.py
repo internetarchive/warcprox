@@ -86,6 +86,7 @@ class ProxyingRecorder(object):
         self._proxy_client_conn_open = bool(self.proxy_client)
         self.len = 0
         self.url = url
+        self.start_time = time.time()
 
     def payload_starts_now(self):
         self.payload_offset = self.len
@@ -109,14 +110,19 @@ class ProxyingRecorder(object):
         self.len += len(hunk)
 
     def read(self, size=-1):
+        # this is called from inside http.client.HTTPResponse.read1() in
+        # case of chunked response
         hunk = self.fp.read(size)
         self._update(hunk)
         return hunk
 
     def readinto(self, b):
-        n = self.fp.readinto(b)
-        self._update(b[:n])
-        return n
+        raise Exception("don't use me?!?")
+
+    def read1(self, size):
+        hunk = self.fp.read1(size)
+        self._update(hunk)
+        return hunk
 
     def readline(self, size=-1):
         # XXX depends on implementation details of self.fp.readline(), in
@@ -189,7 +195,10 @@ class ProxyingRecordingHTTPResponse(http_client.HTTPResponse):
         self.payload_digest = hashlib.new(self.digest_algorithm)
 
     def read(self, amt=None):
-        buf = http_client.HTTPResponse.read(self, amt)
+        raise Exception("don't use me?!?")
+
+    def read1(self, amt=None):
+        buf = http_client.HTTPResponse.read1(self, amt)
         self.payload_digest.update(buf)
         return buf
 
@@ -211,6 +220,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
     logger = logging.getLogger("warcprox.mitmproxy.MitmProxyHandler")
     _socket_timeout = 60
     _max_resource_size = None
+    _max_request_duration = None
     _tmp_file_max_memory_size = 512 * 1024
 
     def __init__(self, request, client_address, server):
@@ -419,6 +429,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         It may contain extra HTTP headers such as ``Warcprox-Meta`` which
         are written in the WARC record for this request.
         '''
+        start = time.time()
         # Build request
         req_str = '{} {} {}\r\n'.format(
                 self.command, self.path, self.request_version)
@@ -462,9 +473,8 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                     tmp_file_max_memory_size=self._tmp_file_max_memory_size)
             prox_rec_res.begin(extra_response_headers=extra_response_headers)
 
-            buf = prox_rec_res.read(65536)
+            buf = prox_rec_res.read1(65536)
             while buf != b'':
-                buf = prox_rec_res.read(65536)
                 if (self._max_resource_size and
                         prox_rec_res.recorder.len > self._max_resource_size):
                     prox_rec_res.truncated = b'length'
@@ -475,6 +485,17 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                             'bytes exceeded for URL %s',
                             self._max_resource_size, self.url)
                     break
+                if (self._max_request_duration and
+                        time.time() - start > self._max_request_duration):
+                    prox_rec_res.truncated = b'time'
+                    self._remote_server_conn.sock.shutdown(socket.SHUT_RDWR)
+                    self._remote_server_conn.sock.close()
+                    self.logger.info(
+                            'truncating response because max request time %d '
+                            'seconds exceeded for URL %s',
+                            self._max_request_duration, self.url)
+                    break
+                buf = prox_rec_res.read1(65536)
 
             self.log_request(prox_rec_res.status, prox_rec_res.recorder.len)
             # Let's close off the remote end. If remote connection is fine,
