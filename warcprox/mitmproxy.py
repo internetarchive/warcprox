@@ -212,6 +212,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
     _socket_timeout = 60
     _max_resource_size = None
     _tmp_file_max_memory_size = 512 * 1024
+    _max_request_duration = None
 
     def __init__(self, request, client_address, server):
         threading.current_thread().name = 'MitmProxyHandler(tid={},started={},client={}:{})'.format(warcprox.gettid(), datetime.datetime.utcnow().isoformat(), client_address[0], client_address[1])
@@ -419,6 +420,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         It may contain extra HTTP headers such as ``Warcprox-Meta`` which
         are written in the WARC record for this request.
         '''
+        start = time.time()
         # Build request
         req_str = '{} {} {}\r\n'.format(
                 self.command, self.path, self.request_version)
@@ -464,7 +466,16 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
 
             buf = prox_rec_res.read(65536)
             while buf != b'':
-                buf = prox_rec_res.read(65536)
+                if (self._max_request_duration and
+                        time.time() - start > self._max_request_duration):
+                    prox_rec_res.truncated = b'time'
+                    self._remote_server_conn.sock.shutdown(socket.SHUT_RDWR)
+                    self._remote_server_conn.sock.close()
+                    self.logger.info(
+                            'truncating response because max request time %d '
+                            'seconds exceeded for URL %s',
+                            self._max_resource_size, self.url)
+                    break
                 if (self._max_resource_size and
                         prox_rec_res.recorder.len > self._max_resource_size):
                     prox_rec_res.truncated = b'length'
@@ -475,6 +486,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                             'bytes exceeded for URL %s',
                             self._max_resource_size, self.url)
                     break
+                buf = prox_rec_res.read(65536)
 
             self.log_request(prox_rec_res.status, prox_rec_res.recorder.len)
             # Let's close off the remote end. If remote connection is fine,
