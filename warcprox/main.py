@@ -184,6 +184,9 @@ def _build_arg_parser(prog='warcprox'):
             '--max-resource-size', dest='max_resource_size', type=int,
             default=None, help='maximum resource size limit in bytes')
     arg_parser.add_argument(
+            '--max-request-duration', dest='max_request_duration', type=int,
+            default=None, help='maximum time a request can be executed in seconds')
+    arg_parser.add_argument(
             '--crawl-log-dir', dest='crawl_log_dir', default=None, help=(
                 'if specified, write crawl log files in the specified '
                 'directory; one crawl log is written per warc filename '
