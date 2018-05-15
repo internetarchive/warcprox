@@ -253,6 +253,4 @@ class RethinkCapturesDedup(warcprox.dedup.DedupDb, DedupableMixin):
         self.captures_db.close()
 
     def notify(self, recorded_url, records):
-        if (records and records[0].type == b'response'
-                and self.should_dedup(recorded_url)):
-            self.captures_db.notify(recorded_url, records)
+        self.captures_db.notify(recorded_url, records)
