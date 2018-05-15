@@ -39,9 +39,9 @@ urllib3.disable_warnings()
 
 class DedupableMixin(object):
     def __init__(self, options=warcprox.Options()):
-        self.min_text_size = options.dedup_min_text_size
-        self.min_binary_size = options.dedup_min_binary_size
-        self.dedup_only_with_bucket = options.dedup_only_with_bucket
+        self.min_text_size = options.dedup_min_text_size or 0
+        self.min_binary_size = options.dedup_min_binary_size or 0
+        self.dedup_only_with_bucket = options.dedup_only_with_bucket or False
 
     def should_dedup(self, recorded_url):
         """Check if we should try to run dedup on resource based on payload
