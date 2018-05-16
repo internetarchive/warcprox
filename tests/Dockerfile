@@ -75,11 +75,13 @@ RUN mv -v /etc/hadoop/conf/hdfs-site.xml /etc/hadoop/conf/hdfs-site.xml.orig \
 RUN echo '#!/bin/bash\nservice hadoop-hdfs-namenode start\nservice hadoop-hdfs-datanode start' > /etc/my_init.d/50_start_hdfs.sh \
     && chmod a+x /etc/my_init.d/50_start_hdfs.sh
 
+RUN apt-get install -y libsqlite3-dev
+
 # trough itself
 RUN virtualenv -p python3 /opt/trough-ve3 \
     && . /opt/trough-ve3/bin/activate \
     && pip install git+https://github.com/jkafader/snakebite@feature/python3-version-string \
-    && pip install git+https://github.com/nlevitt/trough.git@toward-warcprox-dedup
+    && pip install git+https://github.com/internetarchive/trough.git
 
 RUN mkdir -vp /etc/service/trough-sync-local \
     && echo "#!/bin/bash\nsource /opt/trough-ve3/bin/activate\nexec sync.py >>/tmp/trough-sync-local.out 2>&1" > /etc/service/trough-sync-local/run \
@@ -97,11 +99,11 @@ RUN mkdir -vp /etc/service/trough-write \
     && echo '#!/bin/bash\nvenv=/opt/trough-ve3\nsource $venv/bin/activate\nsleep 5\npython -c $"import doublethink ; from trough.settings import settings ; rr = doublethink.Rethinker(settings[\"RETHINKDB_HOSTS\"]) ; rr.db(\"trough_configuration\").wait().run()"\nexec uwsgi --venv=$venv --http :6222 --master --processes=2 --harakiri=240 --max-requests=50000 --vacuum --die-on-term --wsgi-file $venv/bin/writer.py >>/tmp/trough-write.out 2>&1' > /etc/service/trough-write/run \
     && chmod a+x /etc/service/trough-write/run
 
-RUN mkdir -vp /etc/service/trough-write-provisioner-local \
-    && echo '#!/bin/bash\nvenv=/opt/trough-ve3\nsource $venv/bin/activate\nsleep 5\npython -c $"import doublethink ; from trough.settings import settings ; rr = doublethink.Rethinker(settings[\"RETHINKDB_HOSTS\"]) ; rr.db(\"trough_configuration\").wait().run()"\nexec uwsgi --venv=$venv --http :6112 --master --processes=2 --harakiri=20 --max-requests=50000 --vacuum --die-on-term --wsgi-file $venv/bin/write_provisioner_local.py >>/tmp/trough-write-provisioner-local.out 2>&1' > /etc/service/trough-write-provisioner-local/run \
-    && chmod a+x /etc/service/trough-write-provisioner-local/run
+RUN mkdir -vp /etc/service/trough-segment-manager-local \
+    && echo '#!/bin/bash\nvenv=/opt/trough-ve3\nsource $venv/bin/activate\nsleep 5\npython -c $"import doublethink ; from trough.settings import settings ; rr = doublethink.Rethinker(settings[\"RETHINKDB_HOSTS\"]) ; rr.db(\"trough_configuration\").wait().run()"\nexec uwsgi --venv=$venv --http :6112 --master --processes=2 --harakiri=7200 --http-timeout=7200 --max-requests=50000 --vacuum --die-on-term --mount /=trough.wsgi.segment_manager:local >>/tmp/trough-segment-manager-local.out 2>&1' > /etc/service/trough-segment-manager-local/run \
+    && chmod a+x /etc/service/trough-segment-manager-local/run
 
-RUN mkdir -vp /etc/service/trough-write-provisioner-server \
-    && echo '#!/bin/bash\nvenv=/opt/trough-ve3\nsource $venv/bin/activate\nsleep 5\npython -c $"import doublethink ; from trough.settings import settings ; rr = doublethink.Rethinker(settings[\"RETHINKDB_HOSTS\"]) ; rr.db(\"trough_configuration\").wait().run()"\nexec uwsgi --venv=$venv --http :6111 --master --processes=2 --harakiri=20 --max-requests=50000 --vacuum --die-on-term --wsgi-file $venv/bin/write_provisioner_server.py >>/tmp/trough-write-provisioner-server.out 2>&1' > /etc/service/trough-write-provisioner-server/run \
-    && chmod a+x /etc/service/trough-write-provisioner-server/run
+RUN mkdir -vp /etc/service/trough-segment-manager-server \
+    && echo '#!/bin/bash\nvenv=/opt/trough-ve3\nsource $venv/bin/activate\nsleep 5\npython -c $"import doublethink ; from trough.settings import settings ; rr = doublethink.Rethinker(settings[\"RETHINKDB_HOSTS\"]) ; rr.db(\"trough_configuration\").wait().run()"\nexec uwsgi --venv=$venv --http :6111 --master --processes=2 --harakiri=7200 --http-timeout=7200 --max-requests=50000 --vacuum --die-on-term --mount /=trough.wsgi.segment_manager:server >>/tmp/trough-segment-manager-server.out 2>&1' > /etc/service/trough-segment-manager-server/run \
+    && chmod a+x /etc/service/trough-segment-manager-server/run
 
