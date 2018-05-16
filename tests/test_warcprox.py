@@ -1940,7 +1940,7 @@ def test_trough_segment_promotion(warcprox_):
     time.sleep(3)
     assert promoted == []
 
-def test_dedup_min_size(http_daemon, warcprox_, archiving_proxies, playback_proxies):
+def test_dedup_min_text_size(http_daemon, warcprox_, archiving_proxies):
     """We use options --dedup-min-text-size=3 --dedup-min-binary-size=5 and we
     try to download content smaller than these limits to make sure that it is
     not deduplicated. We create the digest_str with the following code:
@@ -1950,36 +1950,155 @@ def test_dedup_min_size(http_daemon, warcprox_, archiving_proxies, playback_prox
     warcprox.digest_str(payload_digest)
     ```
     """
+    urls_before = warcprox_.proxy.running_stats.urls
+
+    # start a fresh warc
+    warcprox_.warc_writer_processor.writer_pool.close_writers()
+
+    # fetch small text
     url = 'http://localhost:%s/text-2bytes' % http_daemon.server_port
     response = requests.get(
         url, proxies=archiving_proxies, verify=False, timeout=10)
     assert len(response.content) == 2
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
+    # check no dedup was saved (except RethinkCapturesDedup which always saves)
     dedup_lookup = warcprox_.dedup_db.lookup(
             b'sha1:e0c9035898dd52fc65c41454cec9c4d2611bfb37')
-    assert dedup_lookup is None
-    time.sleep(3)
+    if not isinstance(warcprox_.dedup_db, warcprox.bigtable.RethinkCapturesDedup):
+        assert dedup_lookup is None
+
+        # fetch again saving dedup info so that we can test dedup info ignored
+        orig_should_dedup = warcprox_.dedup_db.should_dedup
+        warcprox_.dedup_db.should_dedup = lambda *args, **kwargs: True
+        try:
+            response = requests.get(
+                url, proxies=archiving_proxies, verify=False, timeout=10)
+            assert len(response.content) == 2
+            wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 2)
+            # check dedup was saved
+            dedup_lookup = warcprox_.dedup_db.lookup(
+                    b'sha1:e0c9035898dd52fc65c41454cec9c4d2611bfb37')
+            assert dedup_lookup
+        finally:
+            warcprox_.dedup_db.should_dedup = orig_should_dedup
+    else:
+        assert dedup_lookup
+
+    # fetch again and check that it was not deduped
+    urls_before = warcprox_.proxy.running_stats.urls
     response = requests.get(
         url, proxies=archiving_proxies, verify=False, timeout=10)
-    dedup_lookup = warcprox_.dedup_db.lookup(
-            b'sha1:e0c9035898dd52fc65c41454cec9c4d2611bfb37')
-    # This would return dedup data if payload_size > dedup-min-text-size
-    assert dedup_lookup is None
+    assert len(response.content) == 2
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
 
+    # check that response records were written
+    warc = warcprox_.warc_writer_processor.writer_pool.default_warc_writer._available_warcs.queue[0].path
+    with open(warc, 'rb') as f:
+        rec_iter = iter(warcio.archiveiterator.ArchiveIterator(f))
+        record = next(rec_iter)
+        assert record.rec_type == 'warcinfo'
+        record = next(rec_iter)
+        assert record.rec_type == 'response'
+        assert record.rec_headers.get_header('warc-target-uri') == url
+        record = next(rec_iter)
+        assert record.rec_type == 'request'
+        assert record.rec_headers.get_header('warc-target-uri') == url
+        record = next(rec_iter)
+        assert record.rec_type == 'response'
+        assert record.rec_headers.get_header('warc-target-uri') == url
+        record = next(rec_iter)
+        assert record.rec_type == 'request'
+        assert record.rec_headers.get_header('warc-target-uri') == url
+        if not isinstance(warcprox_.dedup_db, warcprox.bigtable.RethinkCapturesDedup):
+            record = next(rec_iter)
+            assert record.rec_type == 'response'
+            assert record.rec_headers.get_header('warc-target-uri') == url
+            record = next(rec_iter)
+            assert record.rec_type == 'request'
+            assert record.rec_headers.get_header('warc-target-uri') == url
+        with pytest.raises(StopIteration):
+            next(rec_iter)
+
+def test_dedup_min_binary_size(http_daemon, warcprox_, archiving_proxies):
+    """We use options --dedup-min-text-size=3 --dedup-min-binary-size=5 and we
+    try to download content smaller than these limits to make sure that it is
+    not deduplicated. We create the digest_str with the following code:
+    ```
+    payload_digest = hashlib.new('sha1')
+    payload_digest.update(b'aa')
+    warcprox.digest_str(payload_digest)
+    ```
+    """
+    urls_before = warcprox_.proxy.running_stats.urls
+
+    # start a fresh warc
+    warcprox_.warc_writer_processor.writer_pool.close_writers()
+
+    # fetch small binary
     url = 'http://localhost:%s/binary-4bytes' % http_daemon.server_port
     response = requests.get(
         url, proxies=archiving_proxies, verify=False, timeout=10)
     assert len(response.content) == 4
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
+    # check no dedup was saved (except RethinkCapturesDedup which always saves)
     dedup_lookup = warcprox_.dedup_db.lookup(
             b'sha1:70c881d4a26984ddce795f6f71817c9cf4480e79')
-    assert dedup_lookup is None
-    time.sleep(3)
+    if not isinstance(warcprox_.dedup_db, warcprox.bigtable.RethinkCapturesDedup):
+        assert dedup_lookup is None
+
+        # fetch again saving dedup info so that we can test dedup info ignored
+        orig_should_dedup = warcprox_.dedup_db.should_dedup
+        warcprox_.dedup_db.should_dedup = lambda *args, **kwargs: True
+        try:
+            response = requests.get(
+                url, proxies=archiving_proxies, verify=False, timeout=10)
+            assert len(response.content) == 4
+            wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 2)
+            # check dedup was saved
+            dedup_lookup = warcprox_.dedup_db.lookup(
+                    b'sha1:70c881d4a26984ddce795f6f71817c9cf4480e79')
+            assert dedup_lookup
+        finally:
+            warcprox_.dedup_db.should_dedup = orig_should_dedup
+    else:
+        assert dedup_lookup
+
+    # fetch again and check that it was not deduped
+    urls_before = warcprox_.proxy.running_stats.urls
     response = requests.get(
         url, proxies=archiving_proxies, verify=False, timeout=10)
-    dedup_lookup = warcprox_.dedup_db.lookup(
-            b'sha1:70c881d4a26984ddce795f6f71817c9cf4480e79')
-    # This would return dedup data if payload_size > dedup-min-binary-size
-    assert dedup_lookup is None
+    assert len(response.content) == 4
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
 
+    # check that response records were written
+    warc = warcprox_.warc_writer_processor.writer_pool.default_warc_writer._available_warcs.queue[0].path
+    with open(warc, 'rb') as f:
+        rec_iter = iter(warcio.archiveiterator.ArchiveIterator(f))
+        record = next(rec_iter)
+        assert record.rec_type == 'warcinfo'
+        record = next(rec_iter)
+        assert record.rec_type == 'response'
+        assert record.rec_headers.get_header('warc-target-uri') == url
+        record = next(rec_iter)
+        assert record.rec_type == 'request'
+        assert record.rec_headers.get_header('warc-target-uri') == url
+        record = next(rec_iter)
+        assert record.rec_type == 'response'
+        assert record.rec_headers.get_header('warc-target-uri') == url
+        record = next(rec_iter)
+        assert record.rec_type == 'request'
+        assert record.rec_headers.get_header('warc-target-uri') == url
+        if not isinstance(warcprox_.dedup_db, warcprox.bigtable.RethinkCapturesDedup):
+            record = next(rec_iter)
+            assert record.rec_type == 'response'
+            assert record.rec_headers.get_header('warc-target-uri') == url
+            record = next(rec_iter)
+            assert record.rec_type == 'request'
+            assert record.rec_headers.get_header('warc-target-uri') == url
+        with pytest.raises(StopIteration):
+            next(rec_iter)
 
 if __name__ == '__main__':
     pytest.main()
