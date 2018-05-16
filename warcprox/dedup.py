@@ -326,10 +326,9 @@ class CdxServerDedupLoader(warcprox.BaseBatchPostfetchProcessor, DedupableMixin)
             if self.outq:
                 self.outq.put(recorded_url)
 
-class BatchTroughStorer(warcprox.BaseBatchPostfetchProcessor, DedupableMixin):
+class BatchTroughStorer(warcprox.BaseBatchPostfetchProcessor):
     def __init__(self, trough_dedup_db, options=warcprox.Options()):
         warcprox.BaseBatchPostfetchProcessor.__init__(self, options)
-        DedupableMixin.__init__(self, options)
         self.trough_dedup_db = trough_dedup_db
 
     def _filter_and_bucketize(self, batch):
@@ -341,7 +340,7 @@ class BatchTroughStorer(warcprox.BaseBatchPostfetchProcessor, DedupableMixin):
         for recorded_url in batch:
             if (recorded_url.warc_records
                     and recorded_url.warc_records[0].type == b'response'
-                    and self.should_dedup(recorded_url)):
+                    and self.trough_dedup_db.should_dedup(recorded_url)):
                 if (recorded_url.warcprox_meta
                         and 'dedup-bucket' in recorded_url.warcprox_meta):
                     bucket = recorded_url.warcprox_meta['dedup-bucket']
@@ -373,10 +372,9 @@ class BatchTroughStorer(warcprox.BaseBatchPostfetchProcessor, DedupableMixin):
                 logging.warn(
                     'timed out saving dedup info to trough', exc_info=True)
 
-class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor, DedupableMixin):
+class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
     def __init__(self, trough_dedup_db, options=warcprox.Options()):
         warcprox.BaseBatchPostfetchProcessor.__init__(self, options)
-        DedupableMixin.__init__(self, options)
         self.trough_dedup_db = trough_dedup_db
 
     def _startup(self):
@@ -391,7 +389,7 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor, DedupableMixin):
         for recorded_url in batch:
             if (recorded_url.response_recorder
                     and recorded_url.payload_digest
-                    and self.should_dedup(recorded_url)):
+                    and self.trough_dedup_db.should_dedup(recorded_url)):
                 if (recorded_url.warcprox_meta
                         and 'dedup-bucket' in recorded_url.warcprox_meta):
                     bucket = recorded_url.warcprox_meta['dedup-bucket']
