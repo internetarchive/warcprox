@@ -1837,6 +1837,8 @@ def test_socket_timeout_response(
     """Response will timeout because we use --socket-timeout=4 whereas the
     target URL will return after 6 sec.
     """
+    urls_before = warcprox_.proxy.running_stats.urls
+
     url = 'http://localhost:%s/slow-response' % http_daemon.server_port
     response = requests.get(url, proxies=archiving_proxies, verify=False)
     assert response.status_code == 502
@@ -1848,6 +1850,8 @@ def test_socket_timeout_response(
         url, proxies=archiving_proxies, verify=False, timeout=10)
     assert response.status_code == 404
     assert response.content == b'404 Not Found\n'
+
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
 
 def test_empty_response(
         warcprox_, http_daemon, https_daemon, archiving_proxies,
