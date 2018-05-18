@@ -47,8 +47,8 @@ setuptools.setup(name='warcprox-gwu',
         license='GPL',
         packages=['warcprox'],
         package_data={'warcprox':['version.txt']},
-        install_requires=['certauth>=1.1.0', 'warctools>=4.8.3'],  # gdbm not in pip :(
-        dependency_links=['git+https://github.com/internetarchive/warctools.git#egg=warctools-4.8.3'],
+        install_requires=['certauth==1.1.3', 'warctools==4.9.0'],  # gdbm not in pip :(
+        dependency_links=['git+https://github.com/internetarchive/warctools.git#egg=warctools-4.9.0'],
         tests_require=['requests>=2.0.1', 'pytest'],  # >=2.0.1 for https://github.com/kennethreitz/requests/pull/1636
         cmdclass = {'test': PyTest},
         test_suite='warcprox.tests',
