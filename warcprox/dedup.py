@@ -42,6 +42,7 @@ class DedupableMixin(object):
         self.min_text_size = options.dedup_min_text_size or 0
         self.min_binary_size = options.dedup_min_binary_size or 0
         self.dedup_only_with_bucket = options.dedup_only_with_bucket or False
+        self.black_out_period = options.black_out_period or 0
 
     def should_dedup(self, recorded_url):
         """Check if we should try to run dedup on resource based on payload
@@ -56,6 +57,22 @@ class DedupableMixin(object):
             return recorded_url.response_recorder.payload_size() > self.min_text_size
         else:
             return recorded_url.response_recorder.payload_size() > self.min_binary_size
+
+    def in_black_out(self, dedup_info):
+        """If --black-out-period=N sec is set, check if duplicate record
+        datetime is close to the original. If yes, we don't write it to WARC.
+        The aim is to avoid having unnecessary `revisit` records.
+        Return Boolean
+        """
+        if self.black_out_period and dedup_info.get('date'):
+            try:
+                dt = datetime.datetime.strptime(dedup_info['date'].decode('utf-8'),
+                                                '%Y-%m-%dT%H:%M:%SZ')
+                return (datetime.datetime.utcnow() - dt).total_seconds() <= self.black_out_period
+            except ValueError:
+                return False
+        return False
+
 
 class DedupLoader(warcprox.BaseStandardPostfetchProcessor, DedupableMixin):
     def __init__(self, dedup_db, options=warcprox.Options()):
@@ -318,6 +335,9 @@ class CdxServerDedupLoader(warcprox.BaseBatchPostfetchProcessor, DedupableMixin)
             dedup_info = self.cdx_dedup.lookup(digest_key, recorded_url.url)
             if dedup_info:
                 recorded_url.dedup_info = dedup_info
+                if self.in_black_out(dedup_info):
+                    recorded_url.do_not_archive = True
+
         except ValueError as exc:
             self.logger.error('CdxServerDedupLoader _process_url failed for url=%s %s',
                               recorded_url.url, exc)
