@@ -373,6 +373,8 @@ class BatchTroughStorer(warcprox.BaseBatchPostfetchProcessor):
                     'timed out saving dedup info to trough', exc_info=True)
 
 class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
+    logger = logging.getLogger("warcprox.dedup.BatchTroughLoader")
+
     def __init__(self, trough_dedup_db, options=warcprox.Options()):
         warcprox.BaseBatchPostfetchProcessor.__init__(self, options)
         self.trough_dedup_db = trough_dedup_db
@@ -386,6 +388,7 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
         be looked up.
         '''
         buckets = collections.defaultdict(list)
+        discards = []
         for recorded_url in batch:
             if (recorded_url.response_recorder
                     and recorded_url.payload_digest
@@ -396,6 +399,13 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
                 else:
                     bucket = '__unspecified__'
                 buckets[bucket].append(recorded_url)
+            else:
+                discards.append(
+                        warcprox.digest_str(
+                            recorded_url.payload_digest, self.options.base32)
+                        if recorded_url.payload_digest else 'n/a')
+        self.logger.debug(
+                'filtered out digests (not loading dedup): %r', discards)
         return buckets
 
     def _build_key_index(self, batch):
@@ -443,10 +453,19 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
                                 'problem looking up dedup info for %s urls '
                                 'in bucket %s', len(buckets[bucket]), bucket,
                                 exc_info=True)
+
+                    if self.logger.isEnabledFor(logging.DEBUG):
+                        dups = sorted([e['digest_key'] for e in future.result()])
+                        novel = sorted([
+                            k for k in key_index.keys() if k not in dups])
+                        self.logger.debug(
+                                'bucket %s: dups=%r novel=%r',
+                                bucket, dups, novel)
+
             except futures.TimeoutError as e:
                 # the remaining threads actually keep running in this case,
                 # there's no way to stop them, but that should be harmless
-                logging.warn(
+                self.logger.warn(
                     'timed out loading dedup info from trough', exc_info=True)
 
 class TroughDedupDb(DedupDb, DedupableMixin):
