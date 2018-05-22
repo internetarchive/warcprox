@@ -726,14 +726,16 @@ def test_return_capture_timestamp(http_daemon, warcprox_, archiving_proxies):
     response = requests.get(url, proxies=archiving_proxies, headers=headers, stream=True)
     assert response.status_code == 200
     assert response.headers['Warcprox-Meta']
-    data = json.loads(response.headers['Warcprox-Meta'])
-    assert data['capture-metadata']
+    response_meta = json.loads(response.headers['Warcprox-Meta'])
+    assert response_meta['capture-metadata']
     try:
-        dt = datetime.datetime.strptime(data['capture-metadata']['timestamp'],
+        dt = datetime.datetime.strptime(response_meta['capture-metadata']['timestamp'],
                                         '%Y-%m-%dT%H:%M:%SZ')
         assert dt
     except ValueError:
-        pytest.fail('Invalid capture-timestamp format %s', data['capture-timestamp'])
+        pytest.fail(
+                'Invalid http response warcprox-meta["capture-metadata"]["timestamp"]: %r',
+                meta['capture-metadata']['timestamp'])
 
     # wait for postfetch chain (or subsequent test could fail)
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
