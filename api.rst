@@ -4,7 +4,7 @@ warcprox API
 Means of Interacting with warcprox over http, aside from simply proxying urls.
 
 ``/status`` url
-=============
+===============
 
 If warcprox is running at localhost:8000, http://localhost:8000/status returns
 a json blob with a bunch of status info. For example:
@@ -81,16 +81,27 @@ a json blob with a bunch of status info. For example:
     }
 
 ``WARCPROX_WRITE_RECORD`` http method
-===================================
+=====================================
 
-::
+To make warcprox write an arbitrary warc record you can send it a special
+request with http method ``WARCPROX_WRITE_RECORD``. The http request must
+include the headers ``WARC-Type``, ``Content-Type``, and ``Content-Length``.
+Warcprox will use these to populate the warc record. For example::
 
-    $ echo -ne 'WARCPROX_WRITE_RECORD special://url/some?thing HTTP/1.1\r\nWARC-Type: resource\r\ncontent-type: text/plain;charset=utf-8\r\ncontent-length: 29\r\n\r\ni am a warc record payload!\r\n' | ncat 127.0.0.1 8000
+    $ ncat --crlf 127.0.0.1 8000 <<EOF
+    > WARCPROX_WRITE_RECORD special://url/some?thing HTTP/1.1
+    > WARC-Type: resource
+    > Content-type: text/plain;charset=utf-8
+    > Content-length: 29
+    > 
+    > i am a warc record payload!
+    > EOF
     HTTP/1.0 204 OK
     Server: BaseHTTP/0.6 Python/3.6.3
-    Date: Mon, 21 May 2018 23:33:31 GMT
+    Date: Tue, 22 May 2018 19:21:02 GMT
 
-::
+On success warcprox responds with http status 204. For the request above
+warcprox will write a warc record that looks like this::
 
     WARC/1.0
     WARC-Type: resource
@@ -104,7 +115,49 @@ a json blob with a bunch of status info. For example:
 
     i am a warc record payload!
 
-
 ``Warcprox-Meta`` http request header
-===================================
+=====================================
 
+``Warcprox-Meta`` is a special http request header that can be used to pass
+configuration information and metadata with each proxy request to warcprox. The
+value is a json blob. There are several fields understood by warcprox, and
+arbitrary additional fields can be included. If warcprox doesn't recognize a
+field it simply ignores it. Warcprox plugins could make use of custom fields,
+for example.
+
+Warcprox strips the ``warcprox-meta`` header out before sending the request to
+remote server, and also does not write it in the warc request record.
+
+::
+
+    Warcprox-Meta: {}
+
+- warc-prefix
+- stats
+  - buckets
+- dedup-bucket
+- blocks
+- limits
+- soft-limits
+- metadata
+- accept
+- dedup-ok # deprecate?
+
+Brozzler knows about ``warcprox-meta``. For information on configuring
+``warcprox-meta`` in brozzler, see https://github.com/internetarchive/brozzler/blob/master/job-conf.rst#warcprox-meta
+
+``Warcprox-Meta`` http response header
+======================================
+
+In some cases warcprox will add a ``Warcprox-Meta`` header in the http response
+that it sends to the client. Like the request header, the value is a json blob.
+It is only included if something in the ``warcprox-meta`` request header calls
+for it. Those cases are described above in the "``Warcprox-Meta`` http request header" section.
+
+### - blocked-by-rule
+### - reached-limit
+### - reached-soft-limit
+### - stats
+### - capture-metadata
+###
+### Response codes 420, 430
