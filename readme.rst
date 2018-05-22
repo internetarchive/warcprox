@@ -1,5 +1,5 @@
 warcprox - WARC writing MITM HTTP/S proxy
------------------------------------------
+*****************************************
 .. image:: https://travis-ci.org/internetarchive/warcprox.svg?branch=master
     :target: https://travis-ci.org/internetarchive/warcprox
 
@@ -7,7 +7,7 @@ Based on the excellent and simple pymiproxy by Nadeem Douba.
 https://github.com/allfro/pymiproxy
 
 Install
-~~~~~~~
+=======
 
 Warcprox runs on python 3.4+.
 
@@ -26,7 +26,7 @@ You can also install the latest bleeding edge code:
 
 
 Trusting the CA cert
-~~~~~~~~~~~~~~~~~~~~
+====================
 
 For best results while browsing through warcprox, you need to add the CA
 cert as a trusted cert in your browser. If you don't do that, you will
@@ -34,8 +34,19 @@ get the warning when you visit each new site. But worse, any embedded
 https content on a different server will simply fail to load, because
 the browser will reject the certificate without telling you.
 
+API
+===
+
+For interacting with a running instance of warcprox.
+
+* `/status` url
+* `WARCPROX_WRITE_RECORD` http method
+* `Warcprox-Meta` http request header
+
+See `<api.rst>`_.
+
 Plugins
-~~~~~~~
+=======
 
 Warcprox supports a limited notion of plugins by way of the `--plugin` command
 line argument. Plugin classes are loaded from the regular python module search
@@ -49,7 +60,7 @@ specifying `--plugin` multiples times.
 `A minimal example <https://github.com/internetarchive/warcprox/blob/318405e795ac0ab8760988a1a482cf0a17697148/warcprox/__init__.py#L165>`__
 
 Usage
-~~~~~
+=====
 
 ::
 
@@ -162,7 +173,7 @@ Usage
       -q, --quiet
 
 License
-~~~~~~~
+=======
 
 Warcprox is a derivative work of pymiproxy, which is GPL. Thus warcprox is also
 GPL.
