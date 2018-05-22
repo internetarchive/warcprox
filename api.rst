@@ -3,7 +3,7 @@ warcprox API
 
 Means of Interacting with warcprox over http, aside from simply proxying urls.
 
-`/status` url
+``/status`` url
 =============
 
 If warcprox is running at localhost:8000, http://localhost:8000/status returns
@@ -80,7 +80,7 @@ a json blob with a bunch of status info. For example:
       "start_time": 1526690353.4060142
     }
 
-`WARCPROX_WRITE_RECORD` http method
+``WARCPROX_WRITE_RECORD`` http method
 ===================================
 
 ::
@@ -105,6 +105,6 @@ a json blob with a bunch of status info. For example:
     i am a warc record payload!
 
 
-`Warcprox-Meta` http request header
+``Warcprox-Meta`` http request header
 ===================================
 

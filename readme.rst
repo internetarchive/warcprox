@@ -39,23 +39,23 @@ API
 
 For interacting with a running instance of warcprox.
 
-* `/status` url
-* `WARCPROX_WRITE_RECORD` http method
-* `Warcprox-Meta` http request header
+* ``/status`` url
+* ``WARCPROX_WRITE_RECORD`` http method
+* ``Warcprox-Meta`` http request header
 
 See `<api.rst>`_.
 
 Plugins
 =======
 
-Warcprox supports a limited notion of plugins by way of the `--plugin` command
-line argument. Plugin classes are loaded from the regular python module search
-path. They will be instantiated with one argument, a `warcprox.Options`, which
-holds the values of all the command line arguments. Legacy plugins with
-constructors that take no arguments are also supported. Plugins should either
-have a method `notify(self, recorded_url, records)` or should subclass
-`warcprox.BasePostfetchProcessor`. More than one plugin can be configured by
-specifying `--plugin` multiples times.
+Warcprox supports a limited notion of plugins by way of the ``--plugin``
+command line argument. Plugin classes are loaded from the regular python module
+search path. They will be instantiated with one argument, a
+``warcprox.Options``, which holds the values of all the command line arguments.
+Legacy plugins with constructors that take no arguments are also supported.
+Plugins should either have a method ``notify(self, recorded_url, records)`` or
+should subclass ``warcprox.BasePostfetchProcessor``. More than one plugin can
+be configured by specifying ``--plugin`` multiples times.
 
 `A minimal example <https://github.com/internetarchive/warcprox/blob/318405e795ac0ab8760988a1a482cf0a17697148/warcprox/__init__.py#L165>`__
 
