@@ -134,6 +134,13 @@ remote server, and also does not write it in the warc request record.
 
     Warcprox-Meta: {}
 
+Brozzler knows about ``warcprox-meta``. For information on configuring
+it in brozzler, see
+`https://github.com/internetarchive/brozzler/blob/master/job-conf.rst#warcprox-meta`_.
+``Warcprox-Meta`` is often a very important part of brozzler job configuration.
+It is the way url and data quotas (limits) on jobs, seeds, and hosts are
+implemented, among other things.
+
 Warcprox-Meta fields
 -------------------
 
@@ -148,11 +155,24 @@ Example::
 
 ``stats`` (dictionary)
 ~~~~~~~~~~~~~~~~~~~~~~
-* buckets
+``stats`` is a dictionary with only one field understood by warcprox,
+``"buckets"``. The value of ``"buckets"`` is a list of strings and/or
+dictionaries. A string signifies the name of the bucket; a dictionary is
+expected to have at least an item with key ``"bucket"`` whose value is the name
+of the bucket. The other currently recognized key is ``"tally-domains"``, which
+if supplied should be a list of domains. This instructs warcprox to
+additionally tally substats of the given bucket by domain. Host stats are
+stored in the stats table under the key
+``{parent-bucket}:{domain(normalized)}``, e.g. `"bucket2:foo.bar.com"` for the
+example below.
 
-Example::
+Examples::
 
     Warcprox-Meta: {"stats":{"buckets":["my-stats-bucket","all-the-stats"]}}
+    Warcprox-Meta: {"stats":{"buckets":["bucket1",{"bucket":"bucket2","tally-domains":["foo.bar.com","192.168.10.20"}]}}
+
+See `<readme.rst#statistics>`_ for more information on statistics kept by
+warcprox.
 
 ``dedup-bucket`` (string)
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -166,20 +186,38 @@ Example::
 ``blocks``
 ~~~~~~~~~~
 
+Example::
+
+    Warcprox-Meta: {"blocks": [{"ssurt": "com,example,//https:/"}, {"domain": "malware.us", "substring": "wp-login.php?action=logout"}]}
+
 ``limits``
 ~~~~~~~~~~
+
+Example::
+
+    {"stats": {"buckets": ["test_limits_bucket"]}, "limits": {"test_limits_bucket/total/urls": 10}}
 
 ``soft-limits``
 ~~~~~~~~~~~~~~~
 
+Example::
+
+    Warcprox-Meta: {"stats": {"buckets": [{"bucket": "test_domain_doc_limit_bucket", "tally-domains": ["foo.localhost"]}]}, "soft-limits": {"test_domain_doc_limit_bucket:foo.localhost/total/urls": 10}}
+
+
 ``metadata`` (dictionary)
 ~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Example::
+
+    Warcprox-Meta: {"metadata": {"seed": "http://example.com/seed", "description": "here's some information about this crawl job. blah blah"}
 
 ``accept``
 ~~~~~~~~~~
 
-Brozzler knows about ``warcprox-meta``. For information on configuring
-``warcprox-meta`` in brozzler, see https://github.com/internetarchive/brozzler/blob/master/job-conf.rst#warcprox-meta
+Example::
+
+    request_meta = {"accept": ["capture-metadata"]}
 
 ``Warcprox-Meta`` http response header
 ======================================

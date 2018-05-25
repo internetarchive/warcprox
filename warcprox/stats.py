@@ -166,7 +166,7 @@ class StatsProcessor(warcprox.BaseBatchPostfetchProcessor):
         Example Warcprox-Meta header (a real one will likely have other
         sections besides 'stats'):
 
-        Warcprox-Meta: {'stats':{'buckets':['bucket1',{'bucket':'bucket2','tally-domains':['foo.bar.com','192.168.10.20'}]}}
+        Warcprox-Meta: {"stats":{"buckets":["bucket1",{"bucket":"bucket2","tally-domains":["foo.bar.com","192.168.10.20"}]}}
         '''
         buckets = ["__all__"]
         if (recorded_url.warcprox_meta
