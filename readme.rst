@@ -34,6 +34,16 @@ get the warning when you visit each new site. But worse, any embedded
 https content on a different server will simply fail to load, because
 the browser will reject the certificate without telling you.
 
+API
+===
+For interacting with a running instance of warcprox.
+
+* ``/status`` url
+* ``WARCPROX_WRITE_RECORD`` http method
+* ``Warcprox-Meta`` http request header and response header
+
+See `<api.rst>`_.
+
 Deduplication
 =============
 Warcprox avoids archiving redundant content by "deduplicating" it. The process
@@ -56,15 +66,20 @@ the bucket, otherwise the default bucket is used.
 Deduplication can be disabled entirely by starting warcprox with the argument
 ``--dedup-db-file=/dev/null``.
 
-API
-===
-For interacting with a running instance of warcprox.
+Statistics
+==========
+Warcprox keeps some crawl statistics and stores them in sqlite or rethinkdb.
+These are consulting when enforcing ``limits`` and ``soft-limits`` (see
+`<api.rst#warcprox-meta-fields>`_), and can also be consulted by other
+processes outside of warcprox, for reporting etc.
 
-* ``/status`` url
-* ``WARCPROX_WRITE_RECORD`` http method
-* ``Warcprox-Meta`` http request header and response header
+This is what they look like currently in sqlite, the default store::
 
-See `<api.rst>`_.
+    sqlite> select * from buckets_of_stats order by bucket desc;
+    bucket           stats
+    ---------------  ---------------------------------------------------------------------------------------------
+    __unspecified__  {"bucket":"__unspecified__","total":{"urls":37,"wire_bytes":1502781},"new":{"urls":15,"wire_bytes":1179906},"revisit":{"urls":22,"wire_bytes":322875}}
+    __all__          {"bucket":"__all__","total":{"urls":37,"wire_bytes":1502781},"new":{"urls":15,"wire_bytes":1179906},"revisit":{"urls":22,"wire_bytes":322875}}
 
 Plugins
 =======
