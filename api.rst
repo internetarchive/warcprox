@@ -222,20 +222,57 @@ possible, or at least not convenient, to evaluate the block rules. In
 particular, this circumstance prevails when the browser controlled by brozzler
 is requesting images, javascript, css, and so on, embedded in a page.
 
-``limits``
-~~~~~~~~~~
+``limits`` (dictionary)
+~~~~~~~~~~~~~~~~~~~~~~~
 
 Example::
 
     {"stats": {"buckets": ["test_limits_bucket"]}, "limits": {"test_limits_bucket/total/urls": 10}}
 
-``soft-limits``
-~~~~~~~~~~~~~~~
+::
+
+    $ curl -iksS --proxy localhost:8000 --header 'Warcprox-Meta: {"stats": {"buckets": ["test_limits_bucket"]}, "limits": {"test_limits_bucket/total/urls": 10}}' http://example.com/foo
+    HTTP/1.0 420 Reached limit
+    Server: BaseHTTP/0.6 Python/3.6.3
+    Date: Fri, 25 May 2018 23:08:32 GMT
+    Content-Type: text/plain;charset=utf-8
+    Connection: close
+    Content-Length: 77
+    Warcprox-Meta: {"stats":{"test_limits_bucket":{"bucket":"test_limits_bucket","total":{"urls":10,"wire_bytes":15840},"new":{"urls":0,"wire_bytes":0},"revisit":{"urls":10,"wire_bytes":15840}}},"reached-limit":{"test_limits_bucket/total/urls":10}}
+
+    request rejected by warcprox: reached limit test_limits_bucket/total/urls=10
+
+``soft-limits`` (dictionary)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+From warcprox's perspective ``soft-limits`` work almost exactly the same way
+as ``limits``. The only difference is that when a soft limit is hit, warcprox
+response with an http 430 "Reached soft limit" instead of http 420.
+
+Warcprox clients might treat a 430 very differently from a 420. From brozzler's
+perspective, for instance, ``soft-limits`` are very different from ``limits``.
+When brozzler receives a 420 from warcprox because a ``limit`` has been
+reached, this means that crawling for that seed is finished, and brozzler sets
+about finalizing the crawl of that seed. On the other hand, brozzler blissfully
+ignores 430 responses, because soft limits only apply to a particular bucket
+(like a domain), and don't have any effect on crawling of urls that don't fall
+in that bucket.
 
 Example::
 
     Warcprox-Meta: {"stats": {"buckets": [{"bucket": "test_domain_doc_limit_bucket", "tally-domains": ["foo.localhost"]}]}, "soft-limits": {"test_domain_doc_limit_bucket:foo.localhost/total/urls": 10}}
 
+::
+
+    $ curl -iksS --proxy localhost:8000 --header 'Warcprox-Meta: {"stats": {"buckets": ["test_limits_bucket"]}, "soft-limits": {"test_limits_bucket/total/urls": 10}}' http://example.com/foo
+    HTTP/1.0 430 Reached soft limit
+    Server: BaseHTTP/0.6 Python/3.6.3
+    Date: Fri, 25 May 2018 23:12:06 GMT
+    Content-Type: text/plain;charset=utf-8
+    Connection: close
+    Content-Length: 82
+    Warcprox-Meta: {"stats":{"test_limits_bucket":{"bucket":"test_limits_bucket","total":{"urls":10,"wire_bytes":15840},"new":{"urls":0,"wire_bytes":0},"revisit":{"urls":10,"wire_bytes":15840}}},"reached-soft-limit":{"test_limits_bucket/total/urls":10}}
+
+    request rejected by warcprox: reached soft limit test_limits_bucket/total/urls=10
 
 ``metadata`` (dictionary)
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -244,8 +281,8 @@ Example::
 
     Warcprox-Meta: {"metadata": {"seed": "http://example.com/seed", "description": "here's some information about this crawl job. blah blah"}
 
-``accept``
-~~~~~~~~~~
+``accept`` (list)
+~~~~~~~~~~~~~~~~~
 
 Example::
 
@@ -257,7 +294,8 @@ Example::
 In some cases warcprox will add a ``Warcprox-Meta`` header in the http response
 that it sends to the client. Like the request header, the value is a json blob.
 It is only included if something in the ``warcprox-meta`` request header calls
-for it. Those cases are described above in the "``Warcprox-Meta`` http request header" section.
+for it. Those cases are described above in the
+`#warcprox-meta-http-request-header`_ section.
 
 ### - blocked-by-rule
 ### - reached-limit
