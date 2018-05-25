@@ -1,7 +1,9 @@
 warcprox API
 ************
 
-Means of Interacting with warcprox over http, aside from simply proxying urls.
+Means of interacting with warcprox over http, aside from simply proxying urls.
+
+.. contents::
 
 ``/status`` url
 ===============
@@ -132,16 +134,49 @@ remote server, and also does not write it in the warc request record.
 
     Warcprox-Meta: {}
 
-- warc-prefix
-- stats
-  - buckets
-- dedup-bucket
-- blocks
-- limits
-- soft-limits
-- metadata
-- accept
-- dedup-ok # deprecate?
+Warcprox-Meta fields
+-------------------
+
+``warc-prefix`` (string)
+~~~~~~~~~~~~~~~~~~~~~~~~
+Specifies a warc filename prefix. Warcprox will write the warc record for this
+capture, if any, to a warc named accordingly.
+
+Example::
+
+    Warcprox-Meta: {"warc-prefix": "special-warc"}
+
+``stats`` (dictionary)
+~~~~~~~~~~~~~~~~~~~~~~
+* buckets
+
+Example::
+
+    Warcprox-Meta: {"stats":{"buckets":["my-stats-bucket","all-the-stats"]}}
+
+``dedup-bucket`` (string)
+~~~~~~~~~~~~~~~~~~~~~~~~~
+Specifies the deduplication bucket. For more information about deduplication
+see `<readme.rst#deduplication>`_.
+
+Example::
+
+    Warcprox-Meta: {"dedup-bucket":"my-dedup-bucket"}
+
+``blocks``
+~~~~~~~~~~
+
+``limits``
+~~~~~~~~~~
+
+``soft-limits``
+~~~~~~~~~~~~~~~
+
+``metadata`` (dictionary)
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``accept``
+~~~~~~~~~~
 
 Brozzler knows about ``warcprox-meta``. For information on configuring
 ``warcprox-meta`` in brozzler, see https://github.com/internetarchive/brozzler/blob/master/job-conf.rst#warcprox-meta
