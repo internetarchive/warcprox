@@ -72,13 +72,13 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 block_rule = urlcanon.MatchRule(**rule)
                 if block_rule.applies(url):
                     body = ("request rejected by warcprox: blocked by "
-                            "rule found in Warcprox-Meta header: %s"
-                            % rule).encode("utf-8")
+                            "rule found in Warcprox-Meta header: %s\n"
+                            % json.dumps(rule)).encode("utf-8")
                     self.send_response(403, "Forbidden")
                     self.send_header("Content-Type", "text/plain;charset=utf-8")
                     self.send_header("Connection", "close")
                     self.send_header("Content-Length", len(body))
-                    response_meta = {"blocked-by-rule":rule}
+                    response_meta = {"blocked-by-rule": rule}
                     self.send_header(
                             "Warcprox-Meta",
                             json.dumps(response_meta, separators=(",",":")))

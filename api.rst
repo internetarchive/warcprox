@@ -138,8 +138,8 @@ Brozzler knows about ``warcprox-meta``. For information on configuring
 it in brozzler, see
 `https://github.com/internetarchive/brozzler/blob/master/job-conf.rst#warcprox-meta`_.
 ``Warcprox-Meta`` is often a very important part of brozzler job configuration.
-It is the way url and data quotas (limits) on jobs, seeds, and hosts are
-implemented, among other things.
+It is the way url and data limits on jobs, seeds, and hosts are implemented,
+among other things.
 
 Warcprox-Meta fields
 -------------------
@@ -183,12 +183,44 @@ Example::
 
     Warcprox-Meta: {"dedup-bucket":"my-dedup-bucket"}
 
-``blocks``
-~~~~~~~~~~
+``blocks`` (list)
+~~~~~~~~~~~~~~~~~
+List of url match rules. Url match rules are somewhat described at
+https://github.com/internetarchive/brozzler/blob/master/job-conf.rst#scoping
+and https://github.com/iipc/urlcanon/blob/e2ab3524e/python/urlcanon/rules.py#L70.
+(TODO: write a better doc and link to it)
 
 Example::
 
-    Warcprox-Meta: {"blocks": [{"ssurt": "com,example,//https:/"}, {"domain": "malware.us", "substring": "wp-login.php?action=logout"}]}
+    Warcprox-Meta: {"blocks": [{"ssurt": "com,example,//http:/"}, {"domain": "malware.us", "substring": "wp-login.php?action=logout"}]}
+
+If any of the rules match the url being requested, warcprox aborts normal
+processing and responds with a http 403. The http response includes
+a ``Warcprox-Meta`` **response** header with one field, `"blocked-by-rule"`,
+which reproduces the value of the match rule that resulted in the block. The
+presence of the ``warcprox-meta`` response header can be used by the client to
+distinguish this type of a response from a 403 from the remote url being
+requested.
+
+For example::
+
+    $ curl -iksS --proxy localhost:8000 --header 'Warcprox-Meta: {"blocks": [{"ssurt": "com,example,//http:/"}, {"domain": "malware.us", "substring": "wp-login.php?action=logout"}]}' http://example.com/foo
+    HTTP/1.0 403 Forbidden
+    Server: BaseHTTP/0.6 Python/3.6.3
+    Date: Fri, 25 May 2018 22:46:42 GMT
+    Content-Type: text/plain;charset=utf-8
+    Connection: close
+    Content-Length: 111
+    Warcprox-Meta: {"blocked-by-rule":{"ssurt":"com,example,//http:/"}}
+
+    request rejected by warcprox: blocked by rule found in Warcprox-Meta header: {"ssurt": "com,example,//http:/"}
+
+You might be wondering why ``blocks`` is necessary. Why would the warcprox
+client make a request that it should already know will be blocked by the proxy?
+The answer is that the request may be initiated somewhere where it's not
+possible, or at least not convenient, to evaluate the block rules. In
+particular, this circumstance prevails when the browser controlled by brozzler
+is requesting images, javascript, css, and so on, embedded in a page.
 
 ``limits``
 ~~~~~~~~~~
