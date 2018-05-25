@@ -1,4 +1,4 @@
-warcprox - WARC writing MITM HTTP/S proxy
+Warcprox - WARC writing MITM HTTP/S proxy
 *****************************************
 .. image:: https://travis-ci.org/internetarchive/warcprox.svg?branch=master
     :target: https://travis-ci.org/internetarchive/warcprox
@@ -6,9 +6,10 @@ warcprox - WARC writing MITM HTTP/S proxy
 Based on the excellent and simple pymiproxy by Nadeem Douba.
 https://github.com/allfro/pymiproxy
 
+.. contents::
+
 Install
 =======
-
 Warcprox runs on python 3.4+.
 
 To install latest release run:
@@ -27,27 +28,46 @@ You can also install the latest bleeding edge code:
 
 Trusting the CA cert
 ====================
-
 For best results while browsing through warcprox, you need to add the CA
 cert as a trusted cert in your browser. If you don't do that, you will
 get the warning when you visit each new site. But worse, any embedded
 https content on a different server will simply fail to load, because
 the browser will reject the certificate without telling you.
 
+Deduplication
+=============
+Warcprox avoids archiving redundant content by "deduplicating" it. The process
+for deduplication works similarly to heritrix and other web archiving tools.
+
+1. while fetching url, calculate payload content digest (typically sha1)
+2. look up digest in deduplication database (warcprox supports a few different
+   ones)
+3. if found write warc ``revisit`` record referencing the url and capture time
+   of the previous capture
+4. else (if not found)
+   a. write warc ``response`` record with full payload
+   b. store entry in deduplication database
+
+The dedup database is partitioned into different "buckets". Urls are
+deduplicated only against other captures in the same bucket. If specified, the
+``dedup-bucket`` field of the ``Warcprox-Meta`` http request header determines
+the bucket, otherwise the default bucket is used.
+
+Deduplication can be disabled entirely by starting warcprox with the argument
+``--dedup-db-file=/dev/null``.
+
 API
 ===
-
 For interacting with a running instance of warcprox.
 
 * ``/status`` url
 * ``WARCPROX_WRITE_RECORD`` http method
-* ``Warcprox-Meta`` http request header
+* ``Warcprox-Meta`` http request header and response header
 
 See `<api.rst>`_.
 
 Plugins
 =======
-
 Warcprox supports a limited notion of plugins by way of the ``--plugin``
 command line argument. Plugin classes are loaded from the regular python module
 search path. They will be instantiated with one argument, a
