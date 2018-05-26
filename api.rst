@@ -136,7 +136,7 @@ remote server, and also does not write it in the warc request record.
 
 Brozzler knows about ``warcprox-meta``. For information on configuring
 it in brozzler, see
-`https://github.com/internetarchive/brozzler/blob/master/job-conf.rst#warcprox-meta`_.
+https://github.com/internetarchive/brozzler/blob/master/job-conf.rst#warcprox-meta.
 ``Warcprox-Meta`` is often a very important part of brozzler job configuration.
 It is the way url and data limits on jobs, seeds, and hosts are implemented,
 among other things.
@@ -156,14 +156,14 @@ Example::
 ``stats`` (dictionary)
 ~~~~~~~~~~~~~~~~~~~~~~
 ``stats`` is a dictionary with only one field understood by warcprox,
-``"buckets"``. The value of ``"buckets"`` is a list of strings and/or
+``buckets``. The value of ``buckets`` is a list of strings and/or
 dictionaries. A string signifies the name of the bucket; a dictionary is
-expected to have at least an item with key ``"bucket"`` whose value is the name
-of the bucket. The other currently recognized key is ``"tally-domains"``, which
+expected to have at least an item with key ``bucket`` whose value is the name
+of the bucket. The other currently recognized key is ``tally-domains``, which
 if supplied should be a list of domains. This instructs warcprox to
 additionally tally substats of the given bucket by domain. Host stats are
 stored in the stats table under the key
-``{parent-bucket}:{domain(normalized)}``, e.g. `"bucket2:foo.bar.com"` for the
+``{parent-bucket}:{domain(normalized)}``, e.g. ``"bucket2:foo.bar.com"`` for the
 example below.
 
 Examples::
@@ -196,13 +196,13 @@ Example::
 
 If any of the rules match the url being requested, warcprox aborts normal
 processing and responds with a http 403. The http response includes
-a ``Warcprox-Meta`` **response** header with one field, `"blocked-by-rule"`,
+a ``Warcprox-Meta`` **response** header with one field, ``blocked-by-rule``,
 which reproduces the value of the match rule that resulted in the block. The
 presence of the ``warcprox-meta`` response header can be used by the client to
 distinguish this type of a response from a 403 from the remote url being
 requested.
 
-For example::
+An example::
 
     $ curl -iksS --proxy localhost:8000 --header 'Warcprox-Meta: {"blocks": [{"ssurt": "com,example,//http:/"}, {"domain": "malware.us", "substring": "wp-login.php?action=logout"}]}' http://example.com/foo
     HTTP/1.0 403 Forbidden
@@ -217,10 +217,10 @@ For example::
 
 You might be wondering why ``blocks`` is necessary. Why would the warcprox
 client make a request that it should already know will be blocked by the proxy?
-The answer is that the request may be initiated somewhere where it's not
-possible, or at least not convenient, to evaluate the block rules. In
-particular, this circumstance prevails when the browser controlled by brozzler
-is requesting images, javascript, css, and so on, embedded in a page.
+The answer is that the request may be initiated somewhere where it's difficult
+to evaluate the block rules. In particular, this circumstance prevails when the
+browser controlled by brozzler is requesting images, javascript, css, and so
+on, embedded in a page.
 
 ``limits`` (dictionary)
 ~~~~~~~~~~~~~~~~~~~~~~~
