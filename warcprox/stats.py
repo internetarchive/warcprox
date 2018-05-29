@@ -309,11 +309,9 @@ class RunningStats:
         need_ten_sec_snap = (now - self.ten_sec_snaps[0][0]) // 10 > (self.ten_sec_snaps[-1][0] - self.ten_sec_snaps[0][0]) // 10
         if need_minute_snap:
             self.minute_snaps.append((now, self.urls, self.warc_bytes))
-            logging.debug('added minute snap %r', self.minute_snaps[-1])
         if need_ten_sec_snap:
             self.ten_sec_snaps.popleft()
             self.ten_sec_snaps.append((now, self.urls, self.warc_bytes))
-            logging.trace('rotated in ten second snap %r', self.ten_sec_snaps[-1])
 
     def _closest_ten_sec_snap(self, t):
         # it's a deque so iterating over it is faster than indexed lookup

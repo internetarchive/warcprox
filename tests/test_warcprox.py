@@ -726,6 +726,9 @@ def test_limits(http_daemon, warcprox_, archiving_proxies):
     assert response.headers['warcprox-test-header'] == 'i!'
     assert response.content == b'I am the warcprox test payload! jjjjjjjjjj!\n'
 
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 11)
+
 def test_return_capture_timestamp(http_daemon, warcprox_, archiving_proxies):
     urls_before = warcprox_.proxy.running_stats.urls
 
