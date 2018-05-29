@@ -69,11 +69,30 @@ Deduplication can be disabled entirely by starting warcprox with the argument
 Statistics
 ==========
 Warcprox keeps some crawl statistics and stores them in sqlite or rethinkdb.
-These are consulting when enforcing ``limits`` and ``soft-limits`` (see
+These are consulted for enforcing ``limits`` and ``soft-limits`` (see
 `<api.rst#warcprox-meta-fields>`_), and can also be consulted by other
 processes outside of warcprox, for reporting etc.
 
-This is what they look like currently in sqlite, the default store::
+Statistics are grouped by "bucket". Every capture is counted as part of the
+``__all__`` bucket. Other buckets can be specified in the ``Warcprox-Meta``
+request header. The fallback bucket in case none is specified is called
+``__unspecified__``.
+
+Within each bucket are three sub-buckets:
+* "new" - tallies captures for which a complete record (usually a ``response``
+  record) was written to warc
+* "revisit" - tallies captures for which a ``revisit`` record was written to
+  warc
+* "total" - includes all urls processed, even those not written to warc (so the
+  numbers may be greater than new + revisit)
+
+Within each of these sub-buckets we keep two statistics:
+* urls - simple count of urls
+* wire_bytes - sum of bytes received over the wire from the remote server for
+  each url
+
+For historical reasons, statistics are stored as json blobs in sqlite, the
+default store::
 
     sqlite> select * from buckets_of_stats order by bucket desc;
     bucket           stats

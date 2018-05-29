@@ -224,6 +224,10 @@ on, embedded in a page.
 
 ``limits`` (dictionary)
 ~~~~~~~~~~~~~~~~~~~~~~~
+Specifies quantitative limits for warcprox to enforce. The structure of the
+dictionary is ``{stats_key: numerical_limit, ...}`` where stats key has the
+format ``"bucket/sub-bucket/statistic"``. See `readme.rst#statistics`_ for
+further explanation of what "bucket", "sub-bucket", and "statistic" mean here.
 
 Example::
 
