@@ -53,6 +53,53 @@ def _empty_bucket(bucket):
         },
     }
 
+def unravel_buckets(url, warcprox_meta):
+    '''
+    Unravels bucket definitions in Warcprox-Meta header. Each bucket
+    definition can either be a string, which signifies the name of the
+    bucket, or a dict. If a dict it is expected to have at least an item
+    with key 'bucket' whose value is the name of the bucket. The other
+    currently recognized item is 'tally-domains', which if supplied should
+    be a list of domains. This instructs warcprox to additionally tally
+    substats of the given bucket by domain. Host stats are stored in the
+    stats table under the key '{parent-bucket}:{domain(normalized)}'.
+
+    Returns:
+        list of strings
+
+    Example Warcprox-Meta header (a real one will likely have other
+    sections besides 'stats'):
+
+    Warcprox-Meta: {"stats":{"buckets":["bucket1",{"bucket":"bucket2","tally-domains":["foo.bar.com","192.168.10.20"}]}}
+
+    In this case the return value would be
+    ["bucket1","bucket2","bucket2:foo.bar.com","bucket2:192.168.10.20"]
+    '''
+    buckets = ["__all__"]
+    if (warcprox_meta and "stats" in warcprox_meta
+            and "buckets" in warcprox_meta["stats"]):
+        for bucket in warcprox_meta["stats"]["buckets"]:
+            if isinstance(bucket, dict):
+                if not 'bucket' in bucket:
+                    self.logger.warn(
+                            'ignoring invalid stats bucket in '
+                            'warcprox-meta header %s', bucket)
+                    continue
+                buckets.append(bucket['bucket'])
+                if bucket.get('tally-domains'):
+                    canon_url = urlcanon.semantic(url)
+                    for domain in bucket['tally-domains']:
+                        domain = urlcanon.normalize_host(domain).decode('ascii')
+                        if urlcanon.url_matches_domain(canon_url, domain):
+                            buckets.append(
+                                    '%s:%s' % (bucket['bucket'], domain))
+            else:
+                buckets.append(bucket)
+    else:
+        buckets.append("__unspecified__")
+
+    return buckets
+
 class StatsProcessor(warcprox.BaseBatchPostfetchProcessor):
     logger = logging.getLogger("warcprox.stats.StatsProcessor")
 
@@ -153,46 +200,7 @@ class StatsProcessor(warcprox.BaseBatchPostfetchProcessor):
             return None
 
     def buckets(self, recorded_url):
-        '''
-        Unravels bucket definitions in Warcprox-Meta header. Each bucket
-        definition can either be a string, which signifies the name of the
-        bucket, or a dict. If a dict it is expected to have at least an item
-        with key 'bucket' whose value is the name of the bucket. The other
-        currently recognized item is 'tally-domains', which if supplied should
-        be a list of domains. This instructs warcprox to additionally tally
-        substats of the given bucket by domain. Host stats are stored in the
-        stats table under the key '{parent-bucket}:{domain(normalized)}'.
-
-        Example Warcprox-Meta header (a real one will likely have other
-        sections besides 'stats'):
-
-        Warcprox-Meta: {"stats":{"buckets":["bucket1",{"bucket":"bucket2","tally-domains":["foo.bar.com","192.168.10.20"}]}}
-        '''
-        buckets = ["__all__"]
-        if (recorded_url.warcprox_meta
-                and "stats" in recorded_url.warcprox_meta
-                and "buckets" in recorded_url.warcprox_meta["stats"]):
-            for bucket in recorded_url.warcprox_meta["stats"]["buckets"]:
-                if isinstance(bucket, dict):
-                    if not 'bucket' in bucket:
-                        self.logger.warn(
-                                'ignoring invalid stats bucket in '
-                                'warcprox-meta header %s', bucket)
-                        continue
-                    buckets.append(bucket['bucket'])
-                    if bucket.get('tally-domains'):
-                        url = urlcanon.semantic(recorded_url.url)
-                        for domain in bucket['tally-domains']:
-                            domain = urlcanon.normalize_host(domain).decode('ascii')
-                            if urlcanon.url_matches_domain(url, domain):
-                                buckets.append(
-                                        '%s:%s' % (bucket['bucket'], domain))
-                else:
-                    buckets.append(bucket)
-        else:
-            buckets.append("__unspecified__")
-
-        return buckets
+        return unravel_buckets(recorded_url.url, recorded_url.warcprox_meta)
 
 class RethinkStatsProcessor(StatsProcessor):
     logger = logging.getLogger("warcprox.stats.RethinkStatsProcessor")

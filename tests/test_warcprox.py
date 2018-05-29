@@ -1158,6 +1158,9 @@ def test_domain_doc_soft_limit(
     assert response.headers['warcprox-test-header'] == 'o!'
     assert response.content == b'I am the warcprox test payload! pppppppppp!\n'
 
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 22)
+
 def test_domain_data_soft_limit(
         http_daemon, https_daemon, warcprox_, archiving_proxies):
     urls_before = warcprox_.proxy.running_stats.urls
@@ -1264,6 +1267,9 @@ def test_domain_data_soft_limit(
     assert response.status_code == 200
     assert response.headers['warcprox-test-header'] == 'y!'
     assert response.content == b'I am the warcprox test payload! zzzzzzzzzz!\n'
+
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 5)
 
 # XXX this test relies on a tor proxy running at localhost:9050 with a working
 # connection to the internet, and relies on a third party site (facebook) being
