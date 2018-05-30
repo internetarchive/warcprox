@@ -142,7 +142,7 @@ It is the way url and data limits on jobs, seeds, and hosts are implemented,
 among other things.
 
 Warcprox-Meta fields
--------------------
+--------------------
 
 ``warc-prefix`` (string)
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -280,6 +280,11 @@ Example::
 
 ``metadata`` (dictionary)
 ~~~~~~~~~~~~~~~~~~~~~~~~~
+An arbitrary dictionary. Warcprox mostly ignores this. The one exception is
+that if it has a ``seed`` entry and crawl logs are enabled via the
+``--crawl-log-dir`` command line option, the value of ``seed`` is written to
+the crawl log as the 11th field on the line, simulating heritrix's "source
+tag".
 
 Example::
 
@@ -287,24 +292,28 @@ Example::
 
 ``accept`` (list)
 ~~~~~~~~~~~~~~~~~
+Specifies fields that the client would like to receive in the ``Warcprox-Meta``
+*response* header. Only one value is currently understood,
+``capture-metadata``.
 
 Example::
 
-    request_meta = {"accept": ["capture-metadata"]}
+    Warcprox-Meta: {"accept": ["capture-metadata"]}
+
+The response will include a ``Warcpro-Meta`` response header with one field
+also called ``captured-metadata``. Currently warcprox reports one piece of
+capture medata, ``timestamp``, which represents the time fetch began for the
+resource and matches the ``WARC-Date`` written to the warc record. For
+example::
+
+    Warcprox-Meta: {"capture-metadata":{"timestamp":"2018-05-30T00:22:49Z"}}
 
 ``Warcprox-Meta`` http response header
 ======================================
-
 In some cases warcprox will add a ``Warcprox-Meta`` header in the http response
 that it sends to the client. Like the request header, the value is a json blob.
 It is only included if something in the ``warcprox-meta`` request header calls
 for it. Those cases are described above in the
-`#warcprox-meta-http-request-header`_ section.
+`Warcprox-Meta http request header`_ section.
 
-### - blocked-by-rule
-### - reached-limit
-### - reached-soft-limit
-### - stats
-### - capture-metadata
-###
-### Response codes 420, 430
+
