@@ -195,7 +195,7 @@ Example::
     Warcprox-Meta: {"blocks": [{"ssurt": "com,example,//http:/"}, {"domain": "malware.us", "substring": "wp-login.php?action=logout"}]}
 
 If any of the rules match the url being requested, warcprox aborts normal
-processing and responds with a http 403. The http response includes
+processing and responds with a http ``403``. The http response includes
 a ``Warcprox-Meta`` **response** header with one field, ``blocked-by-rule``,
 which reproduces the value of the match rule that resulted in the block. The
 presence of the ``warcprox-meta`` response header can be used by the client to
@@ -229,6 +229,11 @@ dictionary is ``{stats_key: numerical_limit, ...}`` where stats key has the
 format ``"bucket/sub-bucket/statistic"``. See `readme.rst#statistics`_ for
 further explanation of what "bucket", "sub-bucket", and "statistic" mean here.
 
+If processing a request would result in exceeding a limit, warcprox aborts
+normal processing and responds with a http ``420 Reached Limit``. The http
+response includes a ``Warcprox-Meta`` **response** header with the complete set
+of statistics for the bucket whose limit has been reached.
+
 Example::
 
     {"stats": {"buckets": ["test_limits_bucket"]}, "limits": {"test_limits_bucket/total/urls": 10}}
@@ -250,16 +255,16 @@ Example::
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 From warcprox's perspective ``soft-limits`` work almost exactly the same way
 as ``limits``. The only difference is that when a soft limit is hit, warcprox
-response with an http 430 "Reached soft limit" instead of http 420.
+response with an http ``430 Reached soft limit`` instead of http ``420``.
 
-Warcprox clients might treat a 430 very differently from a 420. From brozzler's
-perspective, for instance, ``soft-limits`` are very different from ``limits``.
-When brozzler receives a 420 from warcprox because a ``limit`` has been
-reached, this means that crawling for that seed is finished, and brozzler sets
-about finalizing the crawl of that seed. On the other hand, brozzler blissfully
-ignores 430 responses, because soft limits only apply to a particular bucket
-(like a domain), and don't have any effect on crawling of urls that don't fall
-in that bucket.
+Warcprox clients might treat a 430 very differently from a ``420``. From
+brozzler's perspective, for instance, ``soft-limits`` are very different from
+``limits``. When brozzler receives a ``420`` from warcprox because a ``limit``
+has been reached, this means that crawling for that seed is finished, and
+brozzler sets about finalizing the crawl of that seed. On the other hand,
+brozzler blissfully ignores ``430`` responses, because soft limits only apply
+to a particular bucket (like a domain), and don't have any effect on crawling
+of urls that don't fall in that bucket.
 
 Example::
 
@@ -300,7 +305,7 @@ Example::
 
     Warcprox-Meta: {"accept": ["capture-metadata"]}
 
-The response will include a ``Warcpro-Meta`` response header with one field
+The response will include a ``Warcprox-Meta`` response header with one field
 also called ``captured-metadata``. Currently warcprox reports one piece of
 capture medata, ``timestamp``, which represents the time fetch began for the
 resource and matches the ``WARC-Date`` written to the warc record. For
