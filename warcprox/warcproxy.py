@@ -72,13 +72,13 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 block_rule = urlcanon.MatchRule(**rule)
                 if block_rule.applies(url):
                     body = ("request rejected by warcprox: blocked by "
-                            "rule found in Warcprox-Meta header: %s"
-                            % rule).encode("utf-8")
+                            "rule found in Warcprox-Meta header: %s\n"
+                            % json.dumps(rule)).encode("utf-8")
                     self.send_response(403, "Forbidden")
                     self.send_header("Content-Type", "text/plain;charset=utf-8")
                     self.send_header("Connection", "close")
                     self.send_header("Content-Length", len(body))
-                    response_meta = {"blocked-by-rule":rule}
+                    response_meta = {"blocked-by-rule": rule}
                     self.send_header(
                             "Warcprox-Meta",
                             json.dumps(response_meta, separators=(",",":")))
@@ -92,26 +92,26 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                                 self.client_address[0], self.command,
                                 self.url, rule))
 
-    def _enforce_limit(self, limit_key, limit_value, soft=False):
+    def _enforce_limit(self, buckets, limit_key, limit_value, soft=False):
         if not self.server.stats_db:
             return
-        bucket0, bucket1, bucket2 = limit_key.rsplit("/", 2)
-        _limit_key = limit_key
 
-        # if limit_key looks like 'job1:foo.com/total/urls' then we only want
-        # to apply this rule if the requested url is within domain
-        bucket0_fields = bucket0.split(':')
-        if len(bucket0_fields) == 2:
-            domain = urlcanon.normalize_host(bucket0_fields[1])
-            if not urlcanon.host_matches_domain(self.hostname, domain):
-                return # else host matches, go ahead and enforce the limit
-            bucket0 = '%s:%s' % (bucket0_fields[0], domain.decode('ascii'))
-            _limit_key = '%s/%s/%s' % (bucket0, bucket1, bucket2)
+        # parse limit key
+        bucket0, bucket1, bucket2 = limit_key.rsplit("/", 2)
+        # normalize domain if part of bucket
+        if ":" in bucket0:
+            b, raw_domain = bucket0.split(":", 1)
+            domain = urlcanon.normalize_host(raw_domain).decode("ascii")
+            bucket0 = "%s:%s" % (b, domain)
+            limit_key = "%s/%s/%s" % (bucket0, bucket1, bucket2)
+
+        if not bucket0 in buckets:
+            return
 
         value = self.server.stats_db.value(bucket0, bucket1, bucket2)
         if value and limit_value and limit_value > 0 and value >= limit_value:
             body = ("request rejected by warcprox: reached %s %s=%s\n" % (
-                        "soft limit" if soft else "limit", _limit_key,
+                        "soft limit" if soft else "limit", limit_key,
                         limit_value)).encode("utf-8")
             if soft:
                 self.send_response(430, "Reached soft limit")
@@ -124,12 +124,11 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 "stats": {bucket0:self.server.stats_db.value(bucket0)}
             }
             if soft:
-                response_meta["reached-soft-limit"] = {_limit_key:limit_value}
+                response_meta["reached-soft-limit"] = {limit_key:limit_value}
             else:
-                response_meta["reached-limit"] = {_limit_key:limit_value}
+                response_meta["reached-limit"] = {limit_key:limit_value}
             self.send_header(
-                    "Warcprox-Meta",
-                    json.dumps(response_meta, separators=(",",":")))
+                    "Warcprox-Meta", json.dumps(response_meta, separators=",:"))
             self.end_headers()
             if self.command != "HEAD":
                 self.wfile.write(body)
@@ -139,7 +138,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                         self.client_address[0], 430 if soft else 420,
                         self.command, self.url,
                         "soft limit" if soft else "limit",
-                        _limit_key, limit_value))
+                        limit_key, limit_value))
 
     def _enforce_limits(self, warcprox_meta):
         """
@@ -147,14 +146,15 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         warcprox.RequestBlockedByRule if a limit specified in warcprox_meta is
         reached.
         """
+        buckets = warcprox.stats.unravel_buckets(self.url, warcprox_meta)
         if warcprox_meta and "limits" in warcprox_meta:
             for item in warcprox_meta["limits"].items():
                 limit_key, limit_value = item
-                self._enforce_limit(limit_key, limit_value, soft=False)
+                self._enforce_limit(buckets, limit_key, limit_value, soft=False)
         if warcprox_meta and "soft-limits" in warcprox_meta:
             for item in warcprox_meta["soft-limits"].items():
                 limit_key, limit_value = item
-                self._enforce_limit(limit_key, limit_value, soft=True)
+                self._enforce_limit(buckets, limit_key, limit_value, soft=True)
 
     def _security_check(self, warcprox_meta):
         '''

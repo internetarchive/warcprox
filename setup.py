@@ -45,7 +45,7 @@ setuptools.setup(
         url='https://github.com/internetarchive/warcprox',
         author='Noah Levitt',
         author_email='nlevitt@archive.org',
-        long_description=open('README.rst').read(),
+        long_description=open('readme.rst').read(),
         license='GPL',
         packages=['warcprox'],
         install_requires=deps,

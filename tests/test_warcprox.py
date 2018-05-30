@@ -709,6 +709,7 @@ def test_limits(http_daemon, warcprox_, archiving_proxies):
     # wait for postfetch chain
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 10)
 
+    # next fetch hits the limit
     response = requests.get(url, proxies=archiving_proxies, headers=headers, stream=True)
     assert response.status_code == 420
     assert response.reason == "Reached limit"
@@ -716,6 +717,17 @@ def test_limits(http_daemon, warcprox_, archiving_proxies):
     assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
     assert response.headers["content-type"] == "text/plain;charset=utf-8"
     assert response.raw.data == b"request rejected by warcprox: reached limit test_limits_bucket/total/urls=10\n"
+
+    # make sure limit doesn't get applied to a different stats bucket
+    request_meta = {"stats":{"buckets":["no_limits_bucket"]},"limits":{"test_limits_bucket/total/urls":10}}
+    headers = {"Warcprox-Meta": json.dumps(request_meta)}
+    response = requests.get(url, proxies=archiving_proxies, headers=headers, stream=True)
+    assert response.status_code == 200
+    assert response.headers['warcprox-test-header'] == 'i!'
+    assert response.content == b'I am the warcprox test payload! jjjjjjjjjj!\n'
+
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 11)
 
 def test_return_capture_timestamp(http_daemon, warcprox_, archiving_proxies):
     urls_before = warcprox_.proxy.running_stats.urls
@@ -726,14 +738,16 @@ def test_return_capture_timestamp(http_daemon, warcprox_, archiving_proxies):
     response = requests.get(url, proxies=archiving_proxies, headers=headers, stream=True)
     assert response.status_code == 200
     assert response.headers['Warcprox-Meta']
-    data = json.loads(response.headers['Warcprox-Meta'])
-    assert data['capture-metadata']
+    response_meta = json.loads(response.headers['Warcprox-Meta'])
+    assert response_meta['capture-metadata']
     try:
-        dt = datetime.datetime.strptime(data['capture-metadata']['timestamp'],
+        dt = datetime.datetime.strptime(response_meta['capture-metadata']['timestamp'],
                                         '%Y-%m-%dT%H:%M:%SZ')
         assert dt
     except ValueError:
-        pytest.fail('Invalid capture-timestamp format %s', data['capture-timestamp'])
+        pytest.fail(
+                'Invalid http response warcprox-meta["capture-metadata"]["timestamp"]: %r',
+                meta['capture-metadata']['timestamp'])
 
     # wait for postfetch chain (or subsequent test could fail)
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
@@ -997,6 +1011,7 @@ def test_domain_doc_soft_limit(
         http_daemon, https_daemon, warcprox_, archiving_proxies):
     urls_before = warcprox_.proxy.running_stats.urls
 
+    # ** comment is obsolete (server is multithreaded) but still useful **
     # we need to clear the connection pool here because
     # - connection pool already may already have an open connection localhost
     # - we're about to make a connection to foo.localhost
@@ -1132,6 +1147,23 @@ def test_domain_doc_soft_limit(
     assert response.headers["content-type"] == "text/plain;charset=utf-8"
     assert response.raw.data == b"request rejected by warcprox: reached soft limit test_domain_doc_limit_bucket:foo.localhost/total/urls=10\n"
 
+    # make sure soft limit doesn't get applied to a different stats bucket
+    request_meta = {
+        "stats": {"buckets": [{"bucket":"no_limit_bucket","tally-domains":["foo.localhost"]}]},
+        "soft-limits": {"test_domain_doc_limit_bucket:foo.localhost/total/urls":10},
+    }
+    headers = {"Warcprox-Meta": json.dumps(request_meta)}
+    url = 'http://zuh.foo.localhost:{}/o/p'.format(http_daemon.server_port)
+    response = requests.get(
+            url, proxies=archiving_proxies, headers=headers, stream=True,
+            verify=False)
+    assert response.status_code == 200
+    assert response.headers['warcprox-test-header'] == 'o!'
+    assert response.content == b'I am the warcprox test payload! pppppppppp!\n'
+
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 22)
+
 def test_domain_data_soft_limit(
         http_daemon, https_daemon, warcprox_, archiving_proxies):
     urls_before = warcprox_.proxy.running_stats.urls
@@ -1225,6 +1257,22 @@ def test_domain_data_soft_limit(
     ### assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
     ### assert response.headers["content-type"] == "text/plain;charset=utf-8"
     ### assert response.raw.data == b"request rejected by warcprox: reached soft limit test_domain_data_limit_bucket:xn--zz-2ka.localhost/new/wire_bytes=200\n"
+
+    # make sure soft limit doesn't get applied to a different stats bucket
+    request_meta = {
+        "stats": {"buckets": [{"bucket":"no_limit_bucket","tally-domains":['ÞzZ.LOCALhost']}]},
+        "soft-limits": {"test_domain_data_limit_bucket:ÞZZ.localhost/new/wire_bytes":200},
+    }
+    headers = {"Warcprox-Meta": json.dumps(request_meta)}
+    url = 'http://ÞZz.localhost:{}/y/z'.format(http_daemon.server_port)
+    response = requests.get(
+            url, proxies=archiving_proxies, headers=headers, stream=True)
+    assert response.status_code == 200
+    assert response.headers['warcprox-test-header'] == 'y!'
+    assert response.content == b'I am the warcprox test payload! zzzzzzzzzz!\n'
+
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 5)
 
 # XXX this test relies on a tor proxy running at localhost:9050 with a working
 # connection to the internet, and relies on a third party site (facebook) being
