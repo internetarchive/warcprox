@@ -8,7 +8,7 @@ traffic to disk in `WARC
 <https://iipc.github.io/warc-specifications/specifications/warc-format/warc-1.1/>`_
 format. Warcprox captures encrypted https traffic by using the
 `"man-in-the-middle" <https://en.wikipedia.org/wiki/Man-in-the-middle_attack>`_
-technique (see the `Man-In-The_Middle`_ section for more info).
+technique (see the `Man-in-the-middle`_ section for more info).
 
 The web pages that warcprox stores in WARC files can be played back using
 software like `OpenWayback <https://github.com/iipc/openwayback>`_ or `pywb
@@ -41,21 +41,21 @@ To start warcprox run::
 
 Try ``warcprox --help`` for documentation on command line options.
 
-Man-In-The-Middle?
-==================
-Traffic to and from https sites is encrypted. Normally http proxies can't read
-that traffic. The web client uses the http ``CONNECT`` method to establish a
-tunnel through the proxy, and the proxy merely routes raw bytes between the
-client and server. Since the bytes are encrypted, the proxy can't make sense of
-the information it's proxying. Nonsensical encrypted bytes would not be very
-useful to archive.
+Man-in-the-middle
+=================
+Normally, http proxies can't read https traffic, because it's encrypted. The
+browser uses the http ``CONNECT`` method to establish a tunnel through the
+proxy, and the proxy merely routes raw bytes between the client and server.
+Since the bytes are encrypted, the proxy can't make sense of the information
+it's proxying. This nonsensical encrypted data would not be very useful to
+archive.
 
 In order to capture https traffic, warcprox acts as a "man-in-the-middle"
 (MITM). When it receives a ``CONNECT`` directive from a client, it generates a
 public key certificate for the requested site, presents to the client, and
-proceeds to establish an encrypted connection. Then it makes a separate, normal
-https connection to the remote site. It decrypts, archives, and re-encrypts
-traffic in both directions.
+proceeds to establish an encrypted connection with the client. Then it makes a
+separate, normal https connection to the remote site. It decrypts, archives,
+and re-encrypts traffic in both directions.
 
 Although "man-in-the-middle" is often paired with "attack", there is nothing
 malicious about what warcprox is doing. If you configure an instance of
