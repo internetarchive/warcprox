@@ -124,15 +124,11 @@ warcprox will write a warc record that looks like this::
 configuration information and metadata with each proxy request to warcprox. The
 value is a json blob. There are several fields understood by warcprox, and
 arbitrary additional fields can be included. If warcprox doesn't recognize a
-field it simply ignores it. Warcprox plugins could make use of custom fields,
-for example.
+field it simply ignores it. Custom fields may be useful for custom warcprox
+plugins (see `<readme.rst#plugins>`_).
 
 Warcprox strips the ``warcprox-meta`` header out before sending the request to
-remote server, and also does not write it in the warc request record.
-
-::
-
-    Warcprox-Meta: {}
+remote server, and does not write it in the warc request record.
 
 Brozzler knows about ``warcprox-meta``. For information on configuring
 it in brozzler, see
@@ -152,27 +148,6 @@ capture, if any, to a warc named accordingly.
 Example::
 
     Warcprox-Meta: {"warc-prefix": "special-warc"}
-
-``stats`` (dictionary)
-~~~~~~~~~~~~~~~~~~~~~~
-``stats`` is a dictionary with only one field understood by warcprox,
-``buckets``. The value of ``buckets`` is a list of strings and/or
-dictionaries. A string signifies the name of the bucket; a dictionary is
-expected to have at least an item with key ``bucket`` whose value is the name
-of the bucket. The other currently recognized key is ``tally-domains``, which
-if supplied should be a list of domains. This instructs warcprox to
-additionally tally substats of the given bucket by domain. Host stats are
-stored in the stats table under the key
-``{parent-bucket}:{domain(normalized)}``, e.g. ``"bucket2:foo.bar.com"`` for the
-example below.
-
-Examples::
-
-    Warcprox-Meta: {"stats":{"buckets":["my-stats-bucket","all-the-stats"]}}
-    Warcprox-Meta: {"stats":{"buckets":["bucket1",{"bucket":"bucket2","tally-domains":["foo.bar.com","192.168.10.20"}]}}
-
-See `<readme.rst#statistics>`_ for more information on statistics kept by
-warcprox.
 
 ``dedup-bucket`` (string)
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -196,11 +171,10 @@ Example::
 
 If any of the rules match the url being requested, warcprox aborts normal
 processing and responds with a http ``403``. The http response includes
-a ``Warcprox-Meta`` **response** header with one field, ``blocked-by-rule``,
+a ``Warcprox-Meta`` response header with one field, ``blocked-by-rule``,
 which reproduces the value of the match rule that resulted in the block. The
 presence of the ``warcprox-meta`` response header can be used by the client to
-distinguish this type of a response from a 403 from the remote url being
-requested.
+distinguish this type of a response from a 403 from the remote site.
 
 An example::
 
@@ -222,6 +196,29 @@ to evaluate the block rules. In particular, this circumstance prevails when the
 browser controlled by brozzler is requesting images, javascript, css, and so
 on, embedded in a page.
 
+``stats`` (dictionary)
+~~~~~~~~~~~~~~~~~~~~~~
+``stats`` is a dictionary with only one field understood by warcprox,
+``buckets``. The value of ``buckets`` is a list of strings and/or
+dictionaries. A string signifies the name of the bucket; a dictionary is
+expected to have at least an item with key ``bucket`` whose value is the name
+of the bucket. The other currently recognized key is ``tally-domains``, which
+if supplied should be a list of domains. This instructs warcprox to
+additionally tally substats of the given bucket by domain.
+
+See `<readme.rst#statistics>`_ for more information on statistics kept by
+warcprox.
+
+Examples::
+
+    Warcprox-Meta: {"stats":{"buckets":["my-stats-bucket","all-the-stats"]}}
+    Warcprox-Meta: {"stats":{"buckets":["bucket1",{"bucket":"bucket2","tally-domains":["foo.bar.com","192.168.10.20"}]}}
+
+Domain stats are stored in the stats table under the key
+``"bucket2:foo.bar.com"`` for the latter example. See the following two
+sections for more examples. The ``soft-limits`` section has an example of a
+limit on a domain specified in ``tally-domains``.
+
 ``limits`` (dictionary)
 ~~~~~~~~~~~~~~~~~~~~~~~
 Specifies quantitative limits for warcprox to enforce. The structure of the
@@ -231,12 +228,12 @@ further explanation of what "bucket", "sub-bucket", and "statistic" mean here.
 
 If processing a request would result in exceeding a limit, warcprox aborts
 normal processing and responds with a http ``420 Reached Limit``. The http
-response includes a ``Warcprox-Meta`` **response** header with the complete set
+response includes a ``Warcprox-Meta`` response header with the complete set
 of statistics for the bucket whose limit has been reached.
 
 Example::
 
-    {"stats": {"buckets": ["test_limits_bucket"]}, "limits": {"test_limits_bucket/total/urls": 10}}
+    Warcprox-Meta: {"stats": {"buckets": ["test_limits_bucket"]}, "limits": {"test_limits_bucket/total/urls": 10}}
 
 ::
 
@@ -257,7 +254,7 @@ From warcprox's perspective ``soft-limits`` work almost exactly the same way
 as ``limits``. The only difference is that when a soft limit is hit, warcprox
 response with an http ``430 Reached soft limit`` instead of http ``420``.
 
-Warcprox clients might treat a 430 very differently from a ``420``. From
+Warcprox clients might treat a ``430`` very differently from a ``420``. From
 brozzler's perspective, for instance, ``soft-limits`` are very different from
 ``limits``. When brozzler receives a ``420`` from warcprox because a ``limit``
 has been reached, this means that crawling for that seed is finished, and
@@ -298,7 +295,7 @@ Example::
 ``accept`` (list)
 ~~~~~~~~~~~~~~~~~
 Specifies fields that the client would like to receive in the ``Warcprox-Meta``
-*response* header. Only one value is currently understood,
+response header. Only one value is currently understood,
 ``capture-metadata``.
 
 Example::
@@ -315,10 +312,9 @@ example::
 
 ``Warcprox-Meta`` http response header
 ======================================
-In some cases warcprox will add a ``Warcprox-Meta`` header in the http response
-that it sends to the client. Like the request header, the value is a json blob.
-It is only included if something in the ``warcprox-meta`` request header calls
-for it. Those cases are described above in the
-`Warcprox-Meta http request header`_ section.
-
+In some cases warcprox will add a ``Warcprox-Meta`` header to the http response
+that it sends to the client. As with the request header, the value is a json
+blob. It is only included if something in the ``warcprox-meta`` request header
+calls for it. Those cases are described above in the `Warcprox-Meta http
+request header`_ section.
 
