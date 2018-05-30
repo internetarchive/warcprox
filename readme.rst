@@ -3,7 +3,7 @@ Warcprox - WARC writing MITM HTTP/S proxy
 .. image:: https://travis-ci.org/internetarchive/warcprox.svg?branch=master
     :target: https://travis-ci.org/internetarchive/warcprox
 
-Based on the excellent and simple pymiproxy by Nadeem Douba.
+Originally based on the excellent and simple pymiproxy by Nadeem Douba.
 https://github.com/allfro/pymiproxy
 
 .. contents::
@@ -52,9 +52,10 @@ for deduplication works similarly to heritrix and other web archiving tools.
 1. while fetching url, calculate payload content digest (typically sha1)
 2. look up digest in deduplication database (warcprox supports a few different
    ones)
-3. if found write warc ``revisit`` record referencing the url and capture time
+3. if found, write warc ``revisit`` record referencing the url and capture time
    of the previous capture
-4. else (if not found)
+4. else (if not found),
+
    a. write warc ``response`` record with full payload
    b. store entry in deduplication database
 
@@ -79,22 +80,24 @@ request header. The fallback bucket in case none is specified is called
 ``__unspecified__``.
 
 Within each bucket are three sub-buckets:
-* "new" - tallies captures for which a complete record (usually a ``response``
+
+* ``new`` - tallies captures for which a complete record (usually a ``response``
   record) was written to warc
-* "revisit" - tallies captures for which a ``revisit`` record was written to
+* ``revisit`` - tallies captures for which a ``revisit`` record was written to
   warc
-* "total" - includes all urls processed, even those not written to warc (so the
+* ``total`` - includes all urls processed, even those not written to warc (so the
   numbers may be greater than new + revisit)
 
 Within each of these sub-buckets we keep two statistics:
-* urls - simple count of urls
-* wire_bytes - sum of bytes received over the wire from the remote server for
-  each url
 
-For historical reasons, statistics are stored as json blobs in sqlite, the
-default store::
+* ``urls`` - simple count of urls
+* ``wire_bytes`` - sum of bytes received over the wire, including http headers,
+  from the remote server for each url
 
-    sqlite> select * from buckets_of_stats order by bucket desc;
+For historical reasons, in sqlite, the default store, statistics are kept as
+json blobs::
+
+    sqlite> select * from buckets_of_stats;
     bucket           stats
     ---------------  ---------------------------------------------------------------------------------------------
     __unspecified__  {"bucket":"__unspecified__","total":{"urls":37,"wire_bytes":1502781},"new":{"urls":15,"wire_bytes":1179906},"revisit":{"urls":22,"wire_bytes":322875}}
