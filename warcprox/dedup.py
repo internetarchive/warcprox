@@ -497,7 +497,13 @@ class TroughDedupDb(DedupDb, DedupableMixin):
         return BatchTroughStorer(self, self.options)
 
     def start(self):
-        self._trough_cli.register_schema(self.SCHEMA_ID, self.SCHEMA_SQL)
+        try:
+            self._trough_cli.register_schema(self.SCHEMA_ID, self.SCHEMA_SQL)
+        except Exception as e:
+            # can happen. hopefully someone else has registered it
+            self.logger.critical(
+                    'will try to continue after problem registering schema %s',
+                    self.SCHEMA_ID, exc_info=True)
 
     def save(self, digest_key, response_record, bucket='__unspecified__'):
         record_id = response_record.get_header(warctools.WarcRecord.ID)
