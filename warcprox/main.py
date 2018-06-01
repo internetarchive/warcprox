@@ -193,7 +193,7 @@ def _build_arg_parser(prog='warcprox'):
             action='append', help=(
                 'Qualified name of plugin class, e.g. "mypkg.mymod.MyClass". '
                 'May be used multiple times to register multiple plugins. '
-                'See README.rst for more information.'))
+                'See readme.rst for more information.'))
     arg_parser.add_argument('--version', action='version',
             version="warcprox {}".format(warcprox.__version__))
     arg_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true')

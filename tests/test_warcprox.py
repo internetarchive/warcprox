@@ -709,6 +709,7 @@ def test_limits(http_daemon, warcprox_, archiving_proxies):
     # wait for postfetch chain
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 10)
 
+    # next fetch hits the limit
     response = requests.get(url, proxies=archiving_proxies, headers=headers, stream=True)
     assert response.status_code == 420
     assert response.reason == "Reached limit"
@@ -716,6 +717,17 @@ def test_limits(http_daemon, warcprox_, archiving_proxies):
     assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
     assert response.headers["content-type"] == "text/plain;charset=utf-8"
     assert response.raw.data == b"request rejected by warcprox: reached limit test_limits_bucket/total/urls=10\n"
+
+    # make sure limit doesn't get applied to a different stats bucket
+    request_meta = {"stats":{"buckets":["no_limits_bucket"]},"limits":{"test_limits_bucket/total/urls":10}}
+    headers = {"Warcprox-Meta": json.dumps(request_meta)}
+    response = requests.get(url, proxies=archiving_proxies, headers=headers, stream=True)
+    assert response.status_code == 200
+    assert response.headers['warcprox-test-header'] == 'i!'
+    assert response.content == b'I am the warcprox test payload! jjjjjjjjjj!\n'
+
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 11)
 
 def test_return_capture_timestamp(http_daemon, warcprox_, archiving_proxies):
     urls_before = warcprox_.proxy.running_stats.urls
@@ -726,14 +738,16 @@ def test_return_capture_timestamp(http_daemon, warcprox_, archiving_proxies):
     response = requests.get(url, proxies=archiving_proxies, headers=headers, stream=True)
     assert response.status_code == 200
     assert response.headers['Warcprox-Meta']
-    data = json.loads(response.headers['Warcprox-Meta'])
-    assert data['capture-metadata']
+    response_meta = json.loads(response.headers['Warcprox-Meta'])
+    assert response_meta['capture-metadata']
     try:
-        dt = datetime.datetime.strptime(data['capture-metadata']['timestamp'],
+        dt = datetime.datetime.strptime(response_meta['capture-metadata']['timestamp'],
                                         '%Y-%m-%dT%H:%M:%SZ')
         assert dt
     except ValueError:
-        pytest.fail('Invalid capture-timestamp format %s', data['capture-timestamp'])
+        pytest.fail(
+                'Invalid http response warcprox-meta["capture-metadata"]["timestamp"]: %r',
+                meta['capture-metadata']['timestamp'])
 
     # wait for postfetch chain (or subsequent test could fail)
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
@@ -997,6 +1011,7 @@ def test_domain_doc_soft_limit(
         http_daemon, https_daemon, warcprox_, archiving_proxies):
     urls_before = warcprox_.proxy.running_stats.urls
 
+    # ** comment is obsolete (server is multithreaded) but still useful **
     # we need to clear the connection pool here because
     # - connection pool already may already have an open connection localhost
     # - we're about to make a connection to foo.localhost
@@ -1132,6 +1147,23 @@ def test_domain_doc_soft_limit(
     assert response.headers["content-type"] == "text/plain;charset=utf-8"
     assert response.raw.data == b"request rejected by warcprox: reached soft limit test_domain_doc_limit_bucket:foo.localhost/total/urls=10\n"
 
+    # make sure soft limit doesn't get applied to a different stats bucket
+    request_meta = {
+        "stats": {"buckets": [{"bucket":"no_limit_bucket","tally-domains":["foo.localhost"]}]},
+        "soft-limits": {"test_domain_doc_limit_bucket:foo.localhost/total/urls":10},
+    }
+    headers = {"Warcprox-Meta": json.dumps(request_meta)}
+    url = 'http://zuh.foo.localhost:{}/o/p'.format(http_daemon.server_port)
+    response = requests.get(
+            url, proxies=archiving_proxies, headers=headers, stream=True,
+            verify=False)
+    assert response.status_code == 200
+    assert response.headers['warcprox-test-header'] == 'o!'
+    assert response.content == b'I am the warcprox test payload! pppppppppp!\n'
+
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 22)
+
 def test_domain_data_soft_limit(
         http_daemon, https_daemon, warcprox_, archiving_proxies):
     urls_before = warcprox_.proxy.running_stats.urls
@@ -1225,6 +1257,22 @@ def test_domain_data_soft_limit(
     ### assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
     ### assert response.headers["content-type"] == "text/plain;charset=utf-8"
     ### assert response.raw.data == b"request rejected by warcprox: reached soft limit test_domain_data_limit_bucket:xn--zz-2ka.localhost/new/wire_bytes=200\n"
+
+    # make sure soft limit doesn't get applied to a different stats bucket
+    request_meta = {
+        "stats": {"buckets": [{"bucket":"no_limit_bucket","tally-domains":['ÞzZ.LOCALhost']}]},
+        "soft-limits": {"test_domain_data_limit_bucket:ÞZZ.localhost/new/wire_bytes":200},
+    }
+    headers = {"Warcprox-Meta": json.dumps(request_meta)}
+    url = 'http://ÞZz.localhost:{}/y/z'.format(http_daemon.server_port)
+    response = requests.get(
+            url, proxies=archiving_proxies, headers=headers, stream=True)
+    assert response.status_code == 200
+    assert response.headers['warcprox-test-header'] == 'y!'
+    assert response.content == b'I am the warcprox test payload! zzzzzzzzzz!\n'
+
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 5)
 
 # XXX this test relies on a tor proxy running at localhost:9050 with a working
 # connection to the internet, and relies on a third party site (facebook) being
@@ -1838,6 +1886,8 @@ def test_socket_timeout_response(
     """Response will timeout because we use --socket-timeout=4 whereas the
     target URL will return after 6 sec.
     """
+    urls_before = warcprox_.proxy.running_stats.urls
+
     url = 'http://localhost:%s/slow-response' % http_daemon.server_port
     response = requests.get(url, proxies=archiving_proxies, verify=False)
     assert response.status_code == 502
@@ -1849,6 +1899,8 @@ def test_socket_timeout_response(
         url, proxies=archiving_proxies, verify=False, timeout=10)
     assert response.status_code == 404
     assert response.content == b'404 Not Found\n'
+
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
 
 def test_empty_response(
         warcprox_, http_daemon, https_daemon, archiving_proxies,
@@ -1941,7 +1993,7 @@ def test_trough_segment_promotion(warcprox_):
     time.sleep(3)
     assert promoted == []
 
-def test_dedup_min_size(http_daemon, warcprox_, archiving_proxies, playback_proxies):
+def test_dedup_min_text_size(http_daemon, warcprox_, archiving_proxies):
     """We use options --dedup-min-text-size=3 --dedup-min-binary-size=5 and we
     try to download content smaller than these limits to make sure that it is
     not deduplicated. We create the digest_str with the following code:
@@ -1951,36 +2003,155 @@ def test_dedup_min_size(http_daemon, warcprox_, archiving_proxies, playback_prox
     warcprox.digest_str(payload_digest)
     ```
     """
+    urls_before = warcprox_.proxy.running_stats.urls
+
+    # start a fresh warc
+    warcprox_.warc_writer_processor.writer_pool.close_writers()
+
+    # fetch small text
     url = 'http://localhost:%s/text-2bytes' % http_daemon.server_port
     response = requests.get(
         url, proxies=archiving_proxies, verify=False, timeout=10)
     assert len(response.content) == 2
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
+    # check no dedup was saved (except RethinkCapturesDedup which always saves)
     dedup_lookup = warcprox_.dedup_db.lookup(
             b'sha1:e0c9035898dd52fc65c41454cec9c4d2611bfb37')
-    assert dedup_lookup is None
-    time.sleep(3)
+    if not isinstance(warcprox_.dedup_db, warcprox.bigtable.RethinkCapturesDedup):
+        assert dedup_lookup is None
+
+        # fetch again saving dedup info so that we can test dedup info ignored
+        orig_should_dedup = warcprox_.dedup_db.should_dedup
+        warcprox_.dedup_db.should_dedup = lambda *args, **kwargs: True
+        try:
+            response = requests.get(
+                url, proxies=archiving_proxies, verify=False, timeout=10)
+            assert len(response.content) == 2
+            wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 2)
+            # check dedup was saved
+            dedup_lookup = warcprox_.dedup_db.lookup(
+                    b'sha1:e0c9035898dd52fc65c41454cec9c4d2611bfb37')
+            assert dedup_lookup
+        finally:
+            warcprox_.dedup_db.should_dedup = orig_should_dedup
+    else:
+        assert dedup_lookup
+
+    # fetch again and check that it was not deduped
+    urls_before = warcprox_.proxy.running_stats.urls
     response = requests.get(
         url, proxies=archiving_proxies, verify=False, timeout=10)
-    dedup_lookup = warcprox_.dedup_db.lookup(
-            b'sha1:e0c9035898dd52fc65c41454cec9c4d2611bfb37')
-    # This would return dedup data if payload_size > dedup-min-text-size
-    assert dedup_lookup is None
+    assert len(response.content) == 2
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
 
+    # check that response records were written
+    warc = warcprox_.warc_writer_processor.writer_pool.default_warc_writer._available_warcs.queue[0].path
+    with open(warc, 'rb') as f:
+        rec_iter = iter(warcio.archiveiterator.ArchiveIterator(f))
+        record = next(rec_iter)
+        assert record.rec_type == 'warcinfo'
+        record = next(rec_iter)
+        assert record.rec_type == 'response'
+        assert record.rec_headers.get_header('warc-target-uri') == url
+        record = next(rec_iter)
+        assert record.rec_type == 'request'
+        assert record.rec_headers.get_header('warc-target-uri') == url
+        record = next(rec_iter)
+        assert record.rec_type == 'response'
+        assert record.rec_headers.get_header('warc-target-uri') == url
+        record = next(rec_iter)
+        assert record.rec_type == 'request'
+        assert record.rec_headers.get_header('warc-target-uri') == url
+        if not isinstance(warcprox_.dedup_db, warcprox.bigtable.RethinkCapturesDedup):
+            record = next(rec_iter)
+            assert record.rec_type == 'response'
+            assert record.rec_headers.get_header('warc-target-uri') == url
+            record = next(rec_iter)
+            assert record.rec_type == 'request'
+            assert record.rec_headers.get_header('warc-target-uri') == url
+        with pytest.raises(StopIteration):
+            next(rec_iter)
+
+def test_dedup_min_binary_size(http_daemon, warcprox_, archiving_proxies):
+    """We use options --dedup-min-text-size=3 --dedup-min-binary-size=5 and we
+    try to download content smaller than these limits to make sure that it is
+    not deduplicated. We create the digest_str with the following code:
+    ```
+    payload_digest = hashlib.new('sha1')
+    payload_digest.update(b'aa')
+    warcprox.digest_str(payload_digest)
+    ```
+    """
+    urls_before = warcprox_.proxy.running_stats.urls
+
+    # start a fresh warc
+    warcprox_.warc_writer_processor.writer_pool.close_writers()
+
+    # fetch small binary
     url = 'http://localhost:%s/binary-4bytes' % http_daemon.server_port
     response = requests.get(
         url, proxies=archiving_proxies, verify=False, timeout=10)
     assert len(response.content) == 4
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
+    # check no dedup was saved (except RethinkCapturesDedup which always saves)
     dedup_lookup = warcprox_.dedup_db.lookup(
             b'sha1:70c881d4a26984ddce795f6f71817c9cf4480e79')
-    assert dedup_lookup is None
-    time.sleep(3)
+    if not isinstance(warcprox_.dedup_db, warcprox.bigtable.RethinkCapturesDedup):
+        assert dedup_lookup is None
+
+        # fetch again saving dedup info so that we can test dedup info ignored
+        orig_should_dedup = warcprox_.dedup_db.should_dedup
+        warcprox_.dedup_db.should_dedup = lambda *args, **kwargs: True
+        try:
+            response = requests.get(
+                url, proxies=archiving_proxies, verify=False, timeout=10)
+            assert len(response.content) == 4
+            wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 2)
+            # check dedup was saved
+            dedup_lookup = warcprox_.dedup_db.lookup(
+                    b'sha1:70c881d4a26984ddce795f6f71817c9cf4480e79')
+            assert dedup_lookup
+        finally:
+            warcprox_.dedup_db.should_dedup = orig_should_dedup
+    else:
+        assert dedup_lookup
+
+    # fetch again and check that it was not deduped
+    urls_before = warcprox_.proxy.running_stats.urls
     response = requests.get(
         url, proxies=archiving_proxies, verify=False, timeout=10)
-    dedup_lookup = warcprox_.dedup_db.lookup(
-            b'sha1:70c881d4a26984ddce795f6f71817c9cf4480e79')
-    # This would return dedup data if payload_size > dedup-min-binary-size
-    assert dedup_lookup is None
+    assert len(response.content) == 4
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
 
+    # check that response records were written
+    warc = warcprox_.warc_writer_processor.writer_pool.default_warc_writer._available_warcs.queue[0].path
+    with open(warc, 'rb') as f:
+        rec_iter = iter(warcio.archiveiterator.ArchiveIterator(f))
+        record = next(rec_iter)
+        assert record.rec_type == 'warcinfo'
+        record = next(rec_iter)
+        assert record.rec_type == 'response'
+        assert record.rec_headers.get_header('warc-target-uri') == url
+        record = next(rec_iter)
+        assert record.rec_type == 'request'
+        assert record.rec_headers.get_header('warc-target-uri') == url
+        record = next(rec_iter)
+        assert record.rec_type == 'response'
+        assert record.rec_headers.get_header('warc-target-uri') == url
+        record = next(rec_iter)
+        assert record.rec_type == 'request'
+        assert record.rec_headers.get_header('warc-target-uri') == url
+        if not isinstance(warcprox_.dedup_db, warcprox.bigtable.RethinkCapturesDedup):
+            record = next(rec_iter)
+            assert record.rec_type == 'response'
+            assert record.rec_headers.get_header('warc-target-uri') == url
+            record = next(rec_iter)
+            assert record.rec_type == 'request'
+            assert record.rec_headers.get_header('warc-target-uri') == url
+        with pytest.raises(StopIteration):
+            next(rec_iter)
 
 if __name__ == '__main__':
     pytest.main()

@@ -122,14 +122,19 @@ class BasePostfetchProcessor(threading.Thread):
         self.profiler = None
 
     def run(self):
-        if self.options.profile:
-            import cProfile
-            self.profiler = cProfile.Profile()
-            self.profiler.enable()
-            self._run()
-            self.profiler.disable()
-        else:
-            self._run()
+        try:
+            if self.options.profile:
+                import cProfile
+                self.profiler = cProfile.Profile()
+                self.profiler.enable()
+                self._run()
+                self.profiler.disable()
+            else:
+                self._run()
+        except:
+            self.logger.critical(
+                    '%s dying due to uncaught exception',
+                    self.name, exc_info=True)
 
     def _get_process_put(self):
         '''

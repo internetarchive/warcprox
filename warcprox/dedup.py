@@ -39,9 +39,9 @@ urllib3.disable_warnings()
 
 class DedupableMixin(object):
     def __init__(self, options=warcprox.Options()):
-        self.min_text_size = options.dedup_min_text_size
-        self.min_binary_size = options.dedup_min_binary_size
-        self.dedup_only_with_bucket = options.dedup_only_with_bucket
+        self.min_text_size = options.dedup_min_text_size or 0
+        self.min_binary_size = options.dedup_min_binary_size or 0
+        self.dedup_only_with_bucket = options.dedup_only_with_bucket or False
 
     def should_dedup(self, recorded_url):
         """Check if we should try to run dedup on resource based on payload
@@ -326,10 +326,9 @@ class CdxServerDedupLoader(warcprox.BaseBatchPostfetchProcessor, DedupableMixin)
             if self.outq:
                 self.outq.put(recorded_url)
 
-class BatchTroughStorer(warcprox.BaseBatchPostfetchProcessor, DedupableMixin):
+class BatchTroughStorer(warcprox.BaseBatchPostfetchProcessor):
     def __init__(self, trough_dedup_db, options=warcprox.Options()):
         warcprox.BaseBatchPostfetchProcessor.__init__(self, options)
-        DedupableMixin.__init__(self, options)
         self.trough_dedup_db = trough_dedup_db
 
     def _filter_and_bucketize(self, batch):
@@ -341,7 +340,7 @@ class BatchTroughStorer(warcprox.BaseBatchPostfetchProcessor, DedupableMixin):
         for recorded_url in batch:
             if (recorded_url.warc_records
                     and recorded_url.warc_records[0].type == b'response'
-                    and self.should_dedup(recorded_url)):
+                    and self.trough_dedup_db.should_dedup(recorded_url)):
                 if (recorded_url.warcprox_meta
                         and 'dedup-bucket' in recorded_url.warcprox_meta):
                     bucket = recorded_url.warcprox_meta['dedup-bucket']
@@ -373,10 +372,11 @@ class BatchTroughStorer(warcprox.BaseBatchPostfetchProcessor, DedupableMixin):
                 logging.warn(
                     'timed out saving dedup info to trough', exc_info=True)
 
-class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor, DedupableMixin):
+class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
+    logger = logging.getLogger("warcprox.dedup.BatchTroughLoader")
+
     def __init__(self, trough_dedup_db, options=warcprox.Options()):
         warcprox.BaseBatchPostfetchProcessor.__init__(self, options)
-        DedupableMixin.__init__(self, options)
         self.trough_dedup_db = trough_dedup_db
 
     def _startup(self):
@@ -388,16 +388,24 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor, DedupableMixin):
         be looked up.
         '''
         buckets = collections.defaultdict(list)
+        discards = []
         for recorded_url in batch:
             if (recorded_url.response_recorder
                     and recorded_url.payload_digest
-                    and self.should_dedup(recorded_url)):
+                    and self.trough_dedup_db.should_dedup(recorded_url)):
                 if (recorded_url.warcprox_meta
                         and 'dedup-bucket' in recorded_url.warcprox_meta):
                     bucket = recorded_url.warcprox_meta['dedup-bucket']
                 else:
                     bucket = '__unspecified__'
                 buckets[bucket].append(recorded_url)
+            else:
+                discards.append(
+                        warcprox.digest_str(
+                            recorded_url.payload_digest, self.options.base32)
+                        if recorded_url.payload_digest else 'n/a')
+        self.logger.debug(
+                'filtered out digests (not loading dedup): %r', discards)
         return buckets
 
     def _build_key_index(self, batch):
@@ -445,10 +453,19 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor, DedupableMixin):
                                 'problem looking up dedup info for %s urls '
                                 'in bucket %s', len(buckets[bucket]), bucket,
                                 exc_info=True)
+
+                    if self.logger.isEnabledFor(logging.DEBUG):
+                        dups = sorted([e['digest_key'] for e in future.result()])
+                        novel = sorted([
+                            k for k in key_index.keys() if k not in dups])
+                        self.logger.debug(
+                                'bucket %s: dups=%r novel=%r',
+                                bucket, dups, novel)
+
             except futures.TimeoutError as e:
                 # the remaining threads actually keep running in this case,
                 # there's no way to stop them, but that should be harmless
-                logging.warn(
+                self.logger.warn(
                     'timed out loading dedup info from trough', exc_info=True)
 
 class TroughDedupDb(DedupDb, DedupableMixin):
@@ -480,7 +497,13 @@ class TroughDedupDb(DedupDb, DedupableMixin):
         return BatchTroughStorer(self, self.options)
 
     def start(self):
-        self._trough_cli.register_schema(self.SCHEMA_ID, self.SCHEMA_SQL)
+        try:
+            self._trough_cli.register_schema(self.SCHEMA_ID, self.SCHEMA_SQL)
+        except Exception as e:
+            # can happen. hopefully someone else has registered it
+            self.logger.critical(
+                    'will try to continue after problem registering schema %s',
+                    self.SCHEMA_ID, exc_info=True)
 
     def save(self, digest_key, response_record, bucket='__unspecified__'):
         record_id = response_record.get_header(warctools.WarcRecord.ID)
