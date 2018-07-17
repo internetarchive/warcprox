@@ -1799,7 +1799,7 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     assert fields[10] == b'-'
     assert fields[11] == b'-'
     extra_info = json.loads(fields[12].decode('utf-8'))
-    assert extra_info == {'contentSize': 91}
+    assert extra_info == {'contentSize': 91, 'method': 'HEAD'}
 
     # WARCPROX_WRITE_RECORD
     url = 'http://fakeurl/'
@@ -1838,8 +1838,9 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     assert fields[11] == b'-'
     extra_info = json.loads(fields[12].decode('utf-8'))
     assert set(extra_info.keys()) == {
-            'contentSize', 'warcFilename', 'warcFileOffset'}
+            'contentSize', 'warcFilename', 'warcFileOffset', 'method'}
     assert extra_info['contentSize'] == 38
+    assert extra_info['method'] == 'WARCPROX_WRITE_RECORD'
 
 def test_long_warcprox_meta(
         warcprox_, http_daemon, archiving_proxies, playback_proxies):

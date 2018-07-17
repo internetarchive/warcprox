@@ -40,6 +40,8 @@ class CrawlLogger(object):
         if records:
             extra_info['warcFilename'] = records[0].warc_filename
             extra_info['warcFileOffset'] = records[0].offset
+        if recorded_url.method != 'GET':
+            extra_info['method'] = recorded_url.method
         if recorded_url.response_recorder:
             content_length = recorded_url.response_recorder.len - recorded_url.response_recorder.payload_offset
             payload_digest = warcprox.digest_str(
