@@ -3,10 +3,12 @@
 # this is used by .travis.yml
 #
 
+set -x
+
 pip install git+https://github.com/jkafader/snakebite@feature/python3-version-string
 pip install git+https://github.com/internetarchive/trough.git
 
-mkdir /etc/trough
+mkdir -vp /etc/trough
 
 # hello docker user-defined bridge networking
 echo '
