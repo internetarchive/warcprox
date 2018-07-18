@@ -46,6 +46,7 @@ install:
 before_script:
 - ps ww -fHe
 - docker ps
+- docker exec trough bash -c 'while ! test -e /tmp/trough-read.out ; do sleep 0.5 ; done'
 - docker exec trough cat /tmp/trough-write.out
 - docker exec trough cat /tmp/trough-segment-manager-server.out
 - docker exec trough cat /tmp/trough-segment-manager-local.out
