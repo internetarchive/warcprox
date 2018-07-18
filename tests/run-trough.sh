@@ -3,6 +3,8 @@
 # this is used by .travis.yml
 #
 
+set -x
+
 pip install git+https://github.com/jkafader/snakebite@feature/python3-version-string
 pip install git+https://github.com/internetarchive/trough.git
 

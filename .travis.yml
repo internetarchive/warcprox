@@ -31,7 +31,7 @@ before_install:
 - docker network create --driver=bridge trough
 - docker run --detach --network=trough --hostname=rethinkdb --name=rethinkdb --publish=28015:28015 rethinkdb
 - docker run --detach --network=trough --hostname=hadoop --name=hadoop chalimartines/cdh5-pseudo-distributed
-- docker run --detach --network=trough --hostname=trough --volume="$PWD/tests/run-trough.sh:/run-trough.sh" --publish=6111:6111 --publish=6112:6112 --publish=6222:6222 --publish=6444:6444 python:3 bash /run-trough.sh
+- docker run --detach --network=trough --hostname=trough --name=trough --volume="$PWD/tests/run-trough.sh:/run-trough.sh" --publish=6111:6111 --publish=6112:6112 --publish=6222:6222 --publish=6444:6444 python:3.6 bash /run-trough.sh
 - cat /etc/hosts
 - echo | sudo tee -a /etc/hosts # travis-ci default doesn't end with a newline 🙄
 - echo 127.0.0.1 rethinkdb | sudo tee -a /etc/hosts
@@ -44,7 +44,10 @@ install:
 - pip install . pytest requests warcio mock
 
 before_script:
+- docker exec trough bash -c 'while ! test -e /tmp/trough-read.out ; do sleep 0.5 ; done' || true
+- docker logs --timestamps --details trough
 - ps ww -fHe
+- docker ps
 
 script:
 - py.test -v tests
@@ -55,8 +58,8 @@ script:
 after_script:
 - ps ww -fHe
 - docker exec trough cat /tmp/trough-write.out
-- docker exec trough cat /tmp/trough-write-provisioner-server.out
-- docker exec trough cat /tmp/trough-write-provisioner-local.out
+- docker exec trough cat /tmp/trough-segment-manager-server.out
+- docker exec trough cat /tmp/trough-segment-manager-local.out
 - docker exec trough cat /tmp/trough-sync-server.out
 - docker exec trough cat /tmp/trough-sync-local.out
 - docker exec trough cat /tmp/trough-read.out
