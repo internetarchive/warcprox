@@ -148,6 +148,8 @@ class BasePostfetchProcessor(threading.Thread):
         raise Exception('not implemented')
 
     def _run(self):
+        threading.current_thread().name = '%s(tid=%s)' % (
+                threading.current_thread().name, gettid())
         self.logger.info('%s starting up', self)
         self._startup()
         while not self.stop.is_set():

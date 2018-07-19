@@ -405,7 +405,9 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
                             recorded_url.payload_digest, self.options.base32)
                         if recorded_url.payload_digest else 'n/a')
         self.logger.debug(
-                'filtered out digests (not loading dedup): %r', discards)
+                'len(batch)=%s len(discards)=%s buckets=%s',
+                len(batch), len(discards),
+                {bucket: len(buckets[bucket]) for bucket in buckets})
         return buckets
 
     def _build_key_index(self, batch):
@@ -459,8 +461,8 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
                         novel = sorted([
                             k for k in key_index.keys() if k not in dups])
                         self.logger.debug(
-                                'bucket %s: dups=%r novel=%r',
-                                bucket, dups, novel)
+                                'bucket %s: dups(%s)=%r novel(%s)=%r',
+                                bucket, len(dups), dups, len(novel), novel)
 
             except futures.TimeoutError as e:
                 # the remaining threads actually keep running in this case,
