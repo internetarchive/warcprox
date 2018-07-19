@@ -204,13 +204,14 @@ class WarcWriter:
                 record.offset = offset
                 record.length = warc.f.tell() - offset
                 record.warc_filename = warc.finalname
-                self.logger.debug(
+                self.logger.trace(
                         'wrote warc record: warc_type=%s content_length=%s '
-                        'url=%s warc=%s offset=%d',
-                        record.get_header(warctools.WarcRecord.TYPE),
+                        'digest=%s offset=%d warc=%s url=%s',
+                        record.type,
                         record.get_header(warctools.WarcRecord.CONTENT_LENGTH),
-                        record.get_header(warctools.WarcRecord.URL),
-                        warc.path, record.offset)
+                        record.get_header(b'WARC-Payload-Digest'),
+                        record.offset, warc.path,
+                        record.get_header(warctools.WarcRecord.URL))
 
         return records
 
