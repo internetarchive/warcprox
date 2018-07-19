@@ -125,7 +125,7 @@ configuration information and metadata with each proxy request to warcprox. The
 value is a json blob. There are several fields understood by warcprox, and
 arbitrary additional fields can be included. If warcprox doesn't recognize a
 field it simply ignores it. Custom fields may be useful for custom warcprox
-plugins (see `<readme.rst#plugins>`_).
+plugins (see `<README.rst#plugins>`_).
 
 Warcprox strips the ``warcprox-meta`` header out before sending the request to
 remote server, and does not write it in the warc request record.
@@ -152,7 +152,7 @@ Example::
 ``dedup-bucket`` (string)
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 Specifies the deduplication bucket. For more information about deduplication
-see `<readme.rst#deduplication>`_.
+see `<README.rst#deduplication>`_.
 
 Example::
 
@@ -206,7 +206,7 @@ of the bucket. The other currently recognized key is ``tally-domains``, which
 if supplied should be a list of domains. This instructs warcprox to
 additionally tally substats of the given bucket by domain.
 
-See `<readme.rst#statistics>`_ for more information on statistics kept by
+See `<README.rst#statistics>`_ for more information on statistics kept by
 warcprox.
 
 Examples::
@@ -223,7 +223,7 @@ limit on a domain specified in ``tally-domains``.
 ~~~~~~~~~~~~~~~~~~~~~~~
 Specifies quantitative limits for warcprox to enforce. The structure of the
 dictionary is ``{stats_key: numerical_limit, ...}`` where stats key has the
-format ``"bucket/sub-bucket/statistic"``. See `readme.rst#statistics`_ for
+format ``"bucket/sub-bucket/statistic"``. See `README.rst#statistics`_ for
 further explanation of what "bucket", "sub-bucket", and "statistic" mean here.
 
 If processing a request would result in exceeding a limit, warcprox aborts

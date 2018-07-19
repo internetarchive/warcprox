@@ -405,7 +405,9 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
                             recorded_url.payload_digest, self.options.base32)
                         if recorded_url.payload_digest else 'n/a')
         self.logger.debug(
-                'filtered out digests (not loading dedup): %r', discards)
+                'len(batch)=%s len(discards)=%s buckets=%s',
+                len(batch), len(discards),
+                {bucket: len(buckets[bucket]) for bucket in buckets})
         return buckets
 
     def _build_key_index(self, batch):
@@ -432,11 +434,12 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
         fs = {}
         with futures.ThreadPoolExecutor(max_workers=len(buckets)) as pool:
             # send off the trough requests in parallel
+            key_indexes = {}
             for bucket in buckets:
-                key_index = self._build_key_index(buckets[bucket])
+                key_indexes[bucket] = self._build_key_index(buckets[bucket])
                 future = pool.submit(
                         self.trough_dedup_db.batch_lookup,
-                        key_index.keys(), bucket)
+                        key_indexes[bucket].keys(), bucket)
                 fs[future] = bucket
 
             # process results as they come back
@@ -444,6 +447,7 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
                 for future in futures.as_completed(fs, timeout=20):
                     bucket = fs[future]
                     try:
+                        key_index = key_indexes[bucket]
                         for entry in future.result():
                             for recorded_url in key_index[entry['digest_key']]:
                                 recorded_url.dedup_info = entry
@@ -459,8 +463,8 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
                         novel = sorted([
                             k for k in key_index.keys() if k not in dups])
                         self.logger.debug(
-                                'bucket %s: dups=%r novel=%r',
-                                bucket, dups, novel)
+                                'bucket %s: dups(%s)=%r novel(%s)=%r',
+                                bucket, len(dups), dups, len(novel), novel)
 
             except futures.TimeoutError as e:
                 # the remaining threads actually keep running in this case,
