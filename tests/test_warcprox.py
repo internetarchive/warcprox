@@ -51,6 +51,7 @@ import gzip
 import mock
 import email.message
 import socketserver
+from concurrent import futures
 
 try:
     import http.server as http_server
@@ -885,6 +886,57 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
 
     finally:
         fh.close()
+
+def test_dedup_bucket_concurrency(https_daemon, http_daemon, warcprox_, archiving_proxies):
+    urls_before = warcprox_.proxy.running_stats.urls
+    revisits_before = warcprox_.proxy.stats_db.value(
+            '__all__', 'revisit', 'urls') or 0
+
+    # fire off 20 initial requests simultaneously-ish
+    with futures.ThreadPoolExecutor(max_workers=20) as pool:
+        for i in range(20):
+            url = 'http://localhost:%s/test_dedup_bucket_concurrency/%s' % (
+                    http_daemon.server_port, i)
+            headers = {"Warcprox-Meta": json.dumps({
+                "warc-prefix":"test_dedup_buckets",
+                "dedup-bucket":"bucket_%s" % i})}
+            pool.submit(
+                    requests.get, url, proxies=archiving_proxies, verify=False,
+                    headers=headers)
+
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 20)
+    assert warcprox_.proxy.stats_db.value('__all__', 'revisit', 'urls') == revisits_before
+
+    # fire off 20 requests to the same urls but different buckets
+    # none should be deduped
+    with futures.ThreadPoolExecutor(max_workers=20) as pool:
+        for i in range(20):
+            url = 'http://localhost:%s/test_dedup_bucket_concurrency/%s' % (
+                    http_daemon.server_port, -i - 1)
+            headers = {"Warcprox-Meta": json.dumps({
+                "warc-prefix":"test_dedup_buckets",
+                "dedup-bucket":"bucket_%s" % i})}
+            pool.submit(
+                    requests.get, url, proxies=archiving_proxies, verify=False,
+                    headers=headers)
+
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 40)
+    assert warcprox_.proxy.stats_db.value('__all__', 'revisit', 'urls') == revisits_before
+
+    # fire off 20 requests same as the initial requests, all should be deduped
+    with futures.ThreadPoolExecutor(max_workers=20) as pool:
+        for i in range(20):
+            url = 'http://localhost:%s/test_dedup_bucket_concurrency/%s' % (
+                    http_daemon.server_port, i)
+            headers = {"Warcprox-Meta": json.dumps({
+                "warc-prefix":"test_dedup_buckets",
+                "dedup-bucket":"bucket_%s" % i})}
+            pool.submit(
+                    requests.get, url, proxies=archiving_proxies, verify=False,
+                    headers=headers)
+
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 60)
+    assert warcprox_.proxy.stats_db.value('__all__', 'revisit', 'urls') == revisits_before + 20
 
 def test_block_rules(http_daemon, https_daemon, warcprox_, archiving_proxies):
     urls_before = warcprox_.proxy.running_stats.urls
