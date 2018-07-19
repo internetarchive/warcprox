@@ -434,8 +434,9 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
         fs = {}
         with futures.ThreadPoolExecutor(max_workers=len(buckets)) as pool:
             # send off the trough requests in parallel
+            key_indexes = {}
             for bucket in buckets:
-                key_index = self._build_key_index(buckets[bucket])
+                key_indexes[bucket] = self._build_key_index(buckets[bucket])
                 future = pool.submit(
                         self.trough_dedup_db.batch_lookup,
                         key_index.keys(), bucket)
@@ -446,6 +447,7 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
                 for future in futures.as_completed(fs, timeout=20):
                     bucket = fs[future]
                     try:
+                        key_index = key_indexes[bucket]
                         for entry in future.result():
                             for recorded_url in key_index[entry['digest_key']]:
                                 recorded_url.dedup_info = entry
