@@ -439,7 +439,7 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
                 key_indexes[bucket] = self._build_key_index(buckets[bucket])
                 future = pool.submit(
                         self.trough_dedup_db.batch_lookup,
-                        key_index.keys(), bucket)
+                        key_indexes[bucket].keys(), bucket)
                 fs[future] = bucket
 
             # process results as they come back
