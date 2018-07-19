@@ -14,3 +14,4 @@ dist
 ENV/
 .idea/
 warcprox/version.txt
+out.*

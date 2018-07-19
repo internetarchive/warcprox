@@ -1,5 +1,26 @@
 #!/usr/bin/env python
-# vim:set sw=4 et:
+# vim: set fileencoding=utf-8:
+'''
+warcprox/main.py - entrypoint for warcprox executable, parses command line
+arguments, initializes components, starts controller, handles signals
+
+Copyright (C) 2013-2018 Internet Archive
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
+USA.
+'''
 
 from __future__ import absolute_import
 
@@ -14,21 +35,37 @@ import hashlib
 import argparse
 import os
 import socket
-
+import traceback
+import signal
+import threading
 import certauth.certauth
+import warcprox
+import doublethink
+import cryptography.hazmat.backends.openssl
 
-import warcprox.playback
-import warcprox.dedup
-import warcprox.warcwriter
-import warcprox.warcprox
-import warcprox.controller
+class BetterArgumentDefaultsHelpFormatter(
+                argparse.ArgumentDefaultsHelpFormatter,
+                argparse.RawDescriptionHelpFormatter):
+    '''
+    HelpFormatter with these properties:
 
-def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
+    - formats option help like argparse.ArgumentDefaultsHelpFormatter except
+      that it omits the default value for arguments with action='store_const'
+    - like argparse.RawDescriptionHelpFormatter, does not reformat description
+      string
+    '''
+    def _get_help_string(self, action):
+        if isinstance(action, argparse._StoreConstAction):
+            return action.help
+        else:
+            return argparse.ArgumentDefaultsHelpFormatter._get_help_string(self, action)
+
+def _build_arg_parser(prog='warcprox'):
     arg_parser = argparse.ArgumentParser(prog=prog,
             description='warcprox - WARC writing MITM HTTP/S proxy',
-            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+            formatter_class=BetterArgumentDefaultsHelpFormatter)
     arg_parser.add_argument('-p', '--port', dest='port', default='8000',
-            help='port to listen on')
+            type=int, help='port to listen on')
     arg_parser.add_argument('-b', '--address', dest='address',
             default='localhost', help='address to listen on')
     arg_parser.add_argument('-c', '--cacert', dest='cacert',
@@ -39,19 +76,24 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
             help='where to store and load generated certificates')
     arg_parser.add_argument('-d', '--dir', dest='directory',
             default='./warcs', help='where to write warcs')
+    arg_parser.add_argument('--warc-filename', dest='warc_filename',
+            default='{prefix}-{timestamp17}-{serialno}-{randomtoken}',
+            help='define custom WARC filename with variables {prefix}, {timestamp14}, {timestamp17}, {serialno}, {randomtoken}, {hostname}, {shorthostname}')
     arg_parser.add_argument('-z', '--gzip', dest='gzip', action='store_true',
             help='write gzip-compressed warc records')
-    arg_parser.add_argument('-n', '--prefix', dest='prefix',
-            default='WARCPROX', help='WARC filename prefix')
-    arg_parser.add_argument('-s', '--size', dest='size',
-            default=1000*1000*1000,
-            help='WARC file rollover size threshold in bytes')
+    arg_parser.add_argument('--no-warc-open-suffix', dest='no_warc_open_suffix',
+            default=False, action='store_true', help=argparse.SUPPRESS)
+    # not mentioned in --help: special value for '-' for --prefix means don't
+    # archive the capture, unless prefix set in warcprox-meta header
+    arg_parser.add_argument(
+            '-n', '--prefix', dest='prefix', default='WARCPROX',
+            help='default WARC filename prefix')
+    arg_parser.add_argument(
+            '-s', '--size', dest='rollover_size', default=1000*1000*1000,
+            type=int, help='WARC file rollover size threshold in bytes')
     arg_parser.add_argument('--rollover-idle-time',
-            dest='rollover_idle_time', default=None,
+            dest='rollover_idle_time', default=None, type=int,
             help="WARC file rollover idle time threshold in seconds (so that Friday's last open WARC doesn't sit there all weekend waiting for more data)")
-    arg_parser.add_argument('--rollover-time',
-            dest = 'rollover_time', default = None,
-            help = "WARC file rollover time threshold in seconds to automatically use a new WARC after a period of time")
     try:
         hash_algos = hashlib.algorithms_guaranteed
     except AttributeError:
@@ -60,41 +102,137 @@ def _build_arg_parser(prog=os.path.basename(sys.argv[0])):
             default='sha1', help='digest algorithm, one of {}'.format(', '.join(hash_algos)))
     arg_parser.add_argument('--base32', dest='base32', action='store_true',
             default=False, help='write digests in Base32 instead of hex')
-    arg_parser.add_argument('-j', '--dedup-db-file', dest='dedup_db_file',
-            default='./warcprox-dedup.db', help='persistent deduplication database file; empty string or /dev/null disables deduplication')
+    arg_parser.add_argument('--method-filter', metavar='HTTP_METHOD',
+                            action='append', help='only record requests with the given http method(s) (can be used more than once)')
+
+    group = arg_parser.add_mutually_exclusive_group()
+    group.add_argument(
+            '--stats-db-file', dest='stats_db_file',
+            default='./warcprox.sqlite', help=(
+                'persistent statistics database file; empty string or '
+                '/dev/null disables statistics tracking'))
+    group.add_argument(
+            '--rethinkdb-stats-url', dest='rethinkdb_stats_url', help=(
+                'rethinkdb stats table url, e.g. rethinkdb://db0.foo.org,'
+                'db1.foo.org:38015/my_warcprox_db/my_stats_table'))
+
     arg_parser.add_argument('-P', '--playback-port', dest='playback_port',
-            default=None, help='port to listen on for instant playback')
-    arg_parser.add_argument('--playback-index-db-file', dest='playback_index_db_file',
-            default='./warcprox-playback-index.db',
-            help='playback index database file (only used if --playback-port is specified)')
+            type=int, default=None, help='port to listen on for instant playback')
+    # arg_parser.add_argument('--playback-index-db-file', dest='playback_index_db_file',
+    #         default='./warcprox-playback-index.db',
+    #         help='playback index database file (only used if --playback-port is specified)')
+    group = arg_parser.add_mutually_exclusive_group()
+    group.add_argument('-j', '--dedup-db-file', dest='dedup_db_file',
+            default='./warcprox.sqlite', help='persistent deduplication database file; empty string or /dev/null disables deduplication')
+    group.add_argument(
+            '--rethinkdb-dedup-url', dest='rethinkdb_dedup_url', help=(
+                'rethinkdb dedup url, e.g. rethinkdb://db0.foo.org,'
+                'db1.foo.org:38015/my_warcprox_db/my_dedup_table'))
+    group.add_argument(
+            '--rethinkdb-big-table-url', dest='rethinkdb_big_table_url', help=(
+                'rethinkdb big table url (table will be populated with '
+                'various capture information and is suitable for use as '
+                'index for playback), e.g. rethinkdb://db0.foo.org,'
+                'db1.foo.org:38015/my_warcprox_db/captures'))
+    group.add_argument(
+            '--rethinkdb-trough-db-url', dest='rethinkdb_trough_db_url', help=(
+                '🐷   url pointing to trough configuration rethinkdb database, '
+                'e.g. rethinkdb://db0.foo.org,db1.foo.org:38015'
+                '/trough_configuration'))
+    group.add_argument('--cdxserver-dedup', dest='cdxserver_dedup',
+            help='use a CDX Server URL for deduplication; e.g. https://web.archive.org/cdx/search')
+    arg_parser.add_argument(
+            '--rethinkdb-services-url', dest='rethinkdb_services_url', help=(
+                'rethinkdb service registry table url; if provided, warcprox '
+                'will create and heartbeat entry for itself'))
+    # optional cookie values to pass to CDX Server; e.g. "cookie1=val1;cookie2=val2"
+    arg_parser.add_argument('--cdxserver-dedup-cookies', dest='cdxserver_dedup_cookies',
+            help=argparse.SUPPRESS)
+    arg_parser.add_argument('--dedup-min-text-size', dest='dedup_min_text_size',
+                            type=int, default=0,
+                            help=('try to dedup text resources with payload size over this limit in bytes'))
+    arg_parser.add_argument('--dedup-min-binary-size', dest='dedup_min_binary_size',
+                            type=int, default=0, help=(
+                            'try to dedup binary resources with payload size over this limit in bytes'))
+    # optionally, dedup request only when `dedup-bucket` is available in
+    # Warcprox-Meta HTTP header. By default, we dedup all requests.
+    arg_parser.add_argument('--dedup-only-with-bucket', dest='dedup_only_with_bucket',
+                            action='store_true', default=False, help=argparse.SUPPRESS)
+    arg_parser.add_argument('--queue-size', dest='queue_size', type=int,
+            default=500, help=argparse.SUPPRESS)
+    arg_parser.add_argument('--max-threads', dest='max_threads', type=int,
+            help=argparse.SUPPRESS)
+    arg_parser.add_argument('--profile', action='store_true', default=False,
+            help=argparse.SUPPRESS)
+    arg_parser.add_argument(
+            '--writer-threads', dest='writer_threads', type=int, default=None,
+            help=argparse.SUPPRESS)
+    arg_parser.add_argument(
+            '--onion-tor-socks-proxy', dest='onion_tor_socks_proxy',
+            default=None, help=(
+                'host:port of tor socks proxy, used only to connect to '
+                '.onion sites'))
+    # Configurable connection socket timeout, default is 60 sec.
+    arg_parser.add_argument(
+            '--socket-timeout', dest='socket_timeout', type=float,
+            default=None, help=argparse.SUPPRESS)
+    # Increasing this value increases memory usage but reduces /tmp disk I/O.
+    arg_parser.add_argument(
+            '--tmp-file-max-memory-size', dest='tmp_file_max_memory_size',
+            type=int, default=512*1024, help=argparse.SUPPRESS)
+    arg_parser.add_argument(
+            '--max-resource-size', dest='max_resource_size', type=int,
+            default=None, help='maximum resource size limit in bytes')
+    arg_parser.add_argument(
+            '--crawl-log-dir', dest='crawl_log_dir', default=None, help=(
+                'if specified, write crawl log files in the specified '
+                'directory; one crawl log is written per warc filename '
+                'prefix; crawl log format mimics heritrix'))
+    arg_parser.add_argument(
+            '--plugin', metavar='PLUGIN_CLASS', dest='plugins',
+            action='append', help=(
+                'Qualified name of plugin class, e.g. "mypkg.mymod.MyClass". '
+                'May be used multiple times to register multiple plugins. '
+                'See README.rst for more information.'))
     arg_parser.add_argument('--version', action='version',
-            version="warcprox {}".format(warcprox.version_str))
+            version="warcprox {}".format(warcprox.__version__))
     arg_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true')
+    arg_parser.add_argument('--trace', dest='trace', action='store_true')
     arg_parser.add_argument('-q', '--quiet', dest='quiet', action='store_true')
-    arg_parser.add_argument('-i', '--interrupt', dest='interrupt', action='store_true',
+    arg_parser.add_argument('-i', '--interrupt', dest='interrupt_on_terminate', action='store_true',
                             help='interrupt handling of request when SIGTERM is received (otherwise completes current '
                                  'request)')
-    # [--ispartof=warcinfo ispartof]
-    # [--description=warcinfo description]
-    # [--operator=warcinfo operator]
-    # [--httpheader=warcinfo httpheader]
+    arg_parser.add_argument('--rollover-time',
+                            dest='rollover_time', default=None, type=int,
+                            help="WARC file rollover time threshold in seconds to automatically use a new WARC after a "
+                                 "period of time")
 
     return arg_parser
 
+def dump_state(signum=None, frame=None):
+    '''
+    Signal handler, logs stack traces of active threads.
+    '''
+    state_strs = []
 
-def main(argv=sys.argv):
+    for th in threading.enumerate():
+        try:
+            state_strs.append(str(th))
+            stack = traceback.format_stack(sys._current_frames()[th.ident])
+            state_strs.append(''.join(stack))
+        except Exception as e:
+            state_strs.append('<n/a:%r>' % e)
+
+    logging.warn(
+            'dumping state (caught signal %s)\n%s',
+            signum, '\n'.join(state_strs))
+
+def parse_args(argv):
+    '''
+    Parses command line arguments with argparse.
+    '''
     arg_parser = _build_arg_parser(prog=os.path.basename(argv[0]))
     args = arg_parser.parse_args(args=argv[1:])
-
-    if args.verbose:
-        loglevel = logging.DEBUG
-    elif args.quiet:
-        loglevel = logging.WARNING
-    else:
-        loglevel = logging.INFO
-
-    logging.basicConfig(stream=sys.stdout, level=loglevel,
-            format='%(asctime)s %(process)d %(levelname)s %(threadName)s %(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s')
 
     try:
         hashlib.new(args.digest_algorithm)
@@ -102,47 +240,121 @@ def main(argv=sys.argv):
         logging.fatal(e)
         exit(1)
 
-    if args.dedup_db_file in (None, '', '/dev/null'):
-        logging.info('deduplication disabled')
-        dedup_db = None
+    return args
+
+def main(argv=None):
+    '''
+    Main method, entry point of warcprox command.
+    '''
+    args = parse_args(argv or sys.argv)
+
+    if args.trace:
+        loglevel = warcprox.TRACE
+    elif args.verbose:
+        loglevel = logging.DEBUG
+    elif args.quiet:
+        loglevel = logging.WARNING
     else:
-        dedup_db = warcprox.dedup.DedupDb(args.dedup_db_file)
+        loglevel = logging.INFO
 
-    recorded_url_q = queue.Queue()
+    logging.basicConfig(
+            stream=sys.stdout, level=loglevel, format=(
+                '%(asctime)s %(process)d %(levelname)s %(threadName)s '
+                '%(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s'))
 
-    ca_name = 'Warcprox CA on {}'.format(socket.gethostname())[:64]
-    ca = certauth.certauth.CertificateAuthority(args.cacert, args.certs_dir,
-                                                ca_name=ca_name)
+    # see https://github.com/pyca/cryptography/issues/2911
+    cryptography.hazmat.backends.openssl.backend.activate_builtin_random()
 
-    proxy = warcprox.warcprox.WarcProxy(
-            server_address=(args.address, int(args.port)), ca=ca,
-            recorded_url_q=recorded_url_q,
-            digest_algorithm=args.digest_algorithm,
-            interrupt_on_terminate=args.interrupt)
+    options = warcprox.Options(**vars(args))
+    controller = warcprox.controller.WarcproxController(options)
 
-    if args.playback_port is not None:
-        playback_index_db = warcprox.playback.PlaybackIndexDb(args.playback_index_db_file)
-        playback_server_address=(args.address, int(args.playback_port))
-        playback_proxy = warcprox.playback.PlaybackProxy(server_address=playback_server_address,
-                ca=ca, playback_index_db=playback_index_db,
-                warcs_dir=args.directory)
-    else:
-        playback_index_db = None
-        playback_proxy = None
+    signal.signal(signal.SIGTERM, lambda a,b: controller.stop.set())
+    signal.signal(signal.SIGINT, lambda a,b: controller.stop.set())
+    try:
+        signal.signal(signal.SIGQUIT, dump_state)
+    except AttributeError:
+        # SIGQUIT does not exist on some platforms (windows)
+        pass
 
-    warc_writer = warcprox.warcwriter.WarcWriter(directory=args.directory,
-            gzip=args.gzip, prefix=args.prefix, port=int(args.port),
-            rollover_size=int(args.size), base32=args.base32,
-            dedup_db=dedup_db, digest_algorithm=args.digest_algorithm,
-            playback_index_db=playback_index_db,
-            rollover_time=int(args.rollover_time) if args.rollover_time is not None else None)
-    warc_writer_thread = warcprox.warcwriter.WarcWriterThread(
-            recorded_url_q=recorded_url_q, warc_writer=warc_writer,
-            rollover_idle_time=int(args.rollover_idle_time) if args.rollover_idle_time is not None else None)
-
-    controller = warcprox.controller.WarcproxController(proxy, warc_writer_thread, playback_proxy)
     controller.run_until_shutdown()
 
+def ensure_rethinkdb_tables(argv=None):
+    '''
+    Creates rethinkdb tables if they don't already exist. Warcprox normally
+    creates the tables it needs on demand at startup, but if multiple instances
+    are starting up at the same time, you can end up with duplicate broken
+    tables. So it's a good idea to use this utility at an early step when
+    spinning up a cluster.
+    '''
+    argv = argv or sys.argv
+    arg_parser = argparse.ArgumentParser(
+            prog=os.path.basename(argv[0]),
+            formatter_class=BetterArgumentDefaultsHelpFormatter)
+    arg_parser.add_argument(
+            '--rethinkdb-stats-url', dest='rethinkdb_stats_url', help=(
+                'rethinkdb stats table url, e.g. rethinkdb://db0.foo.org,'
+                'db1.foo.org:38015/my_warcprox_db/my_stats_table'))
+    group = arg_parser.add_mutually_exclusive_group()
+    group.add_argument(
+            '--rethinkdb-dedup-url', dest='rethinkdb_dedup_url', help=(
+                'rethinkdb dedup url, e.g. rethinkdb://db0.foo.org,'
+                'db1.foo.org:38015/my_warcprox_db/my_dedup_table'))
+    group.add_argument(
+            '--rethinkdb-big-table-url', dest='rethinkdb_big_table_url', help=(
+                'rethinkdb big table url (table will be populated with '
+                'various capture information and is suitable for use as '
+                'index for playback), e.g. rethinkdb://db0.foo.org,'
+                'db1.foo.org:38015/my_warcprox_db/captures'))
+    group.add_argument(
+            '--rethinkdb-trough-db-url', dest='rethinkdb_trough_db_url', help=(
+                '🐷   url pointing to trough configuration rethinkdb database, '
+                'e.g. rethinkdb://db0.foo.org,db1.foo.org:38015'
+                '/trough_configuration'))
+    arg_parser.add_argument(
+            '--rethinkdb-services-url', dest='rethinkdb_services_url', help=(
+                'rethinkdb service registry table url; if provided, warcprox '
+                'will create and heartbeat entry for itself'))
+    arg_parser.add_argument(
+            '-q', '--quiet', dest='log_level',
+            action='store_const', default=logging.INFO, const=logging.WARN)
+    arg_parser.add_argument(
+            '-v', '--verbose', dest='log_level',
+            action='store_const', default=logging.INFO, const=logging.DEBUG)
+    args = arg_parser.parse_args(args=argv[1:])
+
+    logging.basicConfig(
+            stream=sys.stdout, level=args.log_level, format=(
+                '%(asctime)s %(levelname)s %(name)s.%(funcName)s'
+                '(%(filename)s:%(lineno)d) %(message)s'))
+
+    options = warcprox.Options(**vars(args))
+
+    did_something = False
+    if args.rethinkdb_services_url:
+        parsed = doublethink.parse_rethinkdb_url(
+                options.rethinkdb_services_url)
+        rr = doublethink.Rethinker(servers=parsed.hosts, db=parsed.database)
+        svcreg = doublethink.ServiceRegistry(rr, table=parsed.table)
+        did_something = True
+    if args.rethinkdb_stats_url:
+        stats_db = warcprox.stats.RethinkStatsProcessor(options=options)
+        stats_db._ensure_db_table()
+        did_something = True
+    if args.rethinkdb_dedup_url:
+        dedup_db = warcprox.dedup.RethinkDedupDb(options=options)
+        did_something = True
+    if args.rethinkdb_big_table_url:
+        dedup_db = warcprox.bigtable.RethinkCapturesDedup(options=options)
+        did_something = True
+    if args.rethinkdb_trough_db_url:
+        dedup_db = warcprox.dedup.TroughDedupDb(options)
+        logging.warn(
+                'trough is responsible for creating most of the rethinkdb '
+                'tables that it uses')
+        did_something = True
+
+    if not did_something:
+        logging.error('nothing to do, no --rethinkdb-* options supplied')
 
 if __name__ == '__main__':
     main()
