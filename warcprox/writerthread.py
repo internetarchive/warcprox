@@ -31,6 +31,7 @@ import logging
 import time
 import warcprox
 from concurrent import futures
+from datetime import datetime
 import threading
 
 class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
@@ -52,6 +53,7 @@ class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
                 max_workers=options.writer_threads or 1,
                 max_queued=10 * (options.writer_threads or 1))
         self.batch = set()
+        self.blackout_period = options.blackout_period or 0
 
     def _startup(self):
         self.logger.info('%s warc writer threads', self.pool._max_workers)
@@ -112,9 +114,32 @@ class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
                   if recorded_url.warcprox_meta
                      and 'warc-prefix' in recorded_url.warcprox_meta
                   else self.options.prefix)
+        res = (prefix != '-' and not recorded_url.do_not_archive
+                and self._filter_accepts(recorded_url)
+                and not self._in_blackout(recorded_url))
+
         # special warc name prefix '-' means "don't archive"
         return (prefix != '-' and not recorded_url.do_not_archive
-                and self._filter_accepts(recorded_url))
+                and self._filter_accepts(recorded_url)
+                and not self._in_blackout(recorded_url))
+
+    def _in_blackout(self, recorded_url):
+        """If --blackout-period=N (sec) is set, check if duplicate record
+        datetime is close to the original. If yes, we don't write it to WARC.
+        The aim is to avoid having unnecessary `revisit` records.
+        Return Boolean
+        """
+        if self.blackout_period and hasattr(recorded_url, "dedup_info") and \
+                recorded_url.dedup_info:
+            dedup_date = recorded_url.dedup_info.get('date')
+            if dedup_date:
+                try:
+                    dt = datetime.strptime(dedup_date.decode('utf-8'),
+                                           '%Y-%m-%dT%H:%M:%SZ')
+                    return (datetime.utcnow() - dt).total_seconds() <= self.blackout_period
+                except ValueError:
+                    return False
+        return False
 
     def _log(self, recorded_url, records):
         try:
