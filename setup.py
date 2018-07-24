@@ -39,8 +39,8 @@ except:
     deps.append('futures')
 
 setuptools.setup(
-        name='warcprox-gwu',
-        version='2.4b3',
+        name='warcprox',
+        version='2.4b3-gwu',
         description='WARC writing MITM HTTP/S proxy',
         url='https://github.com/internetarchive/warcprox',
         author='Noah Levitt',
