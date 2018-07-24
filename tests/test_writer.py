@@ -166,8 +166,7 @@ def test_special_dont_write_prefix():
             recorder.read()
             old = datetime.utcnow() - timedelta(0, 3600)
             ru = RecordedUrl(
-                url='http://example.com/yes',
-                # content_type=hanzo.httptools.ResponseMessage.CONTENT_TYPE,
+                url='http://example.com/dup',
                 content_type='text/plain',
                 status=200, client_ip='127.0.0.2', request_data=b'abc',
                 response_recorder=recorder, remote_ip='127.0.0.3',
@@ -181,7 +180,7 @@ def test_special_dont_write_prefix():
             recorder.read()
             recent = datetime.utcnow() - timedelta(0, 5)
             ru = RecordedUrl(
-                url='http://example.com/yes', content_type='text/plain',
+                url='http://example.com/dup', content_type='text/plain',
                 status=200, client_ip='127.0.0.2', request_data=b'abc',
                 response_recorder=recorder, remote_ip='127.0.0.3',
                 timestamp=datetime.utcnow(),

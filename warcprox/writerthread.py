@@ -114,10 +114,6 @@ class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
                   if recorded_url.warcprox_meta
                      and 'warc-prefix' in recorded_url.warcprox_meta
                   else self.options.prefix)
-        res = (prefix != '-' and not recorded_url.do_not_archive
-                and self._filter_accepts(recorded_url)
-                and not self._in_blackout(recorded_url))
-
         # special warc name prefix '-' means "don't archive"
         return (prefix != '-' and not recorded_url.do_not_archive
                 and self._filter_accepts(recorded_url)
@@ -132,7 +128,7 @@ class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
         if self.blackout_period and hasattr(recorded_url, "dedup_info") and \
                 recorded_url.dedup_info:
             dedup_date = recorded_url.dedup_info.get('date')
-            if dedup_date:
+            if dedup_date and recorded_url.dedup_info.get('url') == recorded_url.url:
                 try:
                     dt = datetime.strptime(dedup_date.decode('utf-8'),
                                            '%Y-%m-%dT%H:%M:%SZ')
