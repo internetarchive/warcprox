@@ -158,6 +158,9 @@ def _build_arg_parser(prog='warcprox'):
     # Warcprox-Meta HTTP header. By default, we dedup all requests.
     arg_parser.add_argument('--dedup-only-with-bucket', dest='dedup_only_with_bucket',
                             action='store_true', default=False, help=argparse.SUPPRESS)
+    arg_parser.add_argument('--blackout-period', dest='blackout_period',
+                            type=int, default=0,
+                            help='skip writing a revisit record if its too close to the original capture')
     arg_parser.add_argument('--queue-size', dest='queue_size', type=int,
             default=500, help=argparse.SUPPRESS)
     arg_parser.add_argument('--max-threads', dest='max_threads', type=int,

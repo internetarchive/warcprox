@@ -22,7 +22,7 @@ USA.
 import os
 import fcntl
 from multiprocessing import Process, Queue
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytest
 import re
 from warcprox.mitmproxy import ProxyingRecorder
@@ -129,7 +129,7 @@ def test_special_dont_write_prefix():
             wwt.join()
 
         wwt = warcprox.writerthread.WarcWriterProcessor(
-                Options(writer_threads=1))
+                Options(writer_threads=1, blackout_period=60, prefix='foo'))
         wwt.inq = warcprox.TimestampedQueue(maxsize=1)
         wwt.outq = warcprox.TimestampedQueue(maxsize=1)
         try:
@@ -158,6 +158,41 @@ def test_special_dont_write_prefix():
             recorded_url = wwt.outq.get(timeout=10)
             assert not recorded_url.warc_records
             assert wwt.outq.empty()
+
+            # test blackout_period option. Write first revisit record because
+            # its outside the blackout_period (60). Do not write the second
+            # because its inside the blackout_period.
+            recorder = ProxyingRecorder(io.BytesIO(b'test1'), None)
+            recorder.read()
+            old = datetime.utcnow() - timedelta(0, 3600)
+            ru = RecordedUrl(
+                url='http://example.com/dup',
+                content_type='text/plain',
+                status=200, client_ip='127.0.0.2', request_data=b'abc',
+                response_recorder=recorder, remote_ip='127.0.0.3',
+                timestamp=datetime.utcnow(),
+                payload_digest=recorder.block_digest)
+            ru.dedup_info = dict(id=b'1', url=b'http://example.com/dup',
+                                 date=old.strftime('%Y-%m-%dT%H:%M:%SZ').encode('utf-8'))
+            wwt.inq.put(ru)
+            recorded_url = wwt.outq.get(timeout=10)
+            recorder = ProxyingRecorder(io.BytesIO(b'test2'), None)
+            recorder.read()
+            recent = datetime.utcnow() - timedelta(0, 5)
+            ru = RecordedUrl(
+                url='http://example.com/dup', content_type='text/plain',
+                status=200, client_ip='127.0.0.2', request_data=b'abc',
+                response_recorder=recorder, remote_ip='127.0.0.3',
+                timestamp=datetime.utcnow(),
+                payload_digest=recorder.block_digest)
+            ru.dedup_info = dict(id=b'2', url=b'http://example.com/dup',
+                                 date=recent.strftime('%Y-%m-%dT%H:%M:%SZ').encode('utf-8'))
+            wwt.inq.put(ru)
+            assert recorded_url.warc_records
+            recorded_url = wwt.outq.get(timeout=10)
+            assert not recorded_url.warc_records
+            assert wwt.outq.empty()
+
         finally:
             wwt.stop.set()
             wwt.join()
