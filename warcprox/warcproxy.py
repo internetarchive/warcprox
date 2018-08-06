@@ -331,17 +331,19 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
 
         # Add this to server's list of handlers.
         self.server.handlers.add(self)
+        self.logger.debug('Added handler. Total of {} handlers.'.format(len(self.server.handlers)))
 
     def finish(self):
         warcprox.mitmproxy.MitmProxyHandler.finish(self)
 
         # If server's stop event is not set, remove from list of handlers.
         if not self.server.stop.is_set() and self.server:
-            self.logger.debug("Removing handler")
             # For some reason, sometimes self.server.handlers disappears, so catching.
             try:
                 self.server.handlers.remove(self)
+                self.logger.debug('Removed handler. Total of {} handlers.'.format(len(self.server.handlers)))
             except TypeError:
+                self.logger.debug('Error removing handler. Total of {} handlers.'.format(len(self.server.handlers)))
                 pass
 
     # def interrupt(self):
