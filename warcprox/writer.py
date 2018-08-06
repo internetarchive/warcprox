@@ -144,7 +144,7 @@ class _OneWritableWarc:
     def maybe_time_rollover(self):
         if self.path and self.rollover_time and datetime.utcnow() - self.current_rollover_time > timedelta(seconds=self.rollover_time):
             self.logger.info('rolling over because exceeded rollover time.')
-            self.close_writer()
+            self.close()
 
 class WarcWriter:
     logger = logging.getLogger('warcprox.writer.WarcWriter')
