@@ -568,43 +568,44 @@ class PooledMixIn(socketserver.ThreadingMixIn):
             'unaccepted_requests': self.unaccepted_requests})
         return result
 
-    def process_request(self, request, client_address):
-        self.active_requests.add(request)
-        future = self.pool.submit(
-                self.process_request_thread, request, client_address)
-        future.add_done_callback(
-                lambda f: self.active_requests.discard(request))
-        if future.done():
-            # avoid theoretical timing issue, in case process_request_thread
-            # managed to finish before future.add_done_callback() ran
-            self.active_requests.discard(request)
-
-    def get_request(self):
-        '''
-        Waits until no other requests are waiting for a thread in the pool to
-        become available, then calls `socket.accept`.
-
-        This override is necessary for the size of the thread pool to act as a
-        cap on the number of open file handles.
-
-        N.b. this method blocks if necessary, even though it's called from
-        `_handle_request_noblock`.
-        '''
-        # neither threading.Condition Queue.not_empty nor Queue.not_full do
-        # what we need here, right?
-        start = time.time()
-        self.logger.trace(
-                'someone is connecting active_requests=%s',
-                len(self.active_requests))
-        self.unaccepted_requests += 1
-        while len(self.active_requests) > self.max_threads:
-            time.sleep(0.05)
-        res = self.socket.accept()
-        self.logger.trace(
-                'accepted after %.1f sec active_requests=%s socket=%s',
-                time.time() - start, len(self.active_requests), res[0])
-        self.unaccepted_requests -= 1
-        return res
+    # Disabling thread limiting due to https://github.com/gwu-libraries/sfm-ui/issues/944
+    # def process_request(self, request, client_address):
+    #     self.active_requests.add(request)
+    #     future = self.pool.submit(
+    #             self.process_request_thread, request, client_address)
+    #     future.add_done_callback(
+    #             lambda f: self.active_requests.discard(request))
+    #     if future.done():
+    #         # avoid theoretical timing issue, in case process_request_thread
+    #         # managed to finish before future.add_done_callback() ran
+    #         self.active_requests.discard(request)
+    #
+    # def get_request(self):
+    #     '''
+    #     Waits until no other requests are waiting for a thread in the pool to
+    #     become available, then calls `socket.accept`.
+    #
+    #     This override is necessary for the size of the thread pool to act as a
+    #     cap on the number of open file handles.
+    #
+    #     N.b. this method blocks if necessary, even though it's called from
+    #     `_handle_request_noblock`.
+    #     '''
+    #     # neither threading.Condition Queue.not_empty nor Queue.not_full do
+    #     # what we need here, right?
+    #     start = time.time()
+    #     self.logger.trace(
+    #             'someone is connecting active_requests=%s',
+    #             len(self.active_requests))
+    #     self.unaccepted_requests += 1
+    #     while len(self.active_requests) > self.max_threads:
+    #         time.sleep(0.05)
+    #     res = self.socket.accept()
+    #     self.logger.trace(
+    #             'accepted after %.1f sec active_requests=%s socket=%s',
+    #             time.time() - start, len(self.active_requests), res[0])
+    #     self.unaccepted_requests -= 1
+    #     return res
 
 class MitmProxy(http_server.HTTPServer):
     def finish_request(self, request, client_address):
