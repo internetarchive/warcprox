@@ -25,13 +25,13 @@ import setuptools
 
 deps = [
     'certauth==1.1.6',
-    'warctools',
+    'warctools>=4.10.0',
     'urlcanon>=0.1.dev16',
     'doublethink>=0.2.0.dev87',
-    'urllib3',
+    'urllib3>=1.23',
     'requests>=2.0.1',
-    'PySocks',
-    'cryptography!=2.1.1', # 2.1.1 installation is failing on ubuntu
+    'PySocks>=1.6.8',
+    'cryptography>=2.3',
 ]
 try:
     import concurrent.futures
@@ -40,7 +40,7 @@ except:
 
 setuptools.setup(
         name='warcprox',
-        version='2.4b3.dev181',
+        version='2.4b3.dev182',
         description='WARC writing MITM HTTP/S proxy',
         url='https://github.com/internetarchive/warcprox',
         author='Noah Levitt',
