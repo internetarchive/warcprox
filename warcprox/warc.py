@@ -19,8 +19,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 USA.
 '''
 
-from __future__ import absolute_import
-
 import logging
 import warcprox
 import hashlib
@@ -83,16 +81,21 @@ class WarcRecordBuilder:
                     concurrent_to=principal_record.id)
             return principal_record, request_record
         else:
-            principal_record = self.build_warc_record(url=recorded_url.url,
+            principal_record = self.build_warc_record(
+                    url=recorded_url.url,
                     warc_date=warc_date, data=recorded_url.request_data,
                     warc_type=recorded_url.custom_type,
-                    content_type=recorded_url.content_type.encode("latin1"))
+                    content_type=recorded_url.content_type.encode("latin1"),
+                    payload_digest=warcprox.digest_str(
+                        recorded_url.payload_digest, self.base32),
+                    content_length=recorded_url.size)
             return (principal_record,)
 
     def build_warc_record(self, url, warc_date=None, recorder=None, data=None,
         concurrent_to=None, warc_type=None, content_type=None, remote_ip=None,
         profile=None, refers_to=None, refers_to_target_uri=None,
-        refers_to_date=None, payload_digest=None, truncated=None):
+        refers_to_date=None, payload_digest=None, truncated=None,
+        content_length=None):
 
         if warc_date is None:
             warc_date = warctools.warc.warc_datetime_str(datetime.datetime.utcnow())
@@ -126,21 +129,41 @@ class WarcRecordBuilder:
             headers.append((b'WARC-Truncated', truncated))
 
         if recorder is not None:
-            headers.append((warctools.WarcRecord.CONTENT_LENGTH, str(len(recorder)).encode('latin1')))
+            if content_length is not None:
+                headers.append((
+                    warctools.WarcRecord.CONTENT_LENGTH,
+                    str(content_length).encode('latin1')))
+            else:
+                headers.append((
+                    warctools.WarcRecord.CONTENT_LENGTH,
+                    str(len(recorder)).encode('latin1')))
             headers.append((warctools.WarcRecord.BLOCK_DIGEST,
                 warcprox.digest_str(recorder.block_digest, self.base32)))
             recorder.tempfile.seek(0)
             record = warctools.WarcRecord(headers=headers, content_file=recorder.tempfile)
         else:
-            headers.append((warctools.WarcRecord.CONTENT_LENGTH, str(len(data)).encode('latin1')))
-            digest = hashlib.new(self.digest_algorithm, data)
-            headers.append((warctools.WarcRecord.BLOCK_DIGEST,
-                warcprox.digest_str(digest, self.base32)))
+            if content_length is not None:
+                headers.append((
+                    warctools.WarcRecord.CONTENT_LENGTH,
+                    str(content_length).encode('latin1')))
+            else:
+                headers.append((
+                    warctools.WarcRecord.CONTENT_LENGTH,
+                    str(len(data)).encode('latin1')))
+            # no http headers so block digest == payload digest
             if not payload_digest:
-                headers.append((warctools.WarcRecord.PAYLOAD_DIGEST,
-                                warcprox.digest_str(digest, self.base32)))
-            content_tuple = content_type, data
-            record = warctools.WarcRecord(headers=headers, content=content_tuple)
+                payload_digest = warcprox.digest_str(
+                        hashlib.new(self.digest_algorithm, data), self.base32)
+                headers.append((
+                    warctools.WarcRecord.PAYLOAD_DIGEST, payload_digest))
+            headers.append((warctools.WarcRecord.BLOCK_DIGEST, payload_digest))
+            if hasattr(data, 'read'):
+                record = warctools.WarcRecord(
+                        headers=headers, content_file=data)
+            else:
+                content_tuple = content_type, data
+                record = warctools.WarcRecord(
+                        headers=headers, content=content_tuple)
 
         return record
 

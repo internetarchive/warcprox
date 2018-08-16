@@ -49,7 +49,7 @@ class CrawlLogger(object):
                 self.options.base32)
         else:
             # WARCPROX_WRITE_RECORD request
-            content_length = len(recorded_url.request_data)
+            content_length = int(records[0].get_header(b'Content-Length'))
             payload_digest = records[0].get_header(b'WARC-Payload-Digest')
         fields = [
             '{:%Y-%m-%dT%H:%M:%S}.{:03d}Z'.format(now, now.microsecond//1000),

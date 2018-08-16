@@ -283,9 +283,9 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                                 self._remote_server_conn.sock)
                     except ssl.SSLError:
                         self.logger.warn(
-                                "failed to establish ssl connection to %s; python "
-                                "ssl library does not support SNI, considering "
-                                "upgrading to python >= 2.7.9 or python 3.4",
+                                "failed to establish ssl connection to %s; "
+                                "python ssl library does not support SNI, "
+                                "consider upgrading to python 2.7.9+ or 3.4+",
                                 self.hostname)
                     raise
         return self._remote_server_conn.sock
@@ -424,8 +424,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 self.command, self.path, self.request_version)
 
         # Swallow headers that don't make sense to forward on, i.e. most
-        # hop-by-hop headers, see
-        # http://tools.ietf.org/html/rfc2616#section-13.5.
+        # hop-by-hop headers. http://tools.ietf.org/html/rfc2616#section-13.5.
         # self.headers is an email.message.Message, which is case-insensitive
         # and doesn't throw KeyError in __delitem__
         for key in (

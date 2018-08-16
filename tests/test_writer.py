@@ -34,6 +34,7 @@ import warcprox
 import io
 import tempfile
 import logging
+import hashlib
 
 def lock_file(queue, filename):
     """Try to lock file and return 1 if successful, else return 0.
@@ -58,7 +59,7 @@ def test_warc_writer_locking(tmpdir):
             url='http://example.com', content_type='text/plain', status=200,
             client_ip='127.0.0.2', request_data=b'abc',
             response_recorder=recorder, remote_ip='127.0.0.3',
-            timestamp=datetime.utcnow())
+            timestamp=datetime.utcnow(), payload_digest=hashlib.sha1())
 
     dirname = os.path.dirname(str(tmpdir.mkdir('test-warc-writer')))
     wwriter = WarcWriter(Options(
@@ -247,7 +248,7 @@ def test_warc_writer_filename(tmpdir):
             url='http://example.com', content_type='text/plain', status=200,
             client_ip='127.0.0.2', request_data=b'abc',
             response_recorder=recorder, remote_ip='127.0.0.3',
-            timestamp=datetime.utcnow())
+            timestamp=datetime.utcnow(), payload_digest=hashlib.sha1())
 
     dirname = os.path.dirname(str(tmpdir.mkdir('test-warc-writer')))
     wwriter = WarcWriter(Options(directory=dirname, prefix='foo',

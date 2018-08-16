@@ -44,6 +44,8 @@ import datetime
 import urlcanon
 import os
 from urllib3 import PoolManager
+import tempfile
+import hashlib
 
 class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
     '''
@@ -285,8 +287,16 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                     and (warc_type or 'WARC-Type' in self.headers)):
                 timestamp = datetime.datetime.utcnow()
 
-                # stream this?
-                request_data = self.rfile.read(int(self.headers['Content-Length']))
+                request_data = tempfile.SpooledTemporaryFile(max_size=524288)
+                payload_digest = hashlib.new(self.server.digest_algorithm)
+
+                length = int(self.headers['Content-Length'])
+                buf = self.rfile.read(min(65536, length - request_data.tell()))
+                while buf != b'':
+                    request_data.write(buf)
+                    payload_digest.update(buf)
+                    buf = self.rfile.read(
+                            min(65536, length - request_data.tell()))
 
                 warcprox_meta = None
                 raw_warcprox_meta = self.headers.get('Warcprox-Meta')
@@ -301,11 +311,14 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                         warcprox_meta=warcprox_meta,
                         content_type=self.headers['Content-Type'],
                         custom_type=warc_type or self.headers['WARC-Type'].encode('utf-8'),
-                        status=204, size=len(request_data),
+                        status=204,
+                        size=request_data.tell(),
                         client_ip=self.client_address[0],
                         method=self.command,
                         timestamp=timestamp,
-                        duration=datetime.datetime.utcnow()-timestamp)
+                        duration=datetime.datetime.utcnow()-timestamp,
+                        payload_digest=payload_digest)
+                request_data.seek(0)
 
                 self.server.recorded_url_q.put(rec_custom)
                 self.send_response(204, 'OK')
