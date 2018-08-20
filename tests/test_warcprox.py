@@ -90,8 +90,7 @@ def _send(self, data):
 # http_client.HTTPConnection.send = _send
 
 logging.basicConfig(
-        # stream=sys.stdout, level=logging.DEBUG, # level=warcprox.TRACE,
-        stream=sys.stdout, level=warcprox.TRACE,
+        stream=sys.stdout, level=logging.TRACE,
         format='%(asctime)s %(process)d %(levelname)s %(threadName)s '
         '%(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s')
 logging.getLogger("requests.packages.urllib3").setLevel(logging.WARN)

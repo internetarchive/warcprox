@@ -266,21 +266,21 @@ def timestamp14():
     return '{:%Y%m%d%H%M%S}'.format(now)
 
 # monkey-patch log levels TRACE and NOTICE
-TRACE = 5
+logging.TRACE = (logging.NOTSET + logging.DEBUG) // 2
 def _logger_trace(self, msg, *args, **kwargs):
-    if self.isEnabledFor(TRACE):
-        self._log(TRACE, msg, args, **kwargs)
+    if self.isEnabledFor(logging.TRACE):
+        self._log(logging.TRACE, msg, args, **kwargs)
 logging.Logger.trace = _logger_trace
 logging.trace = logging.root.trace
-logging.addLevelName(TRACE, 'TRACE')
+logging.addLevelName(logging.TRACE, 'TRACE')
 
-NOTICE = (logging.INFO + logging.WARN) // 2
+logging.NOTICE = (logging.INFO + logging.WARN) // 2
 def _logger_notice(self, msg, *args, **kwargs):
-    if self.isEnabledFor(NOTICE):
-        self._log(NOTICE, msg, args, **kwargs)
+    if self.isEnabledFor(logging.NOTICE):
+        self._log(logging.NOTICE, msg, args, **kwargs)
 logging.Logger.notice = _logger_notice
 logging.notice = logging.root.notice
-logging.addLevelName(NOTICE, 'NOTICE')
+logging.addLevelName(logging.NOTICE, 'NOTICE')
 
 import warcprox.controller as controller
 import warcprox.playback as playback

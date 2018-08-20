@@ -290,11 +290,11 @@ def main(argv=None):
     args = parse_args(argv or sys.argv)
 
     if args.trace:
-        loglevel = warcprox.TRACE
+        loglevel = logging.TRACE
     elif args.verbose:
         loglevel = logging.DEBUG
     elif args.quiet:
-        loglevel = logging.WARNING
+        loglevel = logging.NOTICE
     else:
         loglevel = logging.INFO
 
