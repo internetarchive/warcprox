@@ -149,6 +149,28 @@ specifying ``--plugin`` multiples times.
 See a minimal example `here
 <https://github.com/internetarchive/warcprox/blob/318405e795ac0ab8760988a1a482cf0a17697148/warcprox/__init__.py#L165>`__.
 
+Architecture
+============
+.. image:: arch.jpg
+
+Warcprox is multithreaded. It has pool of http proxy threads (100 by default).
+When handling a request, a proxy thread records data from the remote server to
+an in-memory buffer that spills over to disk if necessary (after 512k by
+default), while it streams the data to the proxy client. Once the HTTP
+transaction is complete, it puts the recorded URL in a thread-safe queue, to be
+picked up by the first processor in the postfetch chain.
+
+The postfetch chain normally includes processors for loading deduplication
+information, writing records to the WARC, saving deduplication information, and
+updating statistics. The exact set of processors in the chain depends on
+command line arguments; for example, plugins specified with ``--plugin`` are
+processors in the postfetch chain. Each postfetch processor has its own thread
+or threads. Thus the processors are able to run in parallel, independent of one
+another. This design also enables them to process URLs in batch. For example,
+the statistics processor gathers statistics for up to 10 seconds or 500 URLs,
+whichever comes first, then updates the statistics database with just a few
+queries.
+
 License
 =======
 

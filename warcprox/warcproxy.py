@@ -287,9 +287,11 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                     and (warc_type or 'WARC-Type' in self.headers)):
                 timestamp = datetime.datetime.utcnow()
 
-                request_data = tempfile.SpooledTemporaryFile(max_size=524288)
+                request_data = tempfile.SpooledTemporaryFile(
+                        max_size=self._tmp_file_max_memory_size)
                 payload_digest = hashlib.new(self.server.digest_algorithm)
 
+                # XXX we don't support chunked uploads for now
                 length = int(self.headers['Content-Length'])
                 buf = self.rfile.read(min(65536, length - request_data.tell()))
                 while buf != b'':

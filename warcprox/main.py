@@ -60,10 +60,23 @@ class BetterArgumentDefaultsHelpFormatter(
         else:
             return argparse.ArgumentDefaultsHelpFormatter._get_help_string(self, action)
 
-def _build_arg_parser(prog='warcprox'):
+def _build_arg_parser(prog='warcprox', show_hidden=False):
+    if show_hidden:
+        def suppress(msg):
+            return msg
+    else:
+        def suppress(msg):
+            return argparse.SUPPRESS
+
     arg_parser = argparse.ArgumentParser(prog=prog,
             description='warcprox - WARC writing MITM HTTP/S proxy',
             formatter_class=BetterArgumentDefaultsHelpFormatter)
+
+    hidden = arg_parser.add_argument_group('hidden options')
+    arg_parser.add_argument(
+        '--help-hidden', action='help', default=argparse.SUPPRESS,
+        help='show help message, including help on hidden options, and exit')
+
     arg_parser.add_argument('-p', '--port', dest='port', default='8000',
             type=int, help='port to listen on')
     arg_parser.add_argument('-b', '--address', dest='address',
@@ -81,8 +94,12 @@ def _build_arg_parser(prog='warcprox'):
             help='define custom WARC filename with variables {prefix}, {timestamp14}, {timestamp17}, {serialno}, {randomtoken}, {hostname}, {shorthostname}')
     arg_parser.add_argument('-z', '--gzip', dest='gzip', action='store_true',
             help='write gzip-compressed warc records')
-    arg_parser.add_argument('--no-warc-open-suffix', dest='no_warc_open_suffix',
-            default=False, action='store_true', help=argparse.SUPPRESS)
+    hidden.add_argument(
+            '--no-warc-open-suffix', dest='no_warc_open_suffix',
+            default=False, action='store_true',
+            help=suppress(
+                'do not name warc files with suffix ".open" while writing to '
+                'them, but lock them with lockf(3) intead'))
     # not mentioned in --help: special value for '-' for --prefix means don't
     # archive the capture, unless prefix set in warcprox-meta header
     arg_parser.add_argument(
@@ -146,43 +163,60 @@ def _build_arg_parser(prog='warcprox'):
                 'rethinkdb service registry table url; if provided, warcprox '
                 'will create and heartbeat entry for itself'))
     # optional cookie values to pass to CDX Server; e.g. "cookie1=val1;cookie2=val2"
-    arg_parser.add_argument('--cdxserver-dedup-cookies', dest='cdxserver_dedup_cookies',
-            help=argparse.SUPPRESS)
+    hidden.add_argument(
+            '--cdxserver-dedup-cookies', dest='cdxserver_dedup_cookies',
+            help=suppress(
+                'value of Cookie header to include in requests to the cdx '
+                'server, when using --cdxserver-dedup'))
     arg_parser.add_argument('--dedup-min-text-size', dest='dedup_min_text_size',
                             type=int, default=0,
                             help=('try to dedup text resources with payload size over this limit in bytes'))
     arg_parser.add_argument('--dedup-min-binary-size', dest='dedup_min_binary_size',
                             type=int, default=0, help=(
                             'try to dedup binary resources with payload size over this limit in bytes'))
-    # optionally, dedup request only when `dedup-bucket` is available in
-    # Warcprox-Meta HTTP header. By default, we dedup all requests.
-    arg_parser.add_argument('--dedup-only-with-bucket', dest='dedup_only_with_bucket',
-                            action='store_true', default=False, help=argparse.SUPPRESS)
+    hidden.add_argument(
+            '--dedup-only-with-bucket', dest='dedup_only_with_bucket',
+            action='store_true', default=False, help=suppress(
+                'only deduplicate captures if "dedup-bucket" is set in '
+                'the Warcprox-Meta request header'))
     arg_parser.add_argument('--blackout-period', dest='blackout_period',
                             type=int, default=0,
                             help='skip writing a revisit record if its too close to the original capture')
-    arg_parser.add_argument('--queue-size', dest='queue_size', type=int,
-            default=500, help=argparse.SUPPRESS)
-    arg_parser.add_argument('--max-threads', dest='max_threads', type=int,
-            help=argparse.SUPPRESS)
-    arg_parser.add_argument('--profile', action='store_true', default=False,
-            help=argparse.SUPPRESS)
-    arg_parser.add_argument(
-            '--writer-threads', dest='writer_threads', type=int, default=None,
-            help=argparse.SUPPRESS)
+    hidden.add_argument(
+            '--queue-size', dest='queue_size', type=int, default=500,
+            help=suppress(
+                'maximum number of urls that can be queued at each '
+                'step of the processing chain (see the section on warcprox '
+                'architecture in README.rst)'))
+    hidden.add_argument(
+            '--max-threads', dest='max_threads', type=int, default=100,
+            help=suppress('maximum number of http worker threads'))
+    hidden.add_argument(
+            '--profile', action='store_true', default=False,
+            help=suppress(
+                'turn on performance profiling; summary statistics are dumped '
+                'every 10 minutes and at shutdown'))
+    hidden.add_argument(
+            '--writer-threads', dest='writer_threads', type=int, default=1,
+            help=suppress(
+                'number of warc writer threads; caution, see '
+                'https://github.com/internetarchive/warcprox/issues/101'))
     arg_parser.add_argument(
             '--onion-tor-socks-proxy', dest='onion_tor_socks_proxy',
             default=None, help=(
                 'host:port of tor socks proxy, used only to connect to '
                 '.onion sites'))
-    # Configurable connection socket timeout, default is 60 sec.
-    arg_parser.add_argument(
-            '--socket-timeout', dest='socket_timeout', type=float,
-            default=None, help=argparse.SUPPRESS)
+    hidden.add_argument(
+            '--socket-timeout', dest='socket_timeout', type=float, default=60,
+            help=suppress(
+                'socket timeout, used for proxy client connection and for '
+                'connection to remote server'))
     # Increasing this value increases memory usage but reduces /tmp disk I/O.
-    arg_parser.add_argument(
+    hidden.add_argument(
             '--tmp-file-max-memory-size', dest='tmp_file_max_memory_size',
-            type=int, default=512*1024, help=argparse.SUPPRESS)
+            type=int, default=512*1024, help=suppress(
+                'size of in-memory buffer for each url being processed '
+                '(spills over to temp space on disk if exceeded)'))
     arg_parser.add_argument(
             '--max-resource-size', dest='max_resource_size', type=int,
             default=None, help='maximum resource size limit in bytes')
@@ -197,11 +231,18 @@ def _build_arg_parser(prog='warcprox'):
                 'Qualified name of plugin class, e.g. "mypkg.mymod.MyClass". '
                 'May be used multiple times to register multiple plugins. '
                 'See README.rst for more information.'))
-    arg_parser.add_argument('--version', action='version',
+    arg_parser.add_argument(
+            '-q', '--quiet', dest='quiet', action='store_true',
+            help='less verbose logging')
+    arg_parser.add_argument(
+            '-v', '--verbose', dest='verbose', action='store_true',
+            help='verbose logging')
+    arg_parser.add_argument(
+            '--trace', dest='trace', action='store_true',
+            help='very verbose logging')
+    arg_parser.add_argument(
+            '--version', action='version',
             version="warcprox {}".format(warcprox.__version__))
-    arg_parser.add_argument('-v', '--verbose', dest='verbose', action='store_true')
-    arg_parser.add_argument('--trace', dest='trace', action='store_true')
-    arg_parser.add_argument('-q', '--quiet', dest='quiet', action='store_true')
 
     return arg_parser
 
@@ -227,7 +268,11 @@ def parse_args(argv):
     '''
     Parses command line arguments with argparse.
     '''
-    arg_parser = _build_arg_parser(prog=os.path.basename(argv[0]))
+    show_hidden = False
+    if '--help-hidden' in argv:
+        show_hidden = True
+        argv = [argv[0], '--help-hidden']
+    arg_parser = _build_arg_parser(os.path.basename(argv[0]), show_hidden)
     args = arg_parser.parse_args(args=argv[1:])
 
     try:
@@ -245,11 +290,11 @@ def main(argv=None):
     args = parse_args(argv or sys.argv)
 
     if args.trace:
-        loglevel = warcprox.TRACE
+        loglevel = logging.TRACE
     elif args.verbose:
         loglevel = logging.DEBUG
     elif args.quiet:
-        loglevel = logging.WARNING
+        loglevel = logging.NOTICE
     else:
         loglevel = logging.INFO
 

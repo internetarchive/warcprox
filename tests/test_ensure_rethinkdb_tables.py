@@ -30,7 +30,7 @@ import logging
 import sys
 
 logging.basicConfig(
-        stream=sys.stdout, level=warcprox.TRACE,
+        stream=sys.stdout, level=logging.TRACE,
         format='%(asctime)s %(process)d %(levelname)s %(threadName)s '
         '%(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s')
 

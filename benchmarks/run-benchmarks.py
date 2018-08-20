@@ -194,7 +194,7 @@ if __name__ == '__main__':
         args = arg_parser.parse_args(args=sys.argv[1:])
 
         if args.trace:
-            loglevel = warcprox.TRACE
+            loglevel = logging.TRACE
         elif args.verbose:
             loglevel = logging.DEBUG
         else:
