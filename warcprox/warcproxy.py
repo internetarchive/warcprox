@@ -288,7 +288,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 timestamp = datetime.datetime.utcnow()
 
                 request_data = tempfile.SpooledTemporaryFile(
-                        max_size=self.options.tmp_file_max_memory_size)
+                        max_size=self._tmp_file_max_memory_size)
                 payload_digest = hashlib.new(self.server.digest_algorithm)
 
                 # XXX we don't support chunked uploads for now
