@@ -250,7 +250,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         '''
         self._conn_pool = self.server.remote_connection_pool.connection_from_host(
             host=self.hostname, port=int(self.port), scheme='http',
-            pool_kwargs={'maxsize': 6})
+            pool_kwargs={'maxsize': 6, 'timeout': self._socket_timeout})
 
         self._remote_server_conn = self._conn_pool._get_conn()
         if is_connection_dropped(self._remote_server_conn):
@@ -263,10 +263,9 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 self._remote_server_conn.sock.set_proxy(
                         socks.SOCKS5, addr=self.onion_tor_socks_proxy_host,
                         port=self.onion_tor_socks_proxy_port, rdns=True)
-                self._remote_server_conn.timeout = self._socket_timeout
+                self._remote_server_conn.sock.settimeout(self._socket_timeout)
                 self._remote_server_conn.sock.connect((self.hostname, int(self.port)))
             else:
-                self._remote_server_conn.timeout = self._socket_timeout
                 self._remote_server_conn.connect()
 
             # Wrap socket if SSL is required
@@ -276,7 +275,8 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                     context.check_hostname = False
                     context.verify_mode = ssl.CERT_NONE
                     self._remote_server_conn.sock = context.wrap_socket(
-                            self._remote_server_conn.sock, server_hostname=self.hostname)
+                            self._remote_server_conn.sock,
+                            server_hostname=self.hostname)
                 except AttributeError:
                     try:
                         self._remote_server_conn.sock = ssl.wrap_socket(
