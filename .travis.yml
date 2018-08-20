@@ -50,10 +50,10 @@ before_script:
 - docker ps
 
 script:
-- py.test -v tests
-- py.test -v --rethinkdb-dedup-url=rethinkdb://localhost/test1/dedup tests
-- py.test -v --rethinkdb-big-table-url=rethinkdb://localhost/test2/captures tests
-- py.test -v --rethinkdb-trough-db-url=rethinkdb://localhost/trough_configuration tests
+- py.test -v --tb=native tests
+- py.test -v --tb=native --rethinkdb-dedup-url=rethinkdb://localhost/test1/dedup tests
+- py.test -v --tb=native --rethinkdb-big-table-url=rethinkdb://localhost/test2/captures tests
+- py.test -v --tb=native --rethinkdb-trough-db-url=rethinkdb://localhost/trough_configuration tests
 
 after_script:
 - ps ww -fHe
