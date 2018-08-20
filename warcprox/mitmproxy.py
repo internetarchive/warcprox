@@ -502,10 +502,7 @@ class PooledMixIn(socketserver.ThreadingMixIn):
     def __init__(self, max_threads=None):
         self.active_requests = set()
         self.unaccepted_requests = 0
-        if max_threads:
-            self.max_threads = max_threads
-        else:
-            self.max_threads = 100
+        self.max_threads = max_threads or 100
         self.pool = concurrent.futures.ThreadPoolExecutor(self.max_threads)
         self.logger.info("%s proxy threads", self.max_threads)
 
@@ -595,11 +592,6 @@ class PooledMitmProxy(PooledMixIn, MitmProxy):
     request_queue_size = 4096
 
     def __init__(self, options=warcprox.Options()):
-        if options.max_threads:
-            self.logger.info(
-                    'max_threads=%s set by command line option',
-                    options.max_threads)
-
         PooledMixIn.__init__(self, options.max_threads)
         self.profilers = collections.defaultdict(cProfile.Profile)
 
