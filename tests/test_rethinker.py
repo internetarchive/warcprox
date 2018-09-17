@@ -24,6 +24,7 @@ import gc
 import pytest
 import rethinkdb as r
 import datetime
+from unittest import mock
 
 logging.basicConfig(stream=sys.stderr, level=logging.INFO,
         format="%(asctime)s %(process)d %(levelname)s %(threadName)s %(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s")
@@ -127,4 +128,79 @@ def test_utcnow():
     # assert abs((now_tz - now_notz).total_seconds()) <  0.1
 
     ## XXX what else can we test without jumping through hoops?
+
+class MockRethinker(doublethink.Rethinker):
+    def __init__(self, *args, **kwargs):
+        self.m = mock.MagicMock()
+
+        def table(name):
+            mm = mock.MagicMock()
+            if name in ('err_running_query', 'recoverable_err_running_query'):
+                if name == 'recoverable_err_running_query':
+                    e = r.ReqlOpFailedError(
+                            'Cannot perform read: The primary replica '
+                            "isn't connected... THIS IS A TEST!")
+                else:
+                    e = Exception
+
+                count = 0
+                def run(*args, **kwargs):
+                    nonlocal count
+                    count += 1
+                    if count <= 2:
+                        raise e
+                    else:
+                        return mock.MagicMock()
+
+                mm.run = run
+
+            elif name in ('err_in_iterator', 'recoverable_err_in_iterator'):
+                if name == 'recoverable_err_in_iterator':
+                    e = r.ReqlOpFailedError(
+                            'Cannot perform read: The primary replica '
+                            "isn't connected... THIS IS A TEST!")
+                else:
+                    e = Exception
+
+                def run(*args, **kwargs):
+                    mmm = mock.MagicMock()
+                    count = 0
+                    def next_(*args, **kwargs):
+                        nonlocal count
+                        count += 1
+                        if count <= 2:
+                            raise e
+                        else:
+                            return mock.MagicMock()
+                    mmm.__iter__ = lambda *args, **kwargs: mmm
+                    mmm.__next__ = next_
+                    return mmm
+
+                mm.run = run
+            return mm
+
+        self.m.table = table
+
+    def _random_server_connection(self):
+        return mock.Mock()
+
+    def __getattr__(self, name):
+        delegate = getattr(self.m, name)
+        return self.wrap(delegate)
+
+def test_error_handling():
+    rr = MockRethinker(db='my_db')
+
+    with pytest.raises(Exception):
+        rr.table('err_running_query').run()
+
+    # should not raise exception
+    rr.table('recoverable_err_running_query').run()
+
+    it = rr.table('err_in_iterator').run() # no exception yet
+    with pytest.raises(Exception):
+        next(it)  # exception here
+
+    it = rr.table('recoverable_err_in_iterator').run() # no exception yet
+    next(it)  # no exception
 
