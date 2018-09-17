@@ -17,6 +17,7 @@ matrix:
   - python: nightly
   - python: 3.7-dev
   - python: 2.7
+  - python: pypy
 
 services:
 - docker
