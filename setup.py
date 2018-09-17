@@ -1,6 +1,13 @@
 import setuptools
 import codecs
 
+test_deps = ['pytest']
+
+try:
+    import unittest.mock
+except:
+    test_deps.append('mock')
+
 setuptools.setup(
     name='doublethink',
     version='0.2.0.dev88',
@@ -10,8 +17,10 @@ setuptools.setup(
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
     ],
     install_requires=['rethinkdb'],
+    extras_require={'test': test_deps},
     url='https://github.com/internetarchive/doublethink',
     author='Noah Levitt',
     author_email='nlevitt@archive.org',

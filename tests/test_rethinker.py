@@ -24,7 +24,10 @@ import gc
 import pytest
 import rethinkdb as r
 import datetime
-from unittest import mock
+try:
+    from unittest import mock
+except:
+    import mock
 
 logging.basicConfig(stream=sys.stderr, level=logging.INFO,
         format="%(asctime)s %(process)d %(levelname)s %(threadName)s %(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s")
@@ -129,6 +132,9 @@ def test_utcnow():
 
     ## XXX what else can we test without jumping through hoops?
 
+class SpecificException(Exception):
+    pass
+
 class MockRethinker(doublethink.Rethinker):
     def __init__(self, *args, **kwargs):
         self.m = mock.MagicMock()
@@ -141,13 +147,13 @@ class MockRethinker(doublethink.Rethinker):
                             'Cannot perform read: The primary replica '
                             "isn't connected... THIS IS A TEST!")
                 else:
-                    e = Exception
+                    e = SpecificException
 
-                count = 0
+                # dict because: https://stackoverflow.com/questions/3190706/nonlocal-keyword-in-python-2-x
+                count = {'value': 0}
                 def run(*args, **kwargs):
-                    nonlocal count
-                    count += 1
-                    if count <= 2:
+                    count['value'] += 1
+                    if count['value'] <= 2:
                         raise e
                     else:
                         return mock.MagicMock()
@@ -160,20 +166,21 @@ class MockRethinker(doublethink.Rethinker):
                             'Cannot perform read: The primary replica '
                             "isn't connected... THIS IS A TEST!")
                 else:
-                    e = Exception
+                    e = SpecificException
 
                 def run(*args, **kwargs):
                     mmm = mock.MagicMock()
-                    count = 0
+                    # dict because: https://stackoverflow.com/questions/3190706/nonlocal-keyword-in-python-2-x
+                    count = {'value': 0}
                     def next_(*args, **kwargs):
-                        nonlocal count
-                        count += 1
-                        if count <= 2:
+                        count['value'] += 1
+                        if count['value'] <= 2:
                             raise e
                         else:
                             return mock.MagicMock()
                     mmm.__iter__ = lambda *args, **kwargs: mmm
                     mmm.__next__ = next_
+                    mmm.next = next_
                     return mmm
 
                 mm.run = run
@@ -191,14 +198,14 @@ class MockRethinker(doublethink.Rethinker):
 def test_error_handling():
     rr = MockRethinker(db='my_db')
 
-    with pytest.raises(Exception):
+    with pytest.raises(SpecificException):
         rr.table('err_running_query').run()
 
     # should not raise exception
     rr.table('recoverable_err_running_query').run()
 
     it = rr.table('err_in_iterator').run() # no exception yet
-    with pytest.raises(Exception):
+    with pytest.raises(SpecificException):
         next(it)  # exception here
 
     it = rr.table('recoverable_err_in_iterator').run() # no exception yet
