@@ -48,14 +48,31 @@ class RethinkerWrapper(object):
                 result = self.wrapped.run(conn, db=db or self.rr.dbname)
                 if hasattr(result, '__next__'):
                     is_iter = True
+
                     def gen():
                         try:
                             yield  # empty yield, see comment below
-                            for x in result:
-                                yield x
+                            while True:
+                                try:
+                                    x = next(result)
+                                    yield x
+                                except StopIteration:
+                                    break
+                                except r.ReqlOpFailedError as e:
+                                    if e.args and re.match(
+                                            '^Cannot perform.*replica.*',
+                                            e.args[0]):
+                                        self.logger.error(
+                                                'will keep trying after '
+                                                'potentially recoverable '
+                                                'error: %s', e)
+                                        time.sleep(0.5)
+                                    else:
+                                        raise
                         finally:
                             result.close()
                             conn.close()
+
                     g = gen()
                     # Start executing the generator, leaving off after the
                     # empty yield. If we didn't do this, and the caller never
