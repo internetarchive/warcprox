@@ -151,7 +151,7 @@ See a minimal example `here
 
 Architecture
 ============
-.. image:: arch.jpg
+.. image:: arch.svg
 
 Warcprox is multithreaded. It has pool of http proxy threads (100 by default).
 When handling a request, a proxy thread records data from the remote server to
