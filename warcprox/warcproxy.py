@@ -507,12 +507,15 @@ class WarcProxy(SingleThreadedWarcProxy, warcprox.mitmproxy.PooledMitmProxy):
 
     def server_activate(self):
         http_server.HTTPServer.server_activate(self)
-        self.logger.info(
+        self.logger.notice(
                 'listening on %s:%s', self.server_address[0],
                 self.server_address[1])
+        # take note of actual port in case running with --port=0 so that other
+        # parts of warcprox have easy access to it
+        self.options.server_port = self.server_address[1]
 
     def server_close(self):
-        self.logger.info('shutting down')
+        self.logger.notice('shutting down')
         http_server.HTTPServer.server_close(self)
         self.remote_connection_pool.clear()
 
