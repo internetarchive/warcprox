@@ -39,6 +39,33 @@ class RethinkerWrapper(object):
     def __repr__(self):
         return '<RethinkerWrapper{}>'.format(repr(self.wrapped))
 
+    def _result_iter(self, conn, result):
+        error_count = 0
+        try:
+            yield  # empty yield, see comment below
+            while True:
+                try:
+                    yield next(result)
+                except StopIteration:
+                    break
+                except r.ReqlOpFailedError as e:
+                    if e.args and re.match(
+                            '^Cannot perform.*replica.*', e.args[0]):
+                        if error_count < 20:
+                            error_count += 1
+                            self.logger.warn(
+                                    'will keep trying after potentially '
+                                    'recoverable error (%s/20): %s',
+                                    error_count, e)
+                            time.sleep(0.5)
+                        else:
+                            raise
+                    else:
+                        raise
+        finally:
+            result.close()
+            conn.close()
+
     def run(self, db=None):
         self.wrapped.run  # raise AttributeError early
         while True:
@@ -48,32 +75,7 @@ class RethinkerWrapper(object):
                 result = self.wrapped.run(conn, db=db or self.rr.dbname)
                 if hasattr(result, '__next__'):
                     is_iter = True
-
-                    def gen():
-                        try:
-                            yield  # empty yield, see comment below
-                            while True:
-                                try:
-                                    x = next(result)
-                                    yield x
-                                except StopIteration:
-                                    break
-                                except r.ReqlOpFailedError as e:
-                                    if e.args and re.match(
-                                            '^Cannot perform.*replica.*',
-                                            e.args[0]):
-                                        self.logger.error(
-                                                'will keep trying after '
-                                                'potentially recoverable '
-                                                'error: %s', e)
-                                        time.sleep(0.5)
-                                    else:
-                                        raise
-                        finally:
-                            result.close()
-                            conn.close()
-
-                    g = gen()
+                    g = self._result_iter(conn, result)
                     # Start executing the generator, leaving off after the
                     # empty yield. If we didn't do this, and the caller never
                     # started the generator, the finally block would never run
@@ -87,7 +89,7 @@ class RethinkerWrapper(object):
             except r.ReqlOpFailedError as e:
                 if e.args and re.match(
                         '^Cannot perform.*replica.*', e.args[0]):
-                    self.logger.error(
+                    self.logger.warn(
                             'will keep trying after potentially recoverable '
                             'error: %s', e)
                     time.sleep(0.5)

@@ -174,7 +174,7 @@ class MockRethinker(doublethink.Rethinker):
                     count = {'value': 0}
                     def next_(*args, **kwargs):
                         count['value'] += 1
-                        if count['value'] <= 2:
+                        if count['value'] % 2 == 1:
                             raise e
                         else:
                             return mock.MagicMock()
@@ -209,5 +209,9 @@ def test_error_handling():
         next(it)  # exception here
 
     it = rr.table('recoverable_err_in_iterator').run() # no exception yet
-    next(it)  # no exception
+    # next(it)
+    for i in range(20):
+        next(it)  # no exception
+    with pytest.raises(r.ReqlOpFailedError):
+        next(it)  # out of retries
 
