@@ -299,9 +299,7 @@ class WarcproxController(object):
         status_info.update(self.proxy.status())
 
         self.status_info = self.service_registry.heartbeat(status_info)
-        self.logger.log(
-                warcprox.TRACE, "status in service registry: %s",
-                self.status_info)
+        self.logger.trace('status in service registry: %s', self.status_info)
 
     def start(self):
         with self._start_stop_lock:

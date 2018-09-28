@@ -31,6 +31,7 @@ import logging
 import time
 import warcprox
 from concurrent import futures
+from datetime import datetime
 import threading
 
 class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
@@ -52,6 +53,7 @@ class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
                 max_workers=options.writer_threads or 1,
                 max_queued=10 * (options.writer_threads or 1))
         self.batch = set()
+        self.blackout_period = options.blackout_period or 0
 
     def _startup(self):
         self.logger.info('%s warc writer threads', self.pool._max_workers)
@@ -114,7 +116,26 @@ class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
                   else self.options.prefix)
         # special warc name prefix '-' means "don't archive"
         return (prefix != '-' and not recorded_url.do_not_archive
-                and self._filter_accepts(recorded_url))
+                and self._filter_accepts(recorded_url)
+                and not self._in_blackout(recorded_url))
+
+    def _in_blackout(self, recorded_url):
+        """If --blackout-period=N (sec) is set, check if duplicate record
+        datetime is close to the original. If yes, we don't write it to WARC.
+        The aim is to avoid having unnecessary `revisit` records.
+        Return Boolean
+        """
+        if self.blackout_period and hasattr(recorded_url, "dedup_info") and \
+                recorded_url.dedup_info:
+            dedup_date = recorded_url.dedup_info.get('date')
+            if dedup_date and recorded_url.dedup_info.get('url') == recorded_url.url:
+                try:
+                    dt = datetime.strptime(dedup_date.decode('utf-8'),
+                                           '%Y-%m-%dT%H:%M:%SZ')
+                    return (datetime.utcnow() - dt).total_seconds() <= self.blackout_period
+                except ValueError:
+                    return False
+        return False
 
     def _log(self, recorded_url, records):
         # 2015-07-17T22:32:23.672Z     1         58 dns:www.dhss.delaware.gov P http://www.dhss.delaware.gov/dhss/ text/dns #045 20150717223214881+316 sha1:63UTPB7GTWIHAGIK3WWL76E57BBTJGAK http://www.dhss.delaware.gov/dhss/ - {"warcFileOffset":2964,"warcFilename":"ARCHIVEIT-1303-WEEKLY-JOB165158-20150717223222113-00000.warc.gz"}

@@ -24,11 +24,15 @@ import datetime
 import json
 import os
 import warcprox
+import socket
 
 class CrawlLogger(object):
     def __init__(self, dir_, options=warcprox.Options()):
         self.dir = dir_
         self.options = options
+        self.hostname = socket.gethostname().split('.', 1)[0]
+
+    def start(self):
         if not os.path.exists(self.dir):
             logging.info('creating directory %r', self.dir)
             os.mkdir(self.dir)
@@ -49,7 +53,7 @@ class CrawlLogger(object):
                 self.options.base32)
         else:
             # WARCPROX_WRITE_RECORD request
-            content_length = len(recorded_url.request_data)
+            content_length = int(records[0].get_header(b'Content-Length'))
             payload_digest = records[0].get_header(b'WARC-Payload-Digest')
         fields = [
             '{:%Y-%m-%dT%H:%M:%S}.{:03d}Z'.format(now, now.microsecond//1000),
@@ -77,12 +81,11 @@ class CrawlLogger(object):
                 pass
         line = b' '.join(fields) + b'\n'
 
-        if 'warc-prefix' in recorded_url.warcprox_meta:
-            filename = '%s.log' % recorded_url.warcprox_meta['warc-prefix']
-        else:
-            filename = 'crawl.log'
-
+        prefix = recorded_url.warcprox_meta.get('warc-prefix', 'crawl')
+        filename = '%s-%s-%s.log' % (
+                prefix, self.hostname, self.options.server_port)
         crawl_log_path = os.path.join(self.dir, filename)
+
         with open(crawl_log_path, 'ab') as f:
             f.write(line)
 

@@ -250,7 +250,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         '''
         self._conn_pool = self.server.remote_connection_pool.connection_from_host(
             host=self.hostname, port=int(self.port), scheme='http',
-            pool_kwargs={'maxsize': 6})
+            pool_kwargs={'maxsize': 6, 'timeout': self._socket_timeout})
 
         self._remote_server_conn = self._conn_pool._get_conn()
         if is_connection_dropped(self._remote_server_conn):
@@ -263,10 +263,9 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 self._remote_server_conn.sock.set_proxy(
                         socks.SOCKS5, addr=self.onion_tor_socks_proxy_host,
                         port=self.onion_tor_socks_proxy_port, rdns=True)
-                self._remote_server_conn.timeout = self._socket_timeout
+                self._remote_server_conn.sock.settimeout(self._socket_timeout)
                 self._remote_server_conn.sock.connect((self.hostname, int(self.port)))
             else:
-                self._remote_server_conn.timeout = self._socket_timeout
                 self._remote_server_conn.connect()
 
             # Wrap socket if SSL is required
@@ -276,16 +275,17 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                     context.check_hostname = False
                     context.verify_mode = ssl.CERT_NONE
                     self._remote_server_conn.sock = context.wrap_socket(
-                            self._remote_server_conn.sock, server_hostname=self.hostname)
+                            self._remote_server_conn.sock,
+                            server_hostname=self.hostname)
                 except AttributeError:
                     try:
                         self._remote_server_conn.sock = ssl.wrap_socket(
                                 self._remote_server_conn.sock)
                     except ssl.SSLError:
                         self.logger.warn(
-                                "failed to establish ssl connection to %s; python "
-                                "ssl library does not support SNI, considering "
-                                "upgrading to python >= 2.7.9 or python 3.4",
+                                "failed to establish ssl connection to %s; "
+                                "python ssl library does not support SNI, "
+                                "consider upgrading to python 2.7.9+ or 3.4+",
                                 self.hostname)
                     raise
         return self._remote_server_conn.sock
@@ -424,8 +424,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 self.command, self.path, self.request_version)
 
         # Swallow headers that don't make sense to forward on, i.e. most
-        # hop-by-hop headers, see
-        # http://tools.ietf.org/html/rfc2616#section-13.5.
+        # hop-by-hop headers. http://tools.ietf.org/html/rfc2616#section-13.5.
         # self.headers is an email.message.Message, which is case-insensitive
         # and doesn't throw KeyError in __delitem__
         for key in (
@@ -503,10 +502,7 @@ class PooledMixIn(socketserver.ThreadingMixIn):
     def __init__(self, max_threads=None):
         self.active_requests = set()
         self.unaccepted_requests = 0
-        if max_threads:
-            self.max_threads = max_threads
-        else:
-            self.max_threads = 100
+        self.max_threads = max_threads or 100
         self.pool = concurrent.futures.ThreadPoolExecutor(self.max_threads)
         self.logger.info("%s proxy threads", self.max_threads)
 
@@ -596,11 +592,6 @@ class PooledMitmProxy(PooledMixIn, MitmProxy):
     request_queue_size = 4096
 
     def __init__(self, options=warcprox.Options()):
-        if options.max_threads:
-            self.logger.info(
-                    'max_threads=%s set by command line option',
-                    options.max_threads)
-
         PooledMixIn.__init__(self, options.max_threads)
         self.profilers = collections.defaultdict(cProfile.Profile)
 

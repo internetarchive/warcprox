@@ -90,8 +90,7 @@ def _send(self, data):
 # http_client.HTTPConnection.send = _send
 
 logging.basicConfig(
-        # stream=sys.stdout, level=logging.DEBUG, # level=warcprox.TRACE,
-        stream=sys.stdout, level=warcprox.TRACE,
+        stream=sys.stdout, level=logging.TRACE,
         format='%(asctime)s %(process)d %(levelname)s %(threadName)s '
         '%(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s')
 logging.getLogger("requests.packages.urllib3").setLevel(logging.WARN)
@@ -1718,8 +1717,14 @@ def test_slash_in_warc_prefix(warcprox_, http_daemon, archiving_proxies):
 def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     urls_before = warcprox_.proxy.running_stats.urls
 
+    hostname = socket.gethostname().split('.', 1)[0]
+    port = warcprox_.proxy.server_port
+    default_crawl_log_path = os.path.join(
+            warcprox_.options.crawl_log_dir,
+            'crawl-%s-%s.log' % (hostname, port))
+
     try:
-        os.unlink(os.path.join(warcprox_.options.crawl_log_dir, 'crawl.log'))
+        os.unlink(default_crawl_log_path)
     except:
         pass
 
@@ -1740,14 +1745,14 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     # wait for postfetch chain
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 2)
 
-    file = os.path.join(warcprox_.options.crawl_log_dir, 'test_crawl_log_1.log')
+    file = os.path.join(
+            warcprox_.options.crawl_log_dir,
+            'test_crawl_log_1-%s-%s.log' % (hostname, port))
     assert os.path.exists(file)
     assert os.stat(file).st_size > 0
-    assert os.path.exists(os.path.join(
-        warcprox_.options.crawl_log_dir, 'crawl.log'))
+    assert os.path.exists(default_crawl_log_path)
 
-    crawl_log = open(os.path.join(
-        warcprox_.options.crawl_log_dir, 'crawl.log'), 'rb').read()
+    crawl_log = open(default_crawl_log_path, 'rb').read()
     # tests will fail in year 3000 :)
     assert re.match(b'\A2[^\n]+\n\Z', crawl_log)
     assert crawl_log[24:31] == b'   200 '
@@ -1768,8 +1773,7 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
             'contentSize', 'warcFilename', 'warcFileOffset'}
     assert extra_info['contentSize'] == 145
 
-    crawl_log_1 = open(os.path.join(
-        warcprox_.options.crawl_log_dir, 'test_crawl_log_1.log'), 'rb').read()
+    crawl_log_1 = open(file, 'rb').read()
     assert re.match(b'\A2[^\n]+\n\Z', crawl_log_1)
     assert crawl_log_1[24:31] == b'   200 '
     assert crawl_log_1[31:42] == b'        54 '
@@ -1800,7 +1804,9 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     # wait for postfetch chain
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 3)
 
-    file = os.path.join(warcprox_.options.crawl_log_dir, 'test_crawl_log_2.log')
+    file = os.path.join(
+            warcprox_.options.crawl_log_dir,
+            'test_crawl_log_2-%s-%s.log' % (hostname, port))
     assert os.path.exists(file)
     assert os.stat(file).st_size > 0
 
@@ -1833,7 +1839,9 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     # wait for postfetch chain
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 4)
 
-    file = os.path.join(warcprox_.options.crawl_log_dir, 'test_crawl_log_3.log')
+    file = os.path.join(
+            warcprox_.options.crawl_log_dir,
+            'test_crawl_log_3-%s-%s.log' % (hostname, port))
 
     assert os.path.exists(file)
     crawl_log_3 = open(file, 'rb').read()
@@ -1871,7 +1879,9 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     # wait for postfetch chain
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 5)
 
-    file = os.path.join(warcprox_.options.crawl_log_dir, 'test_crawl_log_4.log')
+    file = os.path.join(
+            warcprox_.options.crawl_log_dir,
+            'test_crawl_log_4-%s-%s.log' % (hostname, port))
     assert os.path.exists(file)
     crawl_log_4 = open(file, 'rb').read()
 
