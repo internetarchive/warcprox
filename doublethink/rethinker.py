@@ -66,13 +66,14 @@ class RethinkerWrapper(object):
             result.close()
             conn.close()
 
-    def run(self, db=None):
+    def run(self, db=None, **kwargs):
         self.wrapped.run  # raise AttributeError early
         while True:
             conn = self.rr._random_server_connection()
             is_iter = False
             try:
-                result = self.wrapped.run(conn, db=db or self.rr.dbname)
+                result = self.wrapped.run(
+                        conn, db=db or self.rr.dbname, **kwargs)
                 if hasattr(result, '__next__'):
                     is_iter = True
                     g = self._result_iter(conn, result)
