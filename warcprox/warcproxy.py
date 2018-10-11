@@ -170,6 +170,13 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 "request rejected by warcprox: slash and backslash are not "
                 "permitted in warc-prefix")
 
+    def _enforce_limits_and_blocks(self):
+        if 'Warcprox-Meta' in self.headers:
+            warcprox_meta = json.loads(self.headers['Warcprox-Meta'])
+            self._security_check(warcprox_meta)
+            self._enforce_limits(warcprox_meta)
+            self._enforce_blocks(warcprox_meta)
+
     def _connect_to_remote_server(self):
         '''
         Wraps `MitmProxyHandler._connect_to_remote_server`, first enforcing
@@ -178,11 +185,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         Otherwise calls `MitmProxyHandler._connect_to_remote_server`, which
         initializes `self._remote_server_conn`.
         '''
-        if 'Warcprox-Meta' in self.headers:
-            warcprox_meta = json.loads(self.headers['Warcprox-Meta'])
-            self._security_check(warcprox_meta)
-            self._enforce_limits(warcprox_meta)
-            self._enforce_blocks(warcprox_meta)
+        self._enforce_limits_and_blocks()
         return warcprox.mitmproxy.MitmProxyHandler._connect_to_remote_server(self)
 
     def _proxy_request(self):
@@ -282,6 +285,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         '''
         try:
             self.url = self.path
+            self._enforce_limits_and_blocks()
 
             if ('Content-Length' in self.headers and 'Content-Type' in self.headers
                     and (warc_type or 'WARC-Type' in self.headers)):
@@ -331,6 +335,10 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                     'request.'))
 
             self.end_headers()
+        except warcprox.RequestBlockedByRule as e:
+            # limit enforcers have already sent the appropriate response
+            self.logger.info("%r: %r", self.requestline, e)
+            return
         except:
             self.logger.error("uncaught exception in do_WARCPROX_WRITE_RECORD", exc_info=True)
             raise
