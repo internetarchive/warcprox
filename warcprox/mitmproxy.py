@@ -384,10 +384,16 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         try:
             return self._proxy_request()
         except Exception as e:
-            self.logger.error(
-                    'error from remote server(?) %r: %r',
-                    self.requestline, e, exc_info=True)
-            self.send_error(502, str(e))
+            if self.server.shutting_down:
+                self.logger.warn(
+                        'sending 503 warcprox shutting down %r: %r',
+                        self.requestline, e)
+                self.send_error(503, 'warcprox shutting down')
+            else:
+                self.logger.error(
+                        'error from remote server(?) %r: %r',
+                        self.requestline, e, exc_info=True)
+                self.send_error(502, str(e))
             return
 
     def send_error(self, code, message=None, explain=None):
@@ -616,6 +622,7 @@ class PooledMitmProxy(PooledMixIn, MitmProxy):
         PooledMixIn.__init__(self, options.max_threads)
         MitmProxy.__init__(self)
         self.profilers = collections.defaultdict(cProfile.Profile)
+        self.shutting_down = False
 
         if options.profile:
             self.process_request_thread = self._profile_process_request_thread
@@ -648,6 +655,7 @@ class PooledMitmProxy(PooledMixIn, MitmProxy):
         '''
         Abort active connections to remote servers to achieve prompt shutdown.
         '''
+        self.shutting_down = True
         for sock in self.remote_server_socks:
             self.shutdown_request(sock)
 
