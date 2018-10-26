@@ -525,6 +525,7 @@ class WarcProxy(SingleThreadedWarcProxy, warcprox.mitmproxy.PooledMitmProxy):
     def server_close(self):
         self.logger.notice('shutting down')
         http_server.HTTPServer.server_close(self)
+        warcprox.mitmproxy.PooledMitmProxy.server_close(self)
         self.remote_connection_pool.clear()
 
     def handle_error(self, request, client_address):
