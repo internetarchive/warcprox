@@ -716,7 +716,25 @@ def test_limits(http_daemon, warcprox_, archiving_proxies):
     expected_response_meta = {'reached-limit': {'test_limits_bucket/total/urls': 10}, 'stats': {'test_limits_bucket': {'bucket': 'test_limits_bucket', 'revisit': {'wire_bytes': 1215, 'urls': 9}, 'total': {'wire_bytes': 1350, 'urls': 10}, 'new': {'wire_bytes': 135, 'urls': 1}}}}
     assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
     assert response.headers["content-type"] == "text/plain;charset=utf-8"
-    assert response.raw.data == b"request rejected by warcprox: reached limit test_limits_bucket/total/urls=10\n"
+    assert response.content == b"request rejected by warcprox: reached limit test_limits_bucket/total/urls=10\n"
+
+    # limits should apply to WARCPROX_WRITE_RECORD requests
+    payload = b'I am the WARCPROX_WRITE_RECORD payload'
+    wwr_headers = {
+        'Content-Type': 'text/plain',
+        'WARC-Type': 'metadata',
+        'Host': 'N/A'
+    }
+    wwr_headers.update(headers)
+    response = requests.request(
+            method='WARCPROX_WRITE_RECORD', url='http://fakeurl/',
+            data=payload, headers=wwr_headers, proxies=archiving_proxies)
+    assert response.status_code == 420
+    assert response.reason == "Reached limit"
+    expected_response_meta = {'reached-limit': {'test_limits_bucket/total/urls': 10}, 'stats': {'test_limits_bucket': {'bucket': 'test_limits_bucket', 'revisit': {'wire_bytes': 1215, 'urls': 9}, 'total': {'wire_bytes': 1350, 'urls': 10}, 'new': {'wire_bytes': 135, 'urls': 1}}}}
+    assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
+    assert response.headers["content-type"] == "text/plain;charset=utf-8"
+    assert response.content == b"request rejected by warcprox: reached limit test_limits_bucket/total/urls=10\n"
 
     # make sure limit doesn't get applied to a different stats bucket
     request_meta = {"stats":{"buckets":["no_limits_bucket"]},"limits":{"test_limits_bucket/total/urls":10}}
@@ -1154,7 +1172,7 @@ def test_domain_doc_soft_limit(
     expected_response_meta = {'reached-soft-limit': {'test_domain_doc_limit_bucket:foo.localhost/total/urls': 10}, 'stats': {'test_domain_doc_limit_bucket:foo.localhost': {'bucket': 'test_domain_doc_limit_bucket:foo.localhost', 'revisit': {'wire_bytes': 1215, 'urls': 9}, 'new': {'wire_bytes': 135, 'urls': 1}, 'total': {'wire_bytes': 1350, 'urls': 10}}}}
     assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
     assert response.headers["content-type"] == "text/plain;charset=utf-8"
-    assert response.raw.data == b"request rejected by warcprox: reached soft limit test_domain_doc_limit_bucket:foo.localhost/total/urls=10\n"
+    assert response.content == b"request rejected by warcprox: reached soft limit test_domain_doc_limit_bucket:foo.localhost/total/urls=10\n"
 
     warcprox_.proxy.remote_connection_pool.clear()
 
@@ -1182,7 +1200,7 @@ def test_domain_doc_soft_limit(
     expected_response_meta = {'reached-soft-limit': {'test_domain_doc_limit_bucket:foo.localhost/total/urls': 10}, 'stats': {'test_domain_doc_limit_bucket:foo.localhost': {'bucket': 'test_domain_doc_limit_bucket:foo.localhost', 'revisit': {'wire_bytes': 1215, 'urls': 9}, 'new': {'wire_bytes': 135, 'urls': 1}, 'total': {'wire_bytes': 1350, 'urls': 10}}}}
     assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
     assert response.headers["content-type"] == "text/plain;charset=utf-8"
-    assert response.raw.data == b"request rejected by warcprox: reached soft limit test_domain_doc_limit_bucket:foo.localhost/total/urls=10\n"
+    assert response.content == b"request rejected by warcprox: reached soft limit test_domain_doc_limit_bucket:foo.localhost/total/urls=10\n"
 
     warcprox_.proxy.remote_connection_pool.clear()
 
@@ -1196,7 +1214,7 @@ def test_domain_doc_soft_limit(
     expected_response_meta = {'reached-soft-limit': {'test_domain_doc_limit_bucket:foo.localhost/total/urls': 10}, 'stats': {'test_domain_doc_limit_bucket:foo.localhost': {'bucket': 'test_domain_doc_limit_bucket:foo.localhost', 'revisit': {'wire_bytes': 1215, 'urls': 9}, 'new': {'wire_bytes': 135, 'urls': 1}, 'total': {'wire_bytes': 1350, 'urls': 10}}}}
     assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
     assert response.headers["content-type"] == "text/plain;charset=utf-8"
-    assert response.raw.data == b"request rejected by warcprox: reached soft limit test_domain_doc_limit_bucket:foo.localhost/total/urls=10\n"
+    assert response.content == b"request rejected by warcprox: reached soft limit test_domain_doc_limit_bucket:foo.localhost/total/urls=10\n"
 
     # make sure soft limit doesn't get applied to a different stats bucket
     request_meta = {
@@ -1291,7 +1309,7 @@ def test_domain_data_soft_limit(
     expected_response_meta = {'reached-soft-limit': {'test_domain_data_limit_bucket:xn--zz-2ka.localhost/new/wire_bytes': 200}, 'stats': {'test_domain_data_limit_bucket:xn--zz-2ka.localhost': {'total': {'wire_bytes': 405, 'urls': 3}, 'revisit': {'wire_bytes': 135, 'urls': 1}, 'new': {'wire_bytes': 270, 'urls': 2}, 'bucket': 'test_domain_data_limit_bucket:xn--zz-2ka.localhost'}}}
     assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
     assert response.headers["content-type"] == "text/plain;charset=utf-8"
-    assert response.raw.data == b"request rejected by warcprox: reached soft limit test_domain_data_limit_bucket:xn--zz-2ka.localhost/new/wire_bytes=200\n"
+    assert response.content == b"request rejected by warcprox: reached soft limit test_domain_data_limit_bucket:xn--zz-2ka.localhost/new/wire_bytes=200\n"
 
     # XXX this check is resulting in a segfault on mac and linux, from ssl I
     # think, probably because of the dns resolution monkey-patching
@@ -1307,7 +1325,7 @@ def test_domain_data_soft_limit(
     ### expected_response_meta = {'reached-soft-limit': {'test_domain_data_limit_bucket:xn--zz-2ka.localhost/new/wire_bytes': 200}, 'stats': {'test_domain_data_limit_bucket:xn--zz-2ka.localhost': {'total': {'wire_bytes': 405, 'urls': 3}, 'revisit': {'wire_bytes': 135, 'urls': 1}, 'new': {'wire_bytes': 270, 'urls': 2}, 'bucket': 'test_domain_data_limit_bucket:xn--zz-2ka.localhost'}}}
     ### assert json.loads(response.headers["warcprox-meta"]) == expected_response_meta
     ### assert response.headers["content-type"] == "text/plain;charset=utf-8"
-    ### assert response.raw.data == b"request rejected by warcprox: reached soft limit test_domain_data_limit_bucket:xn--zz-2ka.localhost/new/wire_bytes=200\n"
+    ### assert response.content == b"request rejected by warcprox: reached soft limit test_domain_data_limit_bucket:xn--zz-2ka.localhost/new/wire_bytes=200\n"
 
     # make sure soft limit doesn't get applied to a different stats bucket
     request_meta = {

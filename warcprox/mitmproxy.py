@@ -382,6 +382,8 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             return
 
         try:
+            self.server.register_remote_server_sock(
+                    self._remote_server_conn.sock)
             return self._proxy_request()
         except Exception as e:
             self.logger.error(
@@ -389,6 +391,9 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                     self.requestline, e, exc_info=True)
             self.send_error(502, str(e))
             return
+        finally:
+            self.server.unregister_remote_server_sock(
+                    self._remote_server_conn.sock)
 
     def send_error(self, code, message=None, explain=None):
         # BaseHTTPRequestHandler.send_response_only() in http/server.py
@@ -556,6 +561,18 @@ class PooledMixIn(socketserver.ThreadingMixIn):
         return res
 
 class MitmProxy(http_server.HTTPServer):
+    def __init__(self, *args, **kwargs):
+        self.remote_server_socks = set()
+        self.remote_server_socks_lock = threading.Lock()
+
+    def register_remote_server_sock(self, sock):
+        with self.remote_server_socks_lock:
+            self.remote_server_socks.add(sock)
+
+    def unregister_remote_server_sock(self, sock):
+        with self.remote_server_socks_lock:
+            self.remote_server_socks.discard(sock)
+
     def finish_request(self, request, client_address):
         '''
         We override socketserver.BaseServer.finish_request to get at
@@ -593,6 +610,7 @@ class PooledMitmProxy(PooledMixIn, MitmProxy):
 
     def __init__(self, options=warcprox.Options()):
         PooledMixIn.__init__(self, options.max_threads)
+        MitmProxy.__init__(self)
         self.profilers = collections.defaultdict(cProfile.Profile)
 
         if options.profile:
@@ -621,4 +639,11 @@ class PooledMitmProxy(PooledMixIn, MitmProxy):
         except:
             self.handle_error(request, client_address)
             self.shutdown_request(request)
+
+    def server_close(self):
+        '''
+        Abort active connections to remote servers to achieve prompt shutdown.
+        '''
+        for sock in self.remote_server_socks:
+            self.shutdown_request(sock)
 

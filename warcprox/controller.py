@@ -321,15 +321,24 @@ class WarcproxController(object):
                 processor.start()
 
     def shutdown(self):
+        '''
+        Shut down, aborting active connections, but allowing completed fetches
+        to finish processing.
+
+        1. stop accepting new connections
+        2. shut down active connections to remote servers (resulting in sending
+           http 502 to the proxy clients)
+        3. shut down the postfetch processors one by one, in order, letting
+           them finish process their queues
+        '''
         with self._start_stop_lock:
             if not self.proxy_thread or not self.proxy_thread.is_alive():
                 self.logger.info('warcprox is not running')
                 return
 
-            for processor in self._postfetch_chain:
-                processor.stop.set()
             self.proxy.shutdown()
             self.proxy.server_close()
+            self.proxy_thread.join()
 
             if self.playback_proxy is not None:
                 self.playback_proxy.shutdown()
@@ -338,9 +347,9 @@ class WarcproxController(object):
                     self.playback_proxy.playback_index_db.close()
 
             for processor in self._postfetch_chain:
+                processor.stop.set()
                 processor.join()
 
-            self.proxy_thread.join()
             if self.playback_proxy is not None:
                 self.playback_proxy_thread.join()
 
