@@ -382,8 +382,6 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             return
 
         try:
-            self.server.register_remote_server_sock(
-                    self._remote_server_conn.sock)
             return self._proxy_request()
         except Exception as e:
             self.logger.error(
@@ -391,9 +389,6 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                     self.requestline, e, exc_info=True)
             self.send_error(502, str(e))
             return
-        finally:
-            self.server.unregister_remote_server_sock(
-                    self._remote_server_conn.sock)
 
     def send_error(self, code, message=None, explain=None):
         # BaseHTTPRequestHandler.send_response_only() in http/server.py
@@ -414,6 +409,15 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             return None
 
     def _proxy_request(self, extra_response_headers={}):
+        try:
+            self.server.register_remote_server_sock(
+                    self._remote_server_conn.sock)
+            return self._inner_proxy_request(extra_response_headers)
+        finally:
+            self.server.unregister_remote_server_sock(
+                    self._remote_server_conn.sock)
+
+    def _inner_proxy_request(self, extra_response_headers={}):
         '''
         Sends the request to the remote server, then uses a ProxyingRecorder to
         read the response and send it to the proxy client, while recording the
