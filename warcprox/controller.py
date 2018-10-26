@@ -326,9 +326,9 @@ class WarcproxController(object):
         to finish processing.
 
         1. stop accepting new connections
-        2. shut down active connections to remote servers (resulting in sending
-           http 502 to the proxy clients)
-        3. shut down the postfetch processors one by one, in order, letting
+        2. shut down active connections to remote servers
+        3. send "503 warcprox shutting down" response to active requests
+        4. shut down the postfetch processors one by one, in order, letting
            them finish process their queues
         '''
         with self._start_stop_lock:
