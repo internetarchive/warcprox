@@ -1,7 +1,7 @@
 '''
 tests_rethinker.py - unit tests for doublethink connection manager
 
-Copyright (C) 2015-2017 Internet Archive
+Copyright (C) 2015-2018 Internet Archive
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -43,7 +43,7 @@ class RethinkerForTesting(doublethink.Rethinker):
 
 @pytest.fixture(scope="module")
 def rr():
-    rr = RethinkerForTesting()
+    rr = RethinkerForTesting(servers=['localhost','notexists'])
     try:
         rr.db_drop("doublethink_test_db").run()
     except r.errors.ReqlOpFailedError:
