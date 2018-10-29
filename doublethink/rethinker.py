@@ -1,7 +1,7 @@
 '''
 doublethink/rethinker.py - rethinkdb connection-manager
 
-Copyright (C) 2015-2017 Internet Archive
+Copyright (C) 2015-2018 Internet Archive
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -117,6 +117,7 @@ class Rethinker(object):
     # https://github.com/rethinkdb/rethinkdb-example-webpy-blog/blob/master/model.py
     # "Best practices: Managing connections: a connection per request"
     def _random_server_connection(self):
+        retry_wait = 0.01
         while True:
             server = random.choice(self.servers)
             try:
@@ -126,10 +127,11 @@ class Rethinker(object):
                 except ValueError:
                     return r.connect(host=server)
             except Exception as e:
-                self.logger.error(
+                self.logger.warn(
                         'will keep trying after failure connecting to '
                         'rethinkdb server at %s: %s', server, e)
-                time.sleep(0.5)
+                time.sleep(retry_wait)
+                retry_wait = min(retry_wait * 2, 10.0)
 
     def wrap(self, delegate):
         if isinstance(delegate, (types.FunctionType, types.MethodType)):
