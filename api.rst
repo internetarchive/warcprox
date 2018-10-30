@@ -15,72 +15,60 @@ a json blob with a bunch of status info. For example:
 
     $ curl -sS http://localhost:8000/status
     {
-      "rates_5min": {
-        "warc_bytes_per_sec": 0.0,
-        "urls_per_sec": 0.0,
-        "actual_elapsed": 277.2983281612396
-      },
-      "version": "2.4b2.dev174",
-      "load": 0.0,
-      "seconds_behind": 0.0,
-      "threads": 100,
-      "warc_bytes_written": 0,
+      "role": "warcprox",
+      "version": "2.4b3.dev189",
+      "host": "ayutla.local",
+      "address": "127.0.0.1",
       "port": 8000,
+      "pid": 60555,
+      "threads": 100,
+      "active_requests": 1,
+      "unaccepted_requests": 0,
+      "load": 0.0,
+      "queued_urls": 0,
+      "queue_max_size": 500,
+      "urls_processed": 0,
+      "warc_bytes_written": 0,
+      "start_time": "2018-10-30T20:15:19.929861Z",
+      "rates_1min": {
+        "actual_elapsed": 61.76024103164673,
+        "urls_per_sec": 0.0,
+        "warc_bytes_per_sec": 0.0
+      },
+      "rates_5min": {
+        "actual_elapsed": 1.7602601051330566,
+        "urls_per_sec": 0.0,
+        "warc_bytes_per_sec": 0.0
+      },
+      "rates_15min": {
+        "actual_elapsed": 1.7602710723876953,
+        "urls_per_sec": 0.0,
+        "warc_bytes_per_sec": 0.0
+      },
+      "earliest_still_active_fetch_start": "2018-10-30T20:15:21.691467Z",
+      "seconds_behind": 0.001758,
       "postfetch_chain": [
         {
-          "queued_urls": 0,
-          "processor": "SkipFacebookCaptchas"
+          "processor": "DedupLoader",
+          "queued_urls": 0
         },
         {
-          "queued_urls": 0,
-          "processor": "BatchTroughLoader"
+          "processor": "WarcWriterProcessor",
+          "queued_urls": 0
         },
         {
-          "queued_urls": 0,
-          "processor": "WarcWriterProcessor"
+          "processor": "DedupDb",
+          "queued_urls": 0
         },
         {
-          "queued_urls": 0,
-          "processor": "BatchTroughStorer"
+          "processor": "StatsProcessor",
+          "queued_urls": 0
         },
         {
-          "queued_urls": 0,
-          "processor": "RethinkStatsProcessor"
-        },
-        {
-          "queued_urls": 0,
-          "processor": "CrawlLogger"
-        },
-        {
-          "queued_urls": 0,
-          "processor": "TroughFeed"
-        },
-        {
-          "queued_urls": 0,
-          "processor": "RunningStats"
+          "processor": "RunningStats",
+          "queued_urls": 0
         }
-      ],
-      "queue_max_size": 500,
-      "role": "warcprox",
-      "queued_urls": 0,
-      "active_requests": 1,
-      "host": "wbgrp-svc405.us.archive.org",
-      "rates_15min": {
-        "warc_bytes_per_sec": 0.0,
-        "urls_per_sec": 0.0,
-        "actual_elapsed": 876.9885368347168
-      },
-      "unaccepted_requests": 0,
-      "urls_processed": 0,
-      "pid": 18841,
-      "address": "127.0.0.1",
-      "rates_1min": {
-        "warc_bytes_per_sec": 0.0,
-        "urls_per_sec": 0.0,
-        "actual_elapsed": 54.92501664161682
-      },
-      "start_time": 1526690353.4060142
-    }
+      ]
 
 ``WARCPROX_WRITE_RECORD`` http method
 =====================================

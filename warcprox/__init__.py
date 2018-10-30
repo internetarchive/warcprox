@@ -51,7 +51,7 @@ class Options(_Namespace):
 class Jsonner(json.JSONEncoder):
     def default(self, o):
         if isinstance(o, datetime.datetime):
-            return o.isoformat()
+            return o.isoformat() + 'Z'   # we use only utc
         elif isinstance(o, bytes):
             return base64.b64encode(o).decode('ascii')
         else:
