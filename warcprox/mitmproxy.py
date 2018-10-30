@@ -515,7 +515,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
 class PooledMixIn(socketserver.ThreadingMixIn):
     logger = logging.getLogger("warcprox.mitmproxy.PooledMixIn")
     def __init__(self, max_threads=None):
-        self.active_requests = set()
+        self.active_requests = {}
         self.unaccepted_requests = 0
         self.max_threads = max_threads or 100
         self.pool = concurrent.futures.ThreadPoolExecutor(self.max_threads)
@@ -533,15 +533,15 @@ class PooledMixIn(socketserver.ThreadingMixIn):
         return result
 
     def process_request(self, request, client_address):
-        self.active_requests.add(request)
+        self.active_requests[request] = datetime.datetime.utcnow()
         future = self.pool.submit(
                 self.process_request_thread, request, client_address)
         future.add_done_callback(
-                lambda f: self.active_requests.discard(request))
+                lambda f: self.active_requests.pop(request, None))
         if future.done():
             # avoid theoretical timing issue, in case process_request_thread
             # managed to finish before future.add_done_callback() ran
-            self.active_requests.discard(request)
+            self.active_requests.pop(request, None)
 
     def get_request(self):
         '''

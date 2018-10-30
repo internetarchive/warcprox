@@ -31,6 +31,7 @@ try:
     import queue
 except ImportError:
     import Queue as queue
+import json
 
 __version__ = _get_distribution('warcprox').version
 
@@ -47,6 +48,15 @@ class Options(_Namespace):
         except AttributeError:
             return None
 
+class Jsonner(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, datetime.datetime):
+            return o.isoformat()
+        elif isinstance(o, bytes):
+            return base64.b64encode(o).decode('ascii')
+        else:
+            return json.JSONEncoder.default(self, o)
+
 class ThreadPoolExecutor(concurrent.futures.ThreadPoolExecutor):
     '''
     `concurrent.futures.ThreadPoolExecutor` supporting a queue of limited size.
@@ -57,36 +67,6 @@ class ThreadPoolExecutor(concurrent.futures.ThreadPoolExecutor):
     def __init__(self, max_queued=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._work_queue = queue.Queue(maxsize=max_queued or 0)
-
-class TimestampedQueue(queue.Queue):
-    """
-    A queue.Queue that exposes the time enqueued of the oldest item in the
-    queue.
-    """
-    def put(self, item, block=True, timeout=None):
-        return queue.Queue.put(
-                self, (datetime.datetime.utcnow(), item), block, timeout)
-
-    def get(self, block=True, timeout=None):
-        timestamp, item = self.get_with_timestamp(block, timeout)
-        return item
-
-    get_with_timestamp = queue.Queue.get
-
-    def oldest_timestamp(self):
-        with self.mutex:
-            if self.queue:
-                timestamp, item = self.queue[0]
-            else:
-                return None
-        return timestamp
-
-    def seconds_behind(self):
-        timestamp = self.oldest_timestamp()
-        if timestamp:
-            return (datetime.datetime.utcnow() - timestamp).total_seconds()
-        else:
-            return 0.0
 
 # XXX linux-specific
 def gettid():

@@ -245,7 +245,8 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
             }
             status_info.update(self.server.status())
             payload = json.dumps(
-                    status_info, indent=2).encode('utf-8') + b'\n'
+                    status_info, cls=warcprox.Jsonner,
+                    indent=2).encode('utf-8') + b'\n'
             self.send_response(200, 'OK')
             self.send_header('Content-type', 'application/json')
             self.send_header('Content-Length', len(payload))
@@ -460,8 +461,7 @@ class SingleThreadedWarcProxy(http_server.HTTPServer, object):
                 certs_dir=options.certs_dir or './warcprox-ca',
                 ca_name=ca_name)
 
-        self.recorded_url_q = warcprox.TimestampedQueue(
-                maxsize=options.queue_size or 1000)
+        self.recorded_url_q = queue.Queue(maxsize=options.queue_size or 1000)
 
         self.running_stats = warcprox.stats.RunningStats()
 
@@ -475,7 +475,6 @@ class SingleThreadedWarcProxy(http_server.HTTPServer, object):
                 self.recorded_url_q.maxsize or 100),
             'queued_urls': self.recorded_url_q.qsize(),
             'queue_max_size': self.recorded_url_q.maxsize,
-            'seconds_behind': self.recorded_url_q.seconds_behind(),
             'urls_processed': self.running_stats.urls,
             'warc_bytes_written': self.running_stats.warc_bytes,
             'start_time': self.running_stats.first_snap_time,

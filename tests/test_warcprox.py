@@ -1551,7 +1551,8 @@ def test_status_api(warcprox_):
             'queued_urls', 'queue_max_size', 'seconds_behind', 'threads',
             'rates_5min', 'rates_1min', 'unaccepted_requests', 'rates_15min',
             'active_requests','start_time','urls_processed',
-            'warc_bytes_written','postfetch_chain',}
+            'warc_bytes_written', 'postfetch_chain',
+            'earliest_still_active_fetch_start',}
     assert status['role'] == 'warcprox'
     assert status['version'] == warcprox.__version__
     assert status['port'] == warcprox_.proxy.server_port
@@ -1573,25 +1574,13 @@ def test_svcreg_status(warcprox_):
                 'first_heartbeat', 'ttl', 'last_heartbeat', 'threads',
                 'rates_5min', 'rates_1min', 'unaccepted_requests',
                 'rates_15min', 'active_requests','start_time','urls_processed',
-                'warc_bytes_written','postfetch_chain',}
+                'warc_bytes_written', 'postfetch_chain',
+                'earliest_still_active_fetch_start',}
         assert status['role'] == 'warcprox'
         assert status['version'] == warcprox.__version__
         assert status['port'] == warcprox_.proxy.server_port
         assert status['pid'] == os.getpid()
         assert status['threads'] == warcprox_.proxy.pool._max_workers
-
-def test_timestamped_queue():
-    # see also test_queue.py
-    q = warcprox.TimestampedQueue()
-    q.put('monkey')
-    q.put('flonkey')
-    timestamp_item = q.get_with_timestamp()
-    assert isinstance(timestamp_item, tuple)
-    assert isinstance(timestamp_item[0], datetime.datetime)
-    assert timestamp_item[1] == 'monkey'
-    assert timestamp_item[0] < q.oldest_timestamp()
-    time.sleep(1)
-    assert q.seconds_behind() > 1
 
 def test_controller_with_defaults():
     # tests some initialization code that we rarely touch otherwise
