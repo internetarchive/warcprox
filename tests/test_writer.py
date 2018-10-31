@@ -35,8 +35,9 @@ import io
 import tempfile
 import logging
 import hashlib
+import queue
 
-def lock_file(queue, filename):
+def lock_file(q, filename):
     """Try to lock file and return 1 if successful, else return 0.
     It is necessary to run this method in a different process to test locking.
     """
@@ -44,9 +45,9 @@ def lock_file(queue, filename):
         fi = open(filename, 'ab')
         fcntl.lockf(fi, fcntl.LOCK_EX | fcntl.LOCK_NB)
         fi.close()
-        queue.put('OBTAINED LOCK')
+        q.put('OBTAINED LOCK')
     except IOError:
-        queue.put('FAILED TO OBTAIN LOCK')
+        q.put('FAILED TO OBTAIN LOCK')
 
 
 def test_warc_writer_locking(tmpdir):
@@ -69,18 +70,18 @@ def test_warc_writer_locking(tmpdir):
     assert warcs
     target_warc = os.path.join(dirname, warcs[0])
     # launch another process and try to lock WARC file
-    queue = Queue()
-    p = Process(target=lock_file, args=(queue, target_warc))
+    q = Queue()
+    p = Process(target=lock_file, args=(q, target_warc))
     p.start()
     p.join()
-    assert queue.get() == 'FAILED TO OBTAIN LOCK'
+    assert q.get() == 'FAILED TO OBTAIN LOCK'
     wwriter.close_writer()
 
     # locking must succeed after writer has closed the WARC file.
-    p = Process(target=lock_file, args=(queue, target_warc))
+    p = Process(target=lock_file, args=(q, target_warc))
     p.start()
     p.join()
-    assert queue.get() == 'OBTAINED LOCK'
+    assert q.get() == 'OBTAINED LOCK'
 
 def wait(callback, timeout):
     start = time.time()
@@ -97,8 +98,8 @@ def test_special_dont_write_prefix():
 
         wwt = warcprox.writerthread.WarcWriterProcessor(
                 Options(prefix='-', writer_threads=1))
-        wwt.inq = warcprox.TimestampedQueue(maxsize=1)
-        wwt.outq = warcprox.TimestampedQueue(maxsize=1)
+        wwt.inq = queue.Queue(maxsize=1)
+        wwt.outq = queue.Queue(maxsize=1)
         try:
             wwt.start()
             # not to be written due to default prefix
@@ -131,8 +132,8 @@ def test_special_dont_write_prefix():
 
         wwt = warcprox.writerthread.WarcWriterProcessor(
                 Options(writer_threads=1, blackout_period=60, prefix='foo'))
-        wwt.inq = warcprox.TimestampedQueue(maxsize=1)
-        wwt.outq = warcprox.TimestampedQueue(maxsize=1)
+        wwt.inq = queue.Queue(maxsize=1)
+        wwt.outq = queue.Queue(maxsize=1)
         try:
             wwt.start()
             # to be written due to default prefix
@@ -206,8 +207,8 @@ def test_do_not_archive():
 
         wwt = warcprox.writerthread.WarcWriterProcessor(
                 Options(writer_threads=1))
-        wwt.inq = warcprox.TimestampedQueue(maxsize=1)
-        wwt.outq = warcprox.TimestampedQueue(maxsize=1)
+        wwt.inq = queue.Queue(maxsize=1)
+        wwt.outq = queue.Queue(maxsize=1)
         try:
             wwt.start()
             # to be written -- default do_not_archive False
