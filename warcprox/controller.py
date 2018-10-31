@@ -35,6 +35,7 @@ import certauth
 import functools
 import doublethink
 import importlib
+import queue
 
 class Factory:
     @staticmethod
@@ -149,8 +150,35 @@ class WarcproxController(object):
 
         self.service_registry = Factory.service_registry(options)
 
+    def earliest_still_active_fetch_start(self):
+        '''
+        Looks at urls currently in flight, either being fetched or being
+        processed at some step of the postfetch chain, finds the one with the
+        earliest fetch start time, and returns that time.
+        '''
+        earliest = None
+        for timestamp in list(self.proxy.active_requests.values()):
+            if earliest is None or timestamp < earliest:
+                earliest = timestamp
+        for processor in self._postfetch_chain:
+            with processor.inq.mutex:
+                l = list(processor.inq.queue)
+            for recorded_url in l:
+                if earliest is None or recorded_url.timestamp < earliest:
+                    earliest = recorded_url.timestamp
+        return earliest
+
     def postfetch_status(self):
-        result = {'postfetch_chain': []}
+        earliest = self.earliest_still_active_fetch_start()
+        if earliest:
+            seconds_behind = (doublethink.utcnow() - earliest).total_seconds()
+        else:
+            seconds_behind = 0
+        result = {
+            'earliest_still_active_fetch_start': earliest,
+            'seconds_behind': seconds_behind,
+            'postfetch_chain': []
+        }
         for processor in self._postfetch_chain:
             if processor.__class__ == warcprox.ListenerPostfetchProcessor:
                 name = processor.listener.__class__.__name__
@@ -171,7 +199,7 @@ class WarcproxController(object):
         '''
         assert not processor0.outq
         assert not processor1.inq
-        q = warcprox.TimestampedQueue(maxsize=self.options.queue_size)
+        q = queue.Queue(maxsize=self.options.queue_size)
         processor0.outq = q
         processor1.inq = q
 
