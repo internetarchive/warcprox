@@ -46,6 +46,7 @@ import os
 from urllib3 import PoolManager
 import tempfile
 import hashlib
+import doublethink
 
 class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
     '''
@@ -199,7 +200,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
             del self.headers['Warcprox-Meta']
 
         remote_ip = self._remote_server_conn.sock.getpeername()[0]
-        timestamp = datetime.datetime.utcnow()
+        timestamp = doublethink.utcnow()
         extra_response_headers = {}
         if warcprox_meta and 'accept' in warcprox_meta and \
                 'capture-metadata' in warcprox_meta['accept']:
@@ -225,7 +226,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 client_ip=self.client_address[0],
                 content_type=content_type, method=self.command,
                 timestamp=timestamp, host=self.hostname,
-                duration=datetime.datetime.utcnow()-timestamp,
+                duration=doublethink.utcnow()-timestamp,
                 referer=self.headers.get('referer'),
                 payload_digest=prox_rec_res.payload_digest,
                 truncated=prox_rec_res.truncated)
@@ -290,7 +291,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
 
             if ('Content-Length' in self.headers and 'Content-Type' in self.headers
                     and (warc_type or 'WARC-Type' in self.headers)):
-                timestamp = datetime.datetime.utcnow()
+                timestamp = doublethink.utcnow()
 
                 request_data = tempfile.SpooledTemporaryFile(
                         max_size=self._tmp_file_max_memory_size)
@@ -323,7 +324,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                         client_ip=self.client_address[0],
                         method=self.command,
                         timestamp=timestamp,
-                        duration=datetime.datetime.utcnow()-timestamp,
+                        duration=doublethink.utcnow()-timestamp,
                         payload_digest=payload_digest)
                 request_data.seek(0)
 
@@ -425,7 +426,7 @@ class SingleThreadedWarcProxy(http_server.HTTPServer, object):
     def __init__(
             self, stats_db=None, status_callback=None,
             options=warcprox.Options()):
-        self.start_time = datetime.datetime.utcnow()
+        self.start_time = doublethink.utcnow()
         self.status_callback = status_callback
         self.stats_db = stats_db
         self.options = options

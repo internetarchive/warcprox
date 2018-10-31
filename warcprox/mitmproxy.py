@@ -65,6 +65,7 @@ import time
 import collections
 import cProfile
 from urllib3.util import is_connection_dropped
+import doublethink
 
 class ProxyingRecorder(object):
     """
@@ -533,7 +534,7 @@ class PooledMixIn(socketserver.ThreadingMixIn):
         return result
 
     def process_request(self, request, client_address):
-        self.active_requests[request] = datetime.datetime.utcnow()
+        self.active_requests[request] = doublethink.utcnow()
         future = self.pool.submit(
                 self.process_request_thread, request, client_address)
         future.add_done_callback(

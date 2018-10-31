@@ -166,16 +166,12 @@ class WarcproxController(object):
             for recorded_url in l:
                 if earliest is None or recorded_url.timestamp < earliest:
                     earliest = recorded_url.timestamp
-        if earliest:
-            logging.info('earliest: %s', earliest)
-            return earliest
-        else:
-            return None
+        return earliest
 
     def postfetch_status(self):
         earliest = self.earliest_still_active_fetch_start()
         if earliest:
-            seconds_behind = (datetime.datetime.utcnow() - earliest).total_seconds()
+            seconds_behind = (doublethink.utcnow() - earliest).total_seconds()
         else:
             seconds_behind = 0
         result = {
