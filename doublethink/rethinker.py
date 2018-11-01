@@ -123,13 +123,15 @@ class Rethinker(object):
             try:
                 try:
                     host, port = server.split(':')
-                    return r.connect(host=host, port=port)
+                    return r.connect(
+                            host=host, port=port, timeout=max(0.1, retry_wait))
                 except ValueError:
-                    return r.connect(host=server)
+                    return r.connect(host=server, timeout=max(0.1, retry_wait))
             except Exception as e:
                 self.logger.warn(
                         'will keep trying after failure connecting to '
-                        'rethinkdb server at %s: %s', server, e)
+                        'rethinkdb server at %s: %s (sleeping for %s sec)',
+                        server, e, retry_wait)
                 time.sleep(retry_wait)
                 retry_wait = min(retry_wait * 2, 10.0)
 
