@@ -10,7 +10,7 @@ except:
 
 setuptools.setup(
     name='doublethink',
-    version='0.2.0.dev93',
+    version='0.2.0.dev94',
     packages=['doublethink'],
     classifiers=[
         'Programming Language :: Python :: 2.7',
