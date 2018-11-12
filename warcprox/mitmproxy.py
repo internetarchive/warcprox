@@ -464,6 +464,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             req += self.rfile.read(int(self.headers['Content-Length']))
 
         prox_rec_res = None
+        start = time.time()
         try:
             self.logger.debug('sending to remote server req=%r', req)
 
@@ -489,6 +490,15 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                             'truncating response because max resource size %d '
                             'bytes exceeded for URL %s',
                             self._max_resource_size, self.url)
+                    break
+                elif (not 'content-length' in self.headers
+                        and time.time() - start > 3 * 60 * 60):
+                    prox_rec_res.truncated = b'time'
+                    self._remote_server_conn.sock.shutdown(socket.SHUT_RDWR)
+                    self._remote_server_conn.sock.close()
+                    self.logger.info(
+                            'reached hard timeout of 3 hours fetching url '
+                            'without content-length: %s', self.url)
                     break
 
             self.log_request(prox_rec_res.status, prox_rec_res.recorder.len)
