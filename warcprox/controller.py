@@ -36,6 +36,7 @@ import functools
 import doublethink
 import importlib
 import queue
+import socket
 
 class Factory:
     @staticmethod
@@ -319,13 +320,15 @@ class WarcproxController(object):
             status_info = self.status_info
         else:
             status_info = {
+                'id': 'warcprox:%s:%s' % (
+                    socket.gethostname(), self.proxy.server_port),
                 'role': 'warcprox',
                 'version': warcprox.__version__,
                 'ttl': self.HEARTBEAT_INTERVAL * 3,
+                'host': socket.gethostname(),
                 'port': self.proxy.server_port,
             }
         status_info.update(self.proxy.status())
-
         self.status_info = self.service_registry.heartbeat(status_info)
         self.logger.trace('status in service registry: %s', self.status_info)
 
