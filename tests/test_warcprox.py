@@ -1576,8 +1576,11 @@ def test_svcreg_status(warcprox_):
                 'rates_15min', 'active_requests','start_time','urls_processed',
                 'warc_bytes_written', 'postfetch_chain',
                 'earliest_still_active_fetch_start',}
+        assert status['id'] == 'warcprox:%s:%s' % (
+                socket.gethostname(), warcprox_.proxy.server_port)
         assert status['role'] == 'warcprox'
         assert status['version'] == warcprox.__version__
+        assert status['host'] == socket.gethostname()
         assert status['port'] == warcprox_.proxy.server_port
         assert status['pid'] == os.getpid()
         assert status['threads'] == warcprox_.proxy.pool._max_workers
