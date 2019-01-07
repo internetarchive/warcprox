@@ -143,10 +143,6 @@ class WarcproxController(object):
         self.playback_proxy = Factory.playback_proxy(
             self.proxy.ca, self.options)
 
-        # https://github.com/internetarchive/warcprox/wiki/benchmarking-number-of-threads
-        if not self.options.writer_threads:
-            self.options.writer_threads = 1
-
         self.build_postfetch_chain(self.proxy.recorded_url_q)
 
         self.service_registry = Factory.service_registry(options)

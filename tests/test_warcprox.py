@@ -3,7 +3,7 @@
 '''
 tests/test_warcprox.py - automated tests for warcprox
 
-Copyright (C) 2013-2018 Internet Archive
+Copyright (C) 2013-2019 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -844,10 +844,9 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
     # close the warc
     assert warcprox_.warc_writer_processor.writer_pool.warc_writers["test_dedup_buckets"]
     writer = warcprox_.warc_writer_processor.writer_pool.warc_writers["test_dedup_buckets"]
-    warc = writer._available_warcs.queue[0]
-    warc_path = os.path.join(warc.directory, warc.finalname)
+    warc_path = os.path.join(writer.directory, writer.finalname)
     assert not os.path.exists(warc_path)
-    warcprox_.warc_writer_processor.writer_pool.warc_writers["test_dedup_buckets"].close_writer()
+    warcprox_.warc_writer_processor.writer_pool.warc_writers["test_dedup_buckets"].close()
     assert os.path.exists(warc_path)
 
     # read the warc
@@ -1701,7 +1700,7 @@ def test_via_response_header(warcprox_, http_daemon, archiving_proxies, playback
     assert response.status_code == 200
     assert not 'via' in playback_response
 
-    warc = warcprox_.warc_writer_processor.writer_pool.default_warc_writer._available_warcs.queue[0].path
+    warc = warcprox_.warc_writer_processor.writer_pool.default_warc_writer.path
     with open(warc, 'rb') as f:
         for record in warcio.archiveiterator.ArchiveIterator(f):
             if record.rec_headers.get_header('warc-target-uri') == url:
@@ -1933,9 +1932,8 @@ def test_long_warcprox_meta(
     # check that warcprox-meta was parsed and honored ("warc-prefix" param)
     assert warcprox_.warc_writer_processor.writer_pool.warc_writers["test_long_warcprox_meta"]
     writer = warcprox_.warc_writer_processor.writer_pool.warc_writers["test_long_warcprox_meta"]
-    warc = writer._available_warcs.queue[0]
-    warc_path = os.path.join(warc.directory, warc.finalname)
-    warcprox_.warc_writer_processor.writer_pool.warc_writers["test_long_warcprox_meta"].close_writer()
+    warc_path = os.path.join(writer.directory, writer.finalname)
+    warcprox_.warc_writer_processor.writer_pool.warc_writers["test_long_warcprox_meta"].close()
     assert os.path.exists(warc_path)
 
     # read the warc
@@ -2118,7 +2116,7 @@ def test_dedup_min_text_size(http_daemon, warcprox_, archiving_proxies):
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
 
     # check that response records were written
-    warc = warcprox_.warc_writer_processor.writer_pool.default_warc_writer._available_warcs.queue[0].path
+    warc = warcprox_.warc_writer_processor.writer_pool.default_warc_writer.path
     with open(warc, 'rb') as f:
         rec_iter = iter(warcio.archiveiterator.ArchiveIterator(f))
         record = next(rec_iter)
@@ -2198,7 +2196,7 @@ def test_dedup_min_binary_size(http_daemon, warcprox_, archiving_proxies):
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
 
     # check that response records were written
-    warc = warcprox_.warc_writer_processor.writer_pool.default_warc_writer._available_warcs.queue[0].path
+    warc = warcprox_.warc_writer_processor.writer_pool.default_warc_writer.path
     with open(warc, 'rb') as f:
         rec_iter = iter(warcio.archiveiterator.ArchiveIterator(f))
         record = next(rec_iter)

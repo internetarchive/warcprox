@@ -1,7 +1,7 @@
 '''
 tests/test_writer.py - warcprox warc writing tests
 
-Copyright (C) 2017 Internet Archive
+Copyright (C) 2017-2019 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -49,7 +49,6 @@ def lock_file(q, filename):
     except IOError:
         q.put('FAILED TO OBTAIN LOCK')
 
-
 def test_warc_writer_locking(tmpdir):
     """Test if WarcWriter is locking WARC files.
     When we don't have the .open suffix, WarcWriter locks the file and the
@@ -64,7 +63,7 @@ def test_warc_writer_locking(tmpdir):
 
     dirname = os.path.dirname(str(tmpdir.mkdir('test-warc-writer')))
     wwriter = WarcWriter(Options(
-        directory=dirname, no_warc_open_suffix=True, writer_threads=1))
+        directory=dirname, no_warc_open_suffix=True))
     wwriter.write_records(recorded_url)
     warcs = [fn for fn in os.listdir(dirname) if fn.endswith('.warc')]
     assert warcs
@@ -75,7 +74,7 @@ def test_warc_writer_locking(tmpdir):
     p.start()
     p.join()
     assert q.get() == 'FAILED TO OBTAIN LOCK'
-    wwriter.close_writer()
+    wwriter.close()
 
     # locking must succeed after writer has closed the WARC file.
     p = Process(target=lock_file, args=(q, target_warc))
@@ -96,8 +95,7 @@ def test_special_dont_write_prefix():
         logging.debug('cd %s', tmpdir)
         os.chdir(tmpdir)
 
-        wwt = warcprox.writerthread.WarcWriterProcessor(
-                Options(prefix='-', writer_threads=1))
+        wwt = warcprox.writerthread.WarcWriterProcessor(Options(prefix='-'))
         wwt.inq = queue.Queue(maxsize=1)
         wwt.outq = queue.Queue(maxsize=1)
         try:
@@ -131,7 +129,7 @@ def test_special_dont_write_prefix():
             wwt.join()
 
         wwt = warcprox.writerthread.WarcWriterProcessor(
-                Options(writer_threads=1, blackout_period=60, prefix='foo'))
+                Options(blackout_period=60, prefix='foo'))
         wwt.inq = queue.Queue(maxsize=1)
         wwt.outq = queue.Queue(maxsize=1)
         try:
@@ -199,14 +197,12 @@ def test_special_dont_write_prefix():
             wwt.stop.set()
             wwt.join()
 
-
 def test_do_not_archive():
     with tempfile.TemporaryDirectory() as tmpdir:
         logging.debug('cd %s', tmpdir)
         os.chdir(tmpdir)
 
-        wwt = warcprox.writerthread.WarcWriterProcessor(
-                Options(writer_threads=1))
+        wwt = warcprox.writerthread.WarcWriterProcessor()
         wwt.inq = queue.Queue(maxsize=1)
         wwt.outq = queue.Queue(maxsize=1)
         try:
@@ -240,7 +236,6 @@ def test_do_not_archive():
             wwt.stop.set()
             wwt.join()
 
-
 def test_warc_writer_filename(tmpdir):
     """Test if WarcWriter is writing WARC files with custom filenames.
     """
@@ -253,11 +248,9 @@ def test_warc_writer_filename(tmpdir):
 
     dirname = os.path.dirname(str(tmpdir.mkdir('test-warc-writer')))
     wwriter = WarcWriter(Options(directory=dirname, prefix='foo',
-        warc_filename='{timestamp17}_{prefix}_{timestamp14}_{serialno}',
-        writer_threads=1))
+        warc_filename='{timestamp17}_{prefix}_{timestamp14}_{serialno}'))
     wwriter.write_records(recorded_url)
     warcs = [fn for fn in os.listdir(dirname)]
     assert warcs
     assert re.search(
-            r'\d{17}_foo_\d{14}_00000.warc.open',
-            wwriter._available_warcs.queue[0].path)
+            r'\d{17}_foo_\d{14}_00000.warc.open', wwriter.path)

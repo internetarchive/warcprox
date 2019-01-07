@@ -1,7 +1,7 @@
 '''
 warcprox/writer.py - warc writer, manages and writes records to warc files
 
-Copyright (C) 2013-2017 Internet Archive
+Copyright (C) 2013-2019 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -29,37 +29,41 @@ import warcprox
 import os
 import socket
 import random
-import threading
-try:
-    import queue
-except ImportError:
-    import Queue as queue
-import contextlib
 
-class _OneWritableWarc:
+class WarcWriter:
     '''
-    Utility class used by WarcWriter
+    A writer for one warc prefix, which rolls over to new warc file,
+    incrementing serial number, when size limit is hit. Should only be used
+    from one thread.
     '''
+    logger = logging.getLogger('warcprox.writer.WarcWriter')
 
-    logger = logging.getLogger('warcprox.writer._OneWritableWarc')
+    def __init__(self, options=warcprox.Options()):
+        self.options = options
 
-    def __init__(self, options=warcprox.Options(), randomtoken='0'):
+        self.gzip = options.gzip or False
+        self.record_builder = warcprox.warc.WarcRecordBuilder(
+                digest_algorithm=options.digest_algorithm or 'sha1',
+                base32=options.base32)
+
         self.f = None
         self.path = None
         self.finalname = None
         self.gzip = options.gzip or False
         self.prefix = options.prefix or 'warcprox'
         self.open_suffix = '' if options.no_warc_open_suffix else '.open'
-        self.randomtoken = randomtoken
         self.rollover_size = options.rollover_size or 1000000000
         self.rollover_idle_time = options.rollover_idle_time or None
         self.directory = options.directory or './warcs'
         self.filename_template = options.warc_filename or \
                 '{prefix}-{timestamp17}-{randomtoken}-{serialno}'
         self.last_activity = time.time()
+        self.serial = 0
+        self.randomtoken = ''.join(
+                random.sample('abcdefghijklmnopqrstuvwxyz0123456789', 8))
 
     # h3 default <!-- <property name="template" value="${prefix}-${timestamp17}-${serialno}-${heritrix.pid}~${heritrix.hostname}~${heritrix.port}" /> -->
-    def next_filename(self, serial):
+    def filename(self, serial):
         """WARC filename is configurable with CLI parameter --warc-filename.
         Default: '{prefix}-{timestamp17}-{randomtoken}-{serialno}'
         Available variables are: prefix, timestamp14, timestamp17, serialno,
@@ -81,13 +85,17 @@ class _OneWritableWarc:
         return fname
 
     def open(self, serial):
+        '''
+        Opens a new warc file with filename prefix `self.prefix` and serial
+        number `self.serial` and assigns file handle to `self.f`.
+        '''
         if not os.path.exists(self.directory):
             self.logger.info(
                     "warc destination directory %s doesn't exist, creating it",
                     self.directory)
             os.mkdir(self.directory)
 
-        self.finalname = self.next_filename(serial)
+        self.finalname = self.filename(serial)
         self.logger.trace('opening %s', self.finalname)
         self.path = os.path.sep.join(
                 [self.directory, self.finalname + self.open_suffix])
@@ -103,7 +111,53 @@ class _OneWritableWarc:
                         'could not lock file %s (%s)', self.path, exc)
         return self.f
 
+    def ensure_open(self):
+        '''
+        Ensures `self.f` is ready to write the next warc record.
+
+        Closes current warc if size limit has been reached. Then, if warc is
+        not open, opens one, and writes the warcinfo record.
+        '''
+        self.maybe_size_rollover()
+        if not self.f:
+            serial = self.serial
+            self.serial += 1
+            self.open(serial)
+            warcinfo = self.record_builder.build_warcinfo_record(self.finalname)
+            self.logger.debug('warcinfo.headers=%s', warcinfo.headers)
+            warcinfo.write_to(self.f, gzip=self.gzip)
+
+    def write_records(self, recorded_url):
+        '''
+        Returns tuple of records written, which are instances of
+        `hanzo.warctools.warc.WarcRecord`, decorated with `warc_filename` and
+        `offset` attributes.
+        '''
+        records = self.record_builder.build_warc_records(recorded_url)
+
+        self.ensure_open()
+        for record in records:
+            offset = self.f.tell()
+            record.write_to(self.f, gzip=self.gzip)
+            record.offset = offset
+            record.length = self.f.tell() - offset
+            record.warc_filename = self.finalname
+            self.logger.trace(
+                    'wrote warc record: warc_type=%s content_length=%s '
+                    'digest=%s offset=%d warc=%s url=%s', record.type,
+                    record.get_header(warctools.WarcRecord.CONTENT_LENGTH),
+                    record.get_header(b'WARC-Payload-Digest'), record.offset,
+                    self.path, record.get_header(warctools.WarcRecord.URL))
+
+        return records
+
     def close(self):
+        '''
+        Closes out the active warc.
+
+        The next call to `write_records()` will write to a a new warc file with
+        the serial number incremented.
+        '''
         if self.path:
             self.logger.trace('closing %s', self.finalname)
             if self.open_suffix == '':
@@ -136,112 +190,16 @@ class _OneWritableWarc:
                     self.finalname, os.path.getsize(self.path))
             self.close()
 
-class WarcWriter:
-    logger = logging.getLogger('warcprox.writer.WarcWriter')
-
-    def __init__(self, options=warcprox.Options()):
-        self.options = options
-
-        self.gzip = options.gzip or False
-        self.record_builder = warcprox.warc.WarcRecordBuilder(
-                digest_algorithm=options.digest_algorithm or 'sha1',
-                base32=options.base32)
-
-        self._available_warcs = queue.Queue()
-        self._warc_count = 0
-        self._warc_count_lock = threading.Lock()
-
-        self._serial = 0
-        self._serial_lock = threading.Lock()
-
-        self._randomtoken = ''.join(
-                random.sample('abcdefghijklmnopqrstuvwxyz0123456789', 8))
-
-    def _bespeak_warc(self):
-        try:
-            return self._available_warcs.get(block=False)
-        except queue.Empty:
-            with self._warc_count_lock:
-                if self._warc_count < self.options.writer_threads:
-                    self._warc_count += 1
-                    return _OneWritableWarc(self.options, self._randomtoken)
-            # else we're maxed out, wait for one to free up
-            return self._available_warcs.get(block=True)
-
-    @contextlib.contextmanager
-    def _warc(self):
-        warc = self._bespeak_warc()
-
-        warc.maybe_size_rollover()
-
-        # lazy file open
-        if warc.f == None:
-            with self._serial_lock:
-                serial = self._serial
-                self._serial += 1
-            warc.open(serial)
-            warcinfo = self.record_builder.build_warcinfo_record(warc.finalname)
-            self.logger.debug('warcinfo.headers=%s', warcinfo.headers)
-            warcinfo.write_to(warc.f, gzip=self.gzip)
-
-        yield warc
-
-        # __exit__()
-        warc.f.flush()
-        warc.last_activity = time.time()
-        self._available_warcs.put(warc)
-
-    def write_records(self, recorded_url):
-        """Returns tuple of records written, which are instances of
-        hanzo.warctools.warc.WarcRecord, decorated with "warc_filename" and
-        "offset" attributes."""
-        records = self.record_builder.build_warc_records(recorded_url)
-
-        with self._warc() as warc:
-            for record in records:
-                offset = warc.f.tell()
-                record.write_to(warc.f, gzip=self.gzip)
-                record.offset = offset
-                record.length = warc.f.tell() - offset
-                record.warc_filename = warc.finalname
-                self.logger.trace(
-                        'wrote warc record: warc_type=%s content_length=%s '
-                        'digest=%s offset=%d warc=%s url=%s',
-                        record.type,
-                        record.get_header(warctools.WarcRecord.CONTENT_LENGTH),
-                        record.get_header(b'WARC-Payload-Digest'),
-                        record.offset, warc.path,
-                        record.get_header(warctools.WarcRecord.URL))
-
-        return records
-
-    def maybe_idle_rollover(self):
-        warcs = []
-        while True:
-            try:
-                warc = self._available_warcs.get(block=False)
-                warcs.append(warc)
-            except queue.Empty:
-                break
-        for warc in warcs:
-            warc.maybe_idle_rollover()
-            self._available_warcs.put(warc)
-
-    def close_writer(self):
-        while self._warc_count > 0:
-            with self._warc_count_lock:
-                warc = self._available_warcs.get()
-                warc.close()
-                self._warc_count -= 1
-
 class WarcWriterPool:
+    '''
+    A `WarcWriter` per warc prefix. Should only be used from one thread.
+    '''
     logger = logging.getLogger("warcprox.writer.WarcWriterPool")
 
     def __init__(self, options=warcprox.Options()):
         self.default_warc_writer = WarcWriter(options)
         self.warc_writers = {}  # {prefix:WarcWriter}
         self.options = options
-        self._lock = threading.RLock()
         self._last_maybe = time.time()
 
     # chooses writer for filename specified by warcprox_meta["warc-prefix"] if set
@@ -251,16 +209,17 @@ class WarcWriterPool:
             # self.logger.info("recorded_url.warcprox_meta={} for {}".format(recorded_url.warcprox_meta, recorded_url.url))
             options = warcprox.Options(**vars(self.options))
             options.prefix = recorded_url.warcprox_meta["warc-prefix"]
-            with self._lock:
-                if not options.prefix in self.warc_writers:
-                    self.warc_writers[options.prefix] = WarcWriter(options)
-                w = self.warc_writers[options.prefix]
+            if not options.prefix in self.warc_writers:
+                self.warc_writers[options.prefix] = WarcWriter(options)
+            w = self.warc_writers[options.prefix]
         return w
 
     def write_records(self, recorded_url):
-        """Returns tuple of records written, which are instances of
-        hanzo.warctools.warc.WarcRecord, decorated with "warc_filename" and
-        "offset" attributes."""
+        '''
+        Returns tuple of records written, which are instances of
+        `hanzo.warctools.warc.WarcRecord`, decorated with `warc_filename` and
+        `offset` attributes.
+        '''
         return self._writer(recorded_url).write_records(recorded_url)
 
     def maybe_idle_rollover(self):
@@ -271,7 +230,8 @@ class WarcWriterPool:
             self._last_maybe = time.time()
 
     def close_writers(self):
-        self.default_warc_writer.close_writer()
-        for w in self.warc_writers.values():
-            w.close_writer()
+        self.default_warc_writer.close()
+        for prefix, writer in list(self.warc_writers.items()):
+            del self.warc_writers[prefix]
+            writer.close()
 

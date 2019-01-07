@@ -2,7 +2,7 @@
 warcprox/writerthread.py - warc writer thread, reads from the recorded url
 queue, writes warc records, runs final tasks after warc records are written
 
-Copyright (C) 2013-2018 Internet Archive
+Copyright (C) 2013-2019 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -43,45 +43,7 @@ class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
         warcprox.BaseStandardPostfetchProcessor.__init__(self, options=options)
         self.writer_pool = warcprox.writer.WarcWriterPool(options)
         self.method_filter = set(method.upper() for method in self.options.method_filter or [])
-
-        # set max_queued small, because self.inq is already handling queueing
-        self.thread_local = threading.local()
-        self.thread_profilers = {}
-        # for us; but give it a little breathing room to make sure it can keep
-        # worker threads busy
-        self.pool = warcprox.ThreadPoolExecutor(
-                max_workers=options.writer_threads or 1,
-                max_queued=10 * (options.writer_threads or 1))
-        self.batch = set()
         self.blackout_period = options.blackout_period or 0
-
-    def _startup(self):
-        self.logger.info('%s warc writer threads', self.pool._max_workers)
-        warcprox.BaseStandardPostfetchProcessor._startup(self)
-
-    def _get_process_put(self):
-        try:
-            recorded_url = self.inq.get(block=True, timeout=0.5)
-            self.batch.add(recorded_url)
-            self.pool.submit(self._wrap_process_url, recorded_url)
-        finally:
-            self.writer_pool.maybe_idle_rollover()
-
-    def _wrap_process_url(self, recorded_url):
-        if not getattr(self.thread_local, 'name_set', False):
-            threading.current_thread().name = 'WarcWriterThread(tid=%s)' % warcprox.gettid()
-            self.thread_local.name_set = True
-        if self.options.profile:
-            import cProfile
-            if not hasattr(self.thread_local, 'profiler'):
-                self.thread_local.profiler = cProfile.Profile()
-                tid = threading.current_thread().ident
-                self.thread_profilers[tid] = self.thread_local.profiler
-            self.thread_local.profiler.enable()
-            self._process_url(recorded_url)
-            self.thread_local.profiler.disable()
-        else:
-            self._process_url(recorded_url)
 
     def _process_url(self, recorded_url):
         try:
@@ -97,10 +59,6 @@ class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
             logging.error(
                     'caught exception processing %s', recorded_url.url,
                     exc_info=True)
-        finally:
-            self.batch.remove(recorded_url)
-            if self.outq:
-                self.outq.put(recorded_url)
 
     def _filter_accepts(self, recorded_url):
         if not self.method_filter:
