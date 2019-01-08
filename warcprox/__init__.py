@@ -1,7 +1,7 @@
 """
 warcprox/__init__.py - warcprox package main file, contains some utility code
 
-Copyright (C) 2013-2018 Internet Archive
+Copyright (C) 2013-2019 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -56,17 +56,6 @@ class Jsonner(json.JSONEncoder):
             return base64.b64encode(o).decode('ascii')
         else:
             return json.JSONEncoder.default(self, o)
-
-class ThreadPoolExecutor(concurrent.futures.ThreadPoolExecutor):
-    '''
-    `concurrent.futures.ThreadPoolExecutor` supporting a queue of limited size.
-
-    If `max_queued` is set, calls to `submit()` will block if necessary until a
-    free slot is available.
-    '''
-    def __init__(self, max_queued=None, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._work_queue = queue.Queue(maxsize=max_queued or 0)
 
 # XXX linux-specific
 def gettid():

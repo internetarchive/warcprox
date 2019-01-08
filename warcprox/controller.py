@@ -4,7 +4,7 @@ starting up and shutting down the various components of warcprox, and for
 sending heartbeats to the service registry if configured to do so; also has
 some memory profiling capabilities
 
-Copyright (C) 2013-2018 Internet Archive
+Copyright (C) 2013-2019 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -142,10 +142,6 @@ class WarcproxController(object):
                 self.stats_processor, self.postfetch_status, options)
         self.playback_proxy = Factory.playback_proxy(
             self.proxy.ca, self.options)
-
-        # https://github.com/internetarchive/warcprox/wiki/benchmarking-number-of-threads
-        if not self.options.writer_threads:
-            self.options.writer_threads = 1
 
         self.build_postfetch_chain(self.proxy.recorded_url_q)
 

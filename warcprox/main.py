@@ -4,7 +4,7 @@
 warcprox/main.py - entrypoint for warcprox executable, parses command line
 arguments, initializes components, starts controller, handles signals
 
-Copyright (C) 2013-2018 Internet Archive
+Copyright (C) 2013-2019 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -196,11 +196,6 @@ def _build_arg_parser(prog='warcprox', show_hidden=False):
             help=suppress(
                 'turn on performance profiling; summary statistics are dumped '
                 'every 10 minutes and at shutdown'))
-    hidden.add_argument(
-            '--writer-threads', dest='writer_threads', type=int, default=1,
-            help=suppress(
-                'number of warc writer threads; caution, see '
-                'https://github.com/internetarchive/warcprox/issues/101'))
     arg_parser.add_argument(
             '--onion-tor-socks-proxy', dest='onion_tor_socks_proxy',
             default=None, help=(
