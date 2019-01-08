@@ -4,7 +4,7 @@
 warcprox/main.py - entrypoint for warcprox executable, parses command line
 arguments, initializes components, starts controller, handles signals
 
-Copyright (C) 2013-2018 Internet Archive
+Copyright (C) 2013-2019 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License

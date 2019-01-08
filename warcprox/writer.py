@@ -148,6 +148,7 @@ class WarcWriter:
                     record.get_header(warctools.WarcRecord.CONTENT_LENGTH),
                     record.get_header(b'WARC-Payload-Digest'), record.offset,
                     self.path, record.get_header(warctools.WarcRecord.URL))
+        self.f.flush()
 
         return records
 
@@ -234,4 +235,16 @@ class WarcWriterPool:
         for prefix, writer in list(self.warc_writers.items()):
             del self.warc_writers[prefix]
             writer.close()
+
+    def close_for_prefix(self, prefix=None):
+        '''
+        Close warc writer for the given warc prefix, or the default prefix if
+        `prefix` is `None`.
+        '''
+        if prefix and prefix in self.warc_writers:
+            writer = self.warc_writers[prefix]
+            del self.warc_writers[prefix]
+            writer.close()
+        else:
+            self.default_warc_writer.close()
 

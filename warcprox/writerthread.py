@@ -33,6 +33,10 @@ import warcprox
 from concurrent import futures
 from datetime import datetime
 import threading
+try:
+    import queue
+except ImportError:
+    import Queue as queue
 
 class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
     logger = logging.getLogger("warcprox.writerthread.WarcWriterProcessor")
@@ -44,6 +48,27 @@ class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
         self.writer_pool = warcprox.writer.WarcWriterPool(options)
         self.method_filter = set(method.upper() for method in self.options.method_filter or [])
         self.blackout_period = options.blackout_period or 0
+        self.close_prefix_reqs = queue.Queue()
+
+    def _get_process_put(self):
+        while True:
+            try:
+                prefix = self.close_prefix_reqs.get_nowait()
+                self.writer_pool.close_for_prefix(prefix)
+            except queue.Empty:
+                break
+        super()._get_process_put()
+
+    def close_for_prefix(self, prefix=None):
+        '''
+        Request close of warc writer for the given warc prefix, or the default
+        prefix if `prefix` is `None`.
+
+        This API exists so that some code from outside of warcprox proper (in a
+        third-party plugin for example) can close open warcs promptly when it
+        knows they are finished.
+        '''
+        self.close_prefix_reqs.put(prefix)
 
     def _process_url(self, recorded_url):
         try:

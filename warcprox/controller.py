@@ -4,7 +4,7 @@ starting up and shutting down the various components of warcprox, and for
 sending heartbeats to the service registry if configured to do so; also has
 some memory profiling capabilities
 
-Copyright (C) 2013-2018 Internet Archive
+Copyright (C) 2013-2019 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
