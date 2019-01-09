@@ -32,6 +32,7 @@ deps = [
     'requests>=2.0.1',
     'PySocks>=1.6.8',
     'cryptography>=2.3',
+    'idna>=2.5,<2.8',
 ]
 try:
     import concurrent.futures
@@ -40,7 +41,7 @@ except:
 
 setuptools.setup(
         name='warcprox',
-        version='2.4b3.dev192',
+        version='2.4b3.dev193',
         description='WARC writing MITM HTTP/S proxy',
         url='https://github.com/internetarchive/warcprox',
         author='Noah Levitt',
