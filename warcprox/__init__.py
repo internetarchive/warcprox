@@ -81,11 +81,14 @@ class RequestBlockedByRule(Exception):
 class BasePostfetchProcessor(threading.Thread):
     logger = logging.getLogger("warcprox.BasePostfetchProcessor")
 
-    def __init__(self, options=Options()):
+    def __init__(self, options=Options(), controller=None, **kwargs):
         threading.Thread.__init__(self, name=self.__class__.__name__)
         self.options = options
+        self.controller = controller
+
         self.stop = threading.Event()
-        # these should be set before thread is started
+
+        # these should be set by the caller before thread is started
         self.inq = None
         self.outq = None
         self.profiler = None
@@ -205,8 +208,8 @@ class BaseBatchPostfetchProcessor(BasePostfetchProcessor):
         raise Exception('not implemented')
 
 class ListenerPostfetchProcessor(BaseStandardPostfetchProcessor):
-    def __init__(self, listener, options=Options()):
-        BaseStandardPostfetchProcessor.__init__(self, options)
+    def __init__(self, listener, options=Options(), controller=None, **kwargs):
+        BaseStandardPostfetchProcessor.__init__(self, options, controller, **kwargs)
         self.listener = listener
         self.name = listener.__class__.__name__
 
