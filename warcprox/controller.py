@@ -93,15 +93,19 @@ class Factory:
             return None
 
     @staticmethod
-    def plugin(qualname, options):
+    def plugin(qualname, options, controller=None):
         try:
             (module_name, class_name) = qualname.rsplit('.', 1)
             module_ = importlib.import_module(module_name)
             class_ = getattr(module_, class_name)
-            try: # new plugins take `options` argument
-                plugin = class_(options)
-            except: # backward-compatibility
-                plugin = class_()
+            try:
+                # new plugins take `options` and `controller` arguments
+                plugin = class_(options, controller)
+            except:
+                try: # medium plugins take `options` argument
+                    plugin = class_(options)
+                except: # old plugins take no arguments
+                    plugin = class_()
             # check that this is either a listener or a batch processor
             assert hasattr(plugin, 'notify') ^ hasattr(plugin, '_startup')
             return plugin
@@ -229,7 +233,7 @@ class WarcproxController(object):
                         crawl_logger, self.options))
 
         for qualname in self.options.plugins or []:
-            plugin = Factory.plugin(qualname, self.options)
+            plugin = Factory.plugin(qualname, self.options, self)
             if hasattr(plugin, 'notify'):
                 self._postfetch_chain.append(
                         warcprox.ListenerPostfetchProcessor(
