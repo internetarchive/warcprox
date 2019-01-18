@@ -2,7 +2,7 @@
 '''
 setup.py - setuptools installation configuration for warcprox
 
-Copyright (C) 2013-2018 Internet Archive
+Copyright (C) 2013-2019 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -26,13 +26,13 @@ import setuptools
 deps = [
     'certauth==1.1.6',
     'warctools>=4.10.0,<=4.10.0',
-    'urlcanon>=0.1.dev16,<=0.1.dev23',
-    'doublethink>=0.2.0.dev87,<=0.2.0.dev88',
-    'urllib3>=1.23,<=1.23',
-    'requests>=2.0.1,<=2.19.1',
-    'PySocks>=1.6.8,<=1.6.8',
-    'cryptography>=2.3,<=2.3.1',
-    'idna>=2.5,<2.8',
+    'urlcanon>=0.1.dev16',
+    'doublethink>=0.2.0.dev87',
+    'urllib3>=1.23',
+    'requests>=2.0.1',
+    'PySocks>=1.6.8',
+    'cryptography>=2.3',
+    'idna>=2.5',
 ]
 try:
     import concurrent.futures
@@ -41,7 +41,7 @@ except:
 
 setuptools.setup(
         name='warcprox',
-        version='2.4b3',
+        version='2.4b4.dev194',
         description='WARC writing MITM HTTP/S proxy',
         url='https://github.com/internetarchive/warcprox',
         author='Noah Levitt',
