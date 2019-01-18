@@ -1,7 +1,7 @@
 '''
 tests/test_writer.py - warcprox warc writing tests
 
-Copyright (C) 2017 Internet Archive
+Copyright (C) 2017-2019 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -36,6 +36,12 @@ import tempfile
 import logging
 import hashlib
 import queue
+import sys
+
+logging.basicConfig(
+        stream=sys.stdout, level=logging.TRACE,
+        format='%(asctime)s %(process)d %(levelname)s %(threadName)s '
+        '%(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s')
 
 def lock_file(q, filename):
     """Try to lock file and return 1 if successful, else return 0.
@@ -48,7 +54,6 @@ def lock_file(q, filename):
         q.put('OBTAINED LOCK')
     except IOError:
         q.put('FAILED TO OBTAIN LOCK')
-
 
 def test_warc_writer_locking(tmpdir):
     """Test if WarcWriter is locking WARC files.
@@ -64,7 +69,7 @@ def test_warc_writer_locking(tmpdir):
 
     dirname = os.path.dirname(str(tmpdir.mkdir('test-warc-writer')))
     wwriter = WarcWriter(Options(
-        directory=dirname, no_warc_open_suffix=True, writer_threads=1))
+        directory=dirname, no_warc_open_suffix=True))
     wwriter.write_records(recorded_url)
     warcs = [fn for fn in os.listdir(dirname) if fn.endswith('.warc')]
     assert warcs
@@ -75,7 +80,7 @@ def test_warc_writer_locking(tmpdir):
     p.start()
     p.join()
     assert q.get() == 'FAILED TO OBTAIN LOCK'
-    wwriter.close_writer()
+    wwriter.close()
 
     # locking must succeed after writer has closed the WARC file.
     p = Process(target=lock_file, args=(q, target_warc))
@@ -96,8 +101,7 @@ def test_special_dont_write_prefix():
         logging.debug('cd %s', tmpdir)
         os.chdir(tmpdir)
 
-        wwt = warcprox.writerthread.WarcWriterProcessor(
-                Options(prefix='-', writer_threads=1))
+        wwt = warcprox.writerthread.WarcWriterProcessor(Options(prefix='-'))
         wwt.inq = queue.Queue(maxsize=1)
         wwt.outq = queue.Queue(maxsize=1)
         try:
@@ -131,7 +135,7 @@ def test_special_dont_write_prefix():
             wwt.join()
 
         wwt = warcprox.writerthread.WarcWriterProcessor(
-                Options(writer_threads=1, blackout_period=60, prefix='foo'))
+                Options(blackout_period=60, prefix='foo'))
         wwt.inq = queue.Queue(maxsize=1)
         wwt.outq = queue.Queue(maxsize=1)
         try:
@@ -199,14 +203,12 @@ def test_special_dont_write_prefix():
             wwt.stop.set()
             wwt.join()
 
-
 def test_do_not_archive():
     with tempfile.TemporaryDirectory() as tmpdir:
         logging.debug('cd %s', tmpdir)
         os.chdir(tmpdir)
 
-        wwt = warcprox.writerthread.WarcWriterProcessor(
-                Options(writer_threads=1))
+        wwt = warcprox.writerthread.WarcWriterProcessor()
         wwt.inq = queue.Queue(maxsize=1)
         wwt.outq = queue.Queue(maxsize=1)
         try:
@@ -240,7 +242,6 @@ def test_do_not_archive():
             wwt.stop.set()
             wwt.join()
 
-
 def test_warc_writer_filename(tmpdir):
     """Test if WarcWriter is writing WARC files with custom filenames.
     """
@@ -253,11 +254,121 @@ def test_warc_writer_filename(tmpdir):
 
     dirname = os.path.dirname(str(tmpdir.mkdir('test-warc-writer')))
     wwriter = WarcWriter(Options(directory=dirname, prefix='foo',
-        warc_filename='{timestamp17}_{prefix}_{timestamp14}_{serialno}',
-        writer_threads=1))
+        warc_filename='{timestamp17}_{prefix}_{timestamp14}_{serialno}'))
     wwriter.write_records(recorded_url)
     warcs = [fn for fn in os.listdir(dirname)]
     assert warcs
     assert re.search(
-            r'\d{17}_foo_\d{14}_00000.warc.open',
-            wwriter._available_warcs.queue[0].path)
+            r'\d{17}_foo_\d{14}_00000.warc.open', wwriter.path)
+
+def test_close_for_prefix(tmpdir):
+    wwp = warcprox.writerthread.WarcWriterProcessor(
+            Options(directory=str(tmpdir)))
+    wwp.inq = queue.Queue(maxsize=1)
+    wwp.outq = queue.Queue(maxsize=1)
+
+    try:
+        wwp.start()
+
+        # write a record to the default prefix
+        recorder = ProxyingRecorder(io.BytesIO(b'some payload'), None)
+        recorder.read()
+        wwp.inq.put(RecordedUrl(
+            url='http://example.com/1', content_type='text/plain',
+            status=200, client_ip='127.0.0.2', request_data=b'abc',
+            response_recorder=recorder, remote_ip='127.0.0.3',
+            timestamp=datetime.utcnow(),
+            payload_digest=recorder.block_digest))
+        time.sleep(0.5)
+        rurl = wwp.outq.get() # wait for it to finish
+
+        assert rurl.url == b'http://example.com/1'
+        assert len(tmpdir.listdir()) == 1
+        assert tmpdir.listdir()[0].basename.startswith('warcprox-')
+        assert tmpdir.listdir()[0].basename.endswith('-00000.warc.open')
+        assert tmpdir.listdir()[0].basename == wwp.writer_pool.default_warc_writer.finalname + '.open'
+
+        # request close of default warc
+        wwp.close_for_prefix()
+
+        # write a record to some other prefix
+        recorder = ProxyingRecorder(io.BytesIO(b'some payload'), None)
+        recorder.read()
+        wwp.inq.put(RecordedUrl(
+            url='http://example.com/2', content_type='text/plain',
+            status=200, client_ip='127.0.0.2', request_data=b'abc',
+            response_recorder=recorder, remote_ip='127.0.0.3',
+            timestamp=datetime.utcnow(),
+            payload_digest=recorder.block_digest,
+            warcprox_meta={'warc-prefix': 'some-prefix'}))
+        time.sleep(0.5)
+        rurl = wwp.outq.get() # wait for it to finish
+
+        assert rurl.url == b'http://example.com/2'
+        assert len(tmpdir.listdir()) == 2
+        basenames = sorted(f.basename for f in tmpdir.listdir())
+        assert basenames[0].startswith('some-prefix-')
+        assert basenames[0].endswith('-00000.warc.open')
+        assert basenames[1].startswith('warcprox-')
+        assert basenames[1].endswith('-00000.warc')
+
+        # request close of warc with prefix
+        wwp.close_for_prefix('some-prefix')
+
+        # write another record to the default prefix
+        recorder = ProxyingRecorder(io.BytesIO(b'some payload'), None)
+        recorder.read()
+        wwp.inq.put(RecordedUrl(
+            url='http://example.com/3', content_type='text/plain',
+            status=200, client_ip='127.0.0.2', request_data=b'abc',
+            response_recorder=recorder, remote_ip='127.0.0.3',
+            timestamp=datetime.utcnow(),
+            payload_digest=recorder.block_digest))
+        time.sleep(0.5)
+        rurl = wwp.outq.get() # wait for it to finish
+
+        assert rurl.url == b'http://example.com/3'
+        # now some-prefix warc is closed and a new default prefix warc is open
+        basenames = sorted(f.basename for f in tmpdir.listdir())
+        assert len(basenames) == 3
+        assert basenames[0].startswith('some-prefix-')
+        assert basenames[0].endswith('-00000.warc')
+        assert basenames[1].startswith('warcprox-')
+        assert basenames[1].endswith('-00000.warc')
+        assert basenames[2].startswith('warcprox-')
+        assert basenames[2].endswith('-00001.warc.open')
+
+        # write another record to with prefix "some-prefix"
+        recorder = ProxyingRecorder(io.BytesIO(b'some payload'), None)
+        recorder.read()
+        wwp.inq.put(RecordedUrl(
+            url='http://example.com/4', content_type='text/plain',
+            status=200, client_ip='127.0.0.2', request_data=b'abc',
+            response_recorder=recorder, remote_ip='127.0.0.3',
+            timestamp=datetime.utcnow(),
+            payload_digest=recorder.block_digest,
+            warcprox_meta={'warc-prefix': 'some-prefix'}))
+        time.sleep(0.5)
+        rurl = wwp.outq.get() # wait for it to finish
+
+        assert rurl.url == b'http://example.com/4'
+        # new some-prefix warc will have a new random token and start over at
+        # serial 00000
+        basenames = sorted(f.basename for f in tmpdir.listdir())
+        assert len(basenames) == 4
+        assert basenames[0].startswith('some-prefix-')
+        assert basenames[1].startswith('some-prefix-')
+        # order of these two warcs depends on random token so we don't know
+        # which is which
+        assert basenames[0][-5:] != basenames[1][-5:]
+        assert '-00000.' in basenames[0]
+        assert '-00000.' in basenames[1]
+
+        assert basenames[2].startswith('warcprox-')
+        assert basenames[2].endswith('-00000.warc')
+        assert basenames[3].startswith('warcprox-')
+        assert basenames[3].endswith('-00001.warc.open')
+
+    finally:
+        wwp.stop.set()
+        wwp.join()

@@ -1,7 +1,7 @@
 """
 warcprox/__init__.py - warcprox package main file, contains some utility code
 
-Copyright (C) 2013-2018 Internet Archive
+Copyright (C) 2013-2019 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -57,17 +57,6 @@ class Jsonner(json.JSONEncoder):
         else:
             return json.JSONEncoder.default(self, o)
 
-class ThreadPoolExecutor(concurrent.futures.ThreadPoolExecutor):
-    '''
-    `concurrent.futures.ThreadPoolExecutor` supporting a queue of limited size.
-
-    If `max_queued` is set, calls to `submit()` will block if necessary until a
-    free slot is available.
-    '''
-    def __init__(self, max_queued=None, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._work_queue = queue.Queue(maxsize=max_queued or 0)
-
 # XXX linux-specific
 def gettid():
     try:
@@ -92,11 +81,14 @@ class RequestBlockedByRule(Exception):
 class BasePostfetchProcessor(threading.Thread):
     logger = logging.getLogger("warcprox.BasePostfetchProcessor")
 
-    def __init__(self, options=Options()):
+    def __init__(self, options=Options(), controller=None, **kwargs):
         threading.Thread.__init__(self, name=self.__class__.__name__)
         self.options = options
+        self.controller = controller
+
         self.stop = threading.Event()
-        # these should be set before thread is started
+
+        # these should be set by the caller before thread is started
         self.inq = None
         self.outq = None
         self.profiler = None
@@ -216,8 +208,8 @@ class BaseBatchPostfetchProcessor(BasePostfetchProcessor):
         raise Exception('not implemented')
 
 class ListenerPostfetchProcessor(BaseStandardPostfetchProcessor):
-    def __init__(self, listener, options=Options()):
-        BaseStandardPostfetchProcessor.__init__(self, options)
+    def __init__(self, listener, options=Options(), controller=None, **kwargs):
+        BaseStandardPostfetchProcessor.__init__(self, options, controller, **kwargs)
         self.listener = listener
         self.name = listener.__class__.__name__
 
