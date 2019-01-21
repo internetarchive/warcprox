@@ -57,6 +57,7 @@ class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
                 self.writer_pool.close_for_prefix(prefix)
             except queue.Empty:
                 break
+        self.writer_pool.maybe_idle_rollover()
         super()._get_process_put()
 
     def close_for_prefix(self, prefix=None):
