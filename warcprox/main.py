@@ -170,7 +170,7 @@ def _build_arg_parser(prog='warcprox', show_hidden=False):
                 'server, when using --cdxserver-dedup'))
     hidden.add_argument(
             '--cdxserver-dedup-max-threads', dest='cdxserver_dedup_max_threads',
-            type=int, default=400, help=suppress(
+            type=int, default=50, help=suppress(
                 'maximum number of cdx server dedup threads'))
     arg_parser.add_argument('--dedup-min-text-size', dest='dedup_min_text_size',
                             type=int, default=0,
