@@ -296,7 +296,7 @@ class CdxServerDedupLoader(warcprox.BaseBatchPostfetchProcessor, DedupableMixin)
     def __init__(self, cdx_dedup, options=warcprox.Options()):
         warcprox.BaseBatchPostfetchProcessor.__init__(self, options)
         DedupableMixin.__init__(self, options)
-        self.pool = futures.ThreadPoolExecutor(max_workers=400)
+        self.pool = futures.ThreadPoolExecutor(max_workers=options.cdxserver_dedup_max_threads)
         self.batch = set()
         self.cdx_dedup = cdx_dedup
 
