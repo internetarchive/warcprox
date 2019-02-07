@@ -34,6 +34,7 @@ import urllib3
 from urllib3.exceptions import HTTPError
 import collections
 from concurrent import futures
+from functools import lru_cache
 
 urllib3.disable_warnings()
 
@@ -236,6 +237,8 @@ class CdxServerDedup(DedupDb):
             headers['Cookie'] = options.cdxserver_dedup_cookies
         self.http_pool = urllib3.PoolManager(maxsize=maxsize, retries=0,
                                              timeout=2.0, headers=headers)
+        if options.cdxserver_dedup_lru_cache_size:
+            self.cached_lookup = lru_cache(maxsize=options.cdxserver_dedup_lru_cache_size)(self.lookup)
 
     def loader(self, *args, **kwargs):
         return CdxServerDedupLoader(self, self.options)
@@ -299,6 +302,7 @@ class CdxServerDedupLoader(warcprox.BaseBatchPostfetchProcessor, DedupableMixin)
         self.pool = futures.ThreadPoolExecutor(max_workers=options.cdxserver_dedup_max_threads)
         self.batch = set()
         self.cdx_dedup = cdx_dedup
+        self.use_lru_cache = options.cdxserver_dedup_lru_cache_size != None
 
     def _get_process_put(self):
         recorded_url = self.inq.get(block=True, timeout=0.5)
@@ -315,7 +319,11 @@ class CdxServerDedupLoader(warcprox.BaseBatchPostfetchProcessor, DedupableMixin)
         try:
             digest_key = warcprox.digest_str(recorded_url.payload_digest,
                                              self.options.base32)
-            dedup_info = self.cdx_dedup.lookup(digest_key, recorded_url.url)
+            if self.use_lru_cache:
+                dedup_info = self.cdx_dedup.cached_lookup(digest_key, recorded_url.url)
+                self.logger.info(self.cdx_dedup.cached_lookup.cache_info())
+            else:
+                dedup_info = self.cdx_dedup.lookup(digest_key, recorded_url.url)
             if dedup_info:
                 recorded_url.dedup_info = dedup_info
         except ValueError as exc:
