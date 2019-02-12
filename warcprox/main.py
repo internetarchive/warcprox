@@ -174,7 +174,7 @@ def _build_arg_parser(prog='warcprox', show_hidden=False):
                 'maximum number of cdx server dedup threads'))
     hidden.add_argument(
             '--cdxserver-dedup-lru-cache-size', dest='cdxserver_dedup_lru_cache_size',
-            type=int, help=suppress(
+            type=int, default=1024, help=suppress(
                 'enable in-memory LRU cache to reduce duplicate CDX server requests'))
     arg_parser.add_argument('--dedup-min-text-size', dest='dedup_min_text_size',
                             type=int, default=0,
