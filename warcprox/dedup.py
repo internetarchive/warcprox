@@ -318,7 +318,9 @@ class CdxServerDedupLoader(warcprox.BaseBatchPostfetchProcessor, DedupableMixin)
             digest_key = warcprox.digest_str(recorded_url.payload_digest,
                                              self.options.base32)
             dedup_info = self.cdx_dedup.cached_lookup(digest_key, recorded_url.url)
-            self.logger.info(self.cdx_dedup.cached_lookup.cache_info())
+            cache_info = self.cdx_dedup.cached_lookup.cache_info()
+            if (cache_info.hits + cache_info.misses) % 1000 == 0:
+                self.logger.info(self.cdx_dedup.cached_lookup.cache_info())
             if dedup_info:
                 recorded_url.dedup_info = dedup_info
         except ValueError as exc:
