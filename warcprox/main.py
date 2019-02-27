@@ -316,7 +316,11 @@ def main(argv=None):
         # SIGQUIT does not exist on some platforms (windows)
         pass
 
-    controller.run_until_shutdown()
+    try:
+        controller.run_until_shutdown()
+    except:
+        logging.fatal('unhandled exception in controller', exc_info=True)
+        sys.exit(1)
 
 def ensure_rethinkdb_tables(argv=None):
     '''
