@@ -33,7 +33,7 @@ deps = [
     'PySocks>=1.6.8',
     'cryptography>=2.3',
     'idna>=2.5',
-    'PyYAML<=3.13',
+    'PyYAML>=5.1',
 ]
 try:
     import concurrent.futures

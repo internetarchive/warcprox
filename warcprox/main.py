@@ -309,7 +309,7 @@ def main(argv=None):
 
     if args.logging_conf_file:
         with open(args.logging_conf_file, 'r') as fd:
-            conf = yaml.load(fd)
+            conf = yaml.safe_load(fd)
             logging.config.dictConfig(conf)
 
     # see https://github.com/pyca/cryptography/issues/2911
