@@ -30,6 +30,7 @@ except ImportError:
     import Queue as queue
 
 import logging
+import logging.config
 import sys
 import hashlib
 import argparse
@@ -39,6 +40,7 @@ import traceback
 import signal
 import threading
 import certauth.certauth
+import yaml
 import warcprox
 import doublethink
 import cryptography.hazmat.backends.openssl
@@ -240,6 +242,9 @@ def _build_arg_parser(prog='warcprox', show_hidden=False):
             '--trace', dest='trace', action='store_true',
             help='very verbose logging')
     arg_parser.add_argument(
+            '--logging-conf-file', dest='logging_conf_file', default=None,
+            help=('reads logging configuration from a YAML file'))
+    arg_parser.add_argument(
             '--version', action='version',
             version="warcprox {}".format(warcprox.__version__))
 
@@ -301,6 +306,11 @@ def main(argv=None):
             stream=sys.stdout, level=loglevel, format=(
                 '%(asctime)s %(process)d %(levelname)s %(threadName)s '
                 '%(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s'))
+
+    if args.logging_conf_file:
+        with open(args.logging_conf_file, 'r') as fd:
+            conf = yaml.safe_load(fd)
+            logging.config.dictConfig(conf)
 
     # see https://github.com/pyca/cryptography/issues/2911
     cryptography.hazmat.backends.openssl.backend.activate_builtin_random()
