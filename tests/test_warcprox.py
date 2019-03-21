@@ -965,12 +965,12 @@ def test_block_rules(http_daemon, https_daemon, warcprox_, archiving_proxies):
         },
         {
             "url_match": "SURT_MATCH",
-            "value": "http://(localhost:%s,)/fuh/" % (http_daemon.server_port),
+            "value": "http://(localhost,:%s)/fuh/" % (http_daemon.server_port),
         },
         {
             "url_match": "SURT_MATCH",
             # this rule won't match because of http scheme, https port
-            "value": "http://(localhost:%s,)/fuh/" % (https_daemon.server_port),
+            "value": "http://(localhost,:%s)/fuh/" % (https_daemon.server_port),
         },
         {
             "domain": "bad.domain.com",

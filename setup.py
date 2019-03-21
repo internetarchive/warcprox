@@ -26,7 +26,7 @@ import setuptools
 deps = [
     'certauth==1.1.6',
     'warctools>=4.10.0',
-    'urlcanon>=0.1.dev16',
+    'urlcanon>=0.3.0',
     'doublethink>=0.2.0.dev87',
     'urllib3>=1.14',
     'requests>=2.0.1',
