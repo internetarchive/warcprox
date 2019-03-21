@@ -530,6 +530,6 @@ class WarcProxy(SingleThreadedWarcProxy, warcprox.mitmproxy.PooledMitmProxy):
         self.remote_connection_pool.clear()
 
     def handle_error(self, request, client_address):
-        self.logger.warn(
+        self.logger.warning(
                 "exception processing request %s from %s", request,
                 client_address, exc_info=True)

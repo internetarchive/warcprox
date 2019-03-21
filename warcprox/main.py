@@ -264,7 +264,7 @@ def dump_state(signum=None, frame=None):
         except Exception as e:
             state_strs.append('<n/a:%r>' % e)
 
-    logging.warn(
+    logging.warning(
             'dumping state (caught signal %s)\n%s',
             signum, '\n'.join(state_strs))
 
@@ -402,7 +402,7 @@ def ensure_rethinkdb_tables(argv=None):
         did_something = True
     if args.rethinkdb_trough_db_url:
         dedup_db = warcprox.dedup.TroughDedupDb(options)
-        logging.warn(
+        logging.warning(
                 'trough is responsible for creating most of the rethinkdb '
                 'tables that it uses')
         did_something = True
