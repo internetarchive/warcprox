@@ -68,6 +68,7 @@ import certauth.certauth
 import warcprox
 import warcprox.main
 
+
 try:
     import http.client as http_client
 except ImportError:
@@ -93,9 +94,11 @@ logging.basicConfig(
         stream=sys.stdout, level=logging.TRACE,
         format='%(asctime)s %(process)d %(levelname)s %(threadName)s '
         '%(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s')
+
+logging.getLogger("urllib3").setLevel(logging.WARN)
 logging.getLogger("requests.packages.urllib3").setLevel(logging.WARN)
-warnings.simplefilter("ignore", category=requests.packages.urllib3.exceptions.InsecureRequestWarning)
-warnings.simplefilter("ignore", category=requests.packages.urllib3.exceptions.InsecurePlatformWarning)
+import urllib3 ; urllib3.disable_warnings()
+import requests.packages.urllib3 ; requests.packages.urllib3.disable_warnings()
 
 def wait(callback, timeout=10):
     start = time.time()
@@ -144,7 +147,7 @@ def dump_state(signum=None, frame=None):
         stack = traceback.format_stack(sys._current_frames()[th.ident])
         state_strs.append("".join(stack))
 
-    logging.warn("dumping state (caught signal {})\n{}".format(signum, "\n".join(state_strs)))
+    logging.warning("dumping state (caught signal {})\n{}".format(signum, "\n".join(state_strs)))
 
 signal.signal(signal.SIGQUIT, dump_state)
 
@@ -446,7 +449,7 @@ def warcprox_(request, http_daemon, https_daemon):
                 logging.info('dropping rethinkdb database %r', parsed.database)
                 rr.db_drop(parsed.database).run()
             except Exception as e:
-                logging.warn(
+                logging.warning(
                         'problem deleting rethinkdb database %r: %s',
                         parsed.database, e)
         logging.info('deleting working directory %r', work_dir)
@@ -1762,7 +1765,7 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
 
     crawl_log = open(default_crawl_log_path, 'rb').read()
     # tests will fail in year 3000 :)
-    assert re.match(b'\A2[^\n]+\n\Z', crawl_log)
+    assert re.match(br'\A2[^\n]+\n\Z', crawl_log)
     assert crawl_log[24:31] == b'   200 '
     assert crawl_log[31:42] == b'        54 '
     fields = crawl_log.split()
@@ -1782,7 +1785,7 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     assert extra_info['contentSize'] == 145
 
     crawl_log_1 = open(file, 'rb').read()
-    assert re.match(b'\A2[^\n]+\n\Z', crawl_log_1)
+    assert re.match(br'\A2[^\n]+\n\Z', crawl_log_1)
     assert crawl_log_1[24:31] == b'   200 '
     assert crawl_log_1[31:42] == b'        54 '
     fields = crawl_log_1.split()
@@ -1820,7 +1823,7 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
 
     crawl_log_2 = open(file, 'rb').read()
 
-    assert re.match(b'\A2[^\n]+\n\Z', crawl_log_2)
+    assert re.match(br'\A2[^\n]+\n\Z', crawl_log_2)
     assert crawl_log_2[24:31] == b'   200 '
     assert crawl_log_2[31:42] == b'        54 '
     fields = crawl_log_2.split()
@@ -1853,7 +1856,7 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
 
     assert os.path.exists(file)
     crawl_log_3 = open(file, 'rb').read()
-    assert re.match(b'\A2[^\n]+\n\Z', crawl_log_3)
+    assert re.match(br'\A2[^\n]+\n\Z', crawl_log_3)
     assert crawl_log_3[24:31] == b'   200 '
     assert crawl_log_3[31:42] == b'         0 '
     fields = crawl_log_3.split()
@@ -1893,7 +1896,7 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     assert os.path.exists(file)
     crawl_log_4 = open(file, 'rb').read()
 
-    assert re.match(b'\A2[^\n]+\n\Z', crawl_log_4)
+    assert re.match(br'\A2[^\n]+\n\Z', crawl_log_4)
     assert crawl_log_4[24:31] == b'   204 '
     assert crawl_log_4[31:42] == b'        38 '
     fields = crawl_log_4.split()

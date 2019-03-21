@@ -71,7 +71,7 @@ class RethinkCaptures:
                                 "unexpected result saving batch of %s: %s "
                                 "entries" % (len(self._batch), result))
                     if result["replaced"] > 0 or result["unchanged"] > 0:
-                        self.logger.warn(
+                        self.logger.warning(
                                 "inserted=%s replaced=%s unchanged=%s in big "
                                 "captures table (normally replaced=0 and "
                                 "unchanged=0)", result["inserted"],
@@ -148,7 +148,7 @@ class RethinkCaptures:
                         recorded_url.payload_digest.digest()
                         ).decode("utf-8")
             else:
-                self.logger.warn(
+                self.logger.warning(
                         "digest type is %r but big captures table is indexed "
                         "by sha1",
                         recorded_url.payload_digest.name)

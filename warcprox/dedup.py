@@ -374,7 +374,7 @@ class BatchTroughStorer(warcprox.BaseBatchPostfetchProcessor):
             except futures.TimeoutError as e:
                 # the remaining threads actually keep running in this case,
                 # there's no way to stop them, but that should be harmless
-                logging.warn(
+                logging.warning(
                     'timed out saving dedup info to trough', exc_info=True)
 
 class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
@@ -458,7 +458,7 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
                                 recorded_url.dedup_info = entry
                     except Exception as e:
                         # batch_lookup raised exception or something
-                        logging.warn(
+                        logging.warning(
                                 'problem looking up dedup info for %s urls '
                                 'in bucket %s', len(buckets[bucket]), bucket,
                                 exc_info=True)
@@ -474,7 +474,7 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
             except futures.TimeoutError as e:
                 # the remaining threads actually keep running in this case,
                 # there's no way to stop them, but that should be harmless
-                self.logger.warn(
+                self.logger.warning(
                     'timed out loading dedup info from trough', exc_info=True)
 
 class TroughDedupDb(DedupDb, DedupableMixin):

@@ -190,7 +190,7 @@ class TroughClient(object):
             return
         if response.status_code != 200:
             self._write_url_cache.pop(segment_id, None)
-            self.logger.warn(
+            self.logger.warning(
                     'unexpected response %r %r %r from %r to sql=%r',
                     response.status_code, response.reason, response.text,
                     write_url, sql)

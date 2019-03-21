@@ -100,7 +100,7 @@ class ProxyingRecorder(object):
                 self.proxy_client.sendall(hunk)
             except BaseException as e:
                 self._proxy_client_conn_open = False
-                self.logger.warn(
+                self.logger.warning(
                         '%s sending data to proxy client for url %s',
                         e, self.url)
                 self.logger.info(
@@ -283,7 +283,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                         self._remote_server_conn.sock = ssl.wrap_socket(
                                 self._remote_server_conn.sock)
                     except ssl.SSLError:
-                        self.logger.warn(
+                        self.logger.warning(
                                 "failed to establish ssl connection to %s; "
                                 "python ssl library does not support SNI, "
                                 "consider upgrading to python 2.7.9+ or 3.4+",
@@ -332,7 +332,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 else:
                     self.send_error(500, str(e))
             except Exception as f:
-                self.logger.warn("failed to send error response ({}) to proxy client: {}".format(e, f))
+                self.logger.warning("failed to send error response ({}) to proxy client: {}".format(e, f))
             return
 
         # Reload!
@@ -386,7 +386,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             return self._proxy_request()
         except Exception as e:
             if self.server.shutting_down:
-                self.logger.warn(
+                self.logger.warning(
                         'sending 503 warcprox shutting down %r: %r',
                         self.requestline, e)
                 self.send_error(503, 'warcprox shutting down')
@@ -521,7 +521,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             return self.do_COMMAND
 
     def log_error(self, fmt, *args):
-        self.logger.warn(fmt, *args)
+        self.logger.warning(fmt, *args)
 
 class PooledMixIn(socketserver.ThreadingMixIn):
     logger = logging.getLogger("warcprox.mitmproxy.PooledMixIn")
