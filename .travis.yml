@@ -8,7 +8,7 @@ python:
 - 3.4
 - 2.7
 - pypy
-- pypy3
+- pypy3.5
 - nightly
 
 matrix:
