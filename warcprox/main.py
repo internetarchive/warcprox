@@ -29,7 +29,6 @@ try:
 except ImportError:
     import Queue as queue
 
-import json
 import logging
 import logging.config
 import sys
@@ -41,6 +40,7 @@ import traceback
 import signal
 import threading
 import certauth.certauth
+import yaml
 import warcprox
 import doublethink
 import cryptography.hazmat.backends.openssl
@@ -243,7 +243,7 @@ def _build_arg_parser(prog='warcprox', show_hidden=False):
             help='very verbose logging')
     arg_parser.add_argument(
             '--logging-conf-file', dest='logging_conf_file', default=None,
-            help=('reads logging configuration from a JSON file'))
+            help=('reads logging configuration from a YAML file'))
     arg_parser.add_argument(
             '--version', action='version',
             version="warcprox {}".format(warcprox.__version__))
@@ -309,7 +309,7 @@ def main(argv=None):
 
     if args.logging_conf_file:
         with open(args.logging_conf_file, 'r') as fd:
-            conf = json.load(fd)
+            conf = yaml.load(fd)
             logging.config.dictConfig(conf)
 
     # see https://github.com/pyca/cryptography/issues/2911
