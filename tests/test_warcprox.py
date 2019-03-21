@@ -68,9 +68,6 @@ import certauth.certauth
 import warcprox
 import warcprox.main
 
-# https://urllib3.readthedocs.io/en/latest/advanced-usage.html#ssl-warnings
-import urllib3
-urllib3.disable_warnings()
 
 try:
     import http.client as http_client
@@ -97,9 +94,11 @@ logging.basicConfig(
         stream=sys.stdout, level=logging.TRACE,
         format='%(asctime)s %(process)d %(levelname)s %(threadName)s '
         '%(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s')
+
+logging.getLogger("urllib3").setLevel(logging.WARN)
 logging.getLogger("requests.packages.urllib3").setLevel(logging.WARN)
-warnings.simplefilter("ignore", category=requests.packages.urllib3.exceptions.InsecureRequestWarning)
-warnings.simplefilter("ignore", category=requests.packages.urllib3.exceptions.InsecurePlatformWarning)
+import urllib3 ; urllib3.disable_warnings()
+import requests.packages.urllib3 ; requests.packages.urllib3.disable_warnings()
 
 def wait(callback, timeout=10):
     start = time.time()
