@@ -5,7 +5,7 @@
 
 set -x
 
-pip install git+https://github.com/jkafader/snakebite@feature/python3-version-string
+pip install git+https://github.com/nlevitt/snakebite.git@py3
 pip install git+https://github.com/internetarchive/trough.git
 
 mkdir /etc/trough
