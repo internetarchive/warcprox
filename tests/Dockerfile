@@ -80,7 +80,7 @@ RUN apt-get install -y libsqlite3-dev
 # trough itself
 RUN virtualenv -p python3 /opt/trough-ve3 \
     && . /opt/trough-ve3/bin/activate \
-    && pip install git+https://github.com/jkafader/snakebite@feature/python3-version-string \
+    && pip install git+https://github.com/nlevitt/snakebite.git@py3 \
     && pip install git+https://github.com/internetarchive/trough.git
 
 RUN mkdir -vp /etc/service/trough-sync-local \
