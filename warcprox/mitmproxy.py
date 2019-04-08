@@ -45,6 +45,11 @@ try:
     http_client._MAXLINE = 4194304  # 4 MiB
 except ImportError:
     import httplib as http_client
+# http_client has an arbitrary limit of 100 HTTP Headers which is too low and
+# it raises an HTTPException if the target URL has more.
+# https://github.com/python/cpython/blob/3.7/Lib/http/client.py#L113
+http_client._MAXHEADERS = 7000
+
 import json
 import socket
 import logging
