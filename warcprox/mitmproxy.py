@@ -415,9 +415,13 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         try:
             return http_server.BaseHTTPRequestHandler.send_error(
                     self, code, message, explain)
-        except:
-            self.logger.error(
-                    'send_error(%r, %r, %r) raised exception', exc_info=True)
+        except Exception as e:
+            level = logging.ERROR
+            if isinstance(e, OSError) and e.errno == 9:
+                level = logging.TRACE
+            self.logger.log(
+                    level, 'send_error(%r, %r, %r) raised exception',
+                    exc_info=True)
             return None
 
     def _proxy_request(self, extra_response_headers={}):
