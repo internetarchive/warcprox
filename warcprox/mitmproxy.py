@@ -413,6 +413,8 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         if hasattr(self, '_headers_buffer') and not self._headers_buffer:
             self._headers_buffer = []
         try:
+            if not self._sock:
+                return None
             return http_server.BaseHTTPRequestHandler.send_error(
                     self, code, message, explain)
         except:
