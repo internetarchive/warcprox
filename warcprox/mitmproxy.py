@@ -487,9 +487,14 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                     tmp_file_max_memory_size=self._tmp_file_max_memory_size)
             prox_rec_res.begin(extra_response_headers=extra_response_headers)
 
-            buf = prox_rec_res.read(65536)
+            buf = None
             while buf != b'':
-                buf = prox_rec_res.read(65536)
+                try:
+                    buf = prox_rec_res.read(65536)
+                except http_client.IncompleteRead as e:
+                    self.logger.warn('%s from %s', e, self.url)
+                    buf = b''
+
                 if (self._max_resource_size and
                         prox_rec_res.recorder.len > self._max_resource_size):
                     prox_rec_res.truncated = b'length'
