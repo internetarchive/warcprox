@@ -68,7 +68,6 @@ import certauth.certauth
 import warcprox
 import warcprox.main
 
-
 try:
     import http.client as http_client
 except ImportError:
@@ -282,6 +281,15 @@ class _TestHttpRequestHandler(http_server.BaseHTTPRequestHandler):
             payload = b'Test.'
             actual_headers = (b'Content-Type: text/plain\r\n'
                            + b'Content-Length: ' + str(len(payload)).encode('ascii') + b'\r\n')
+        elif self.path == '/incomplete-read':
+            headers = (b'HTTP/1.1 200 OK\r\n'
+                     + b'Content-Type: text/plain\r\n'
+                     + b'Transfer-Encoding: chunked\r\n'
+                     + b'\r\n')
+            # payload = b'''1\r\na'''
+            payload = chunkify(
+                    b'Server closes connection when client expects next chunk')
+            payload = payload[:-7]
         else:
             payload = b'404 Not Found\n'
             headers = (b'HTTP/1.1 404 Not Found\r\n'
@@ -295,7 +303,9 @@ class _TestHttpRequestHandler(http_server.BaseHTTPRequestHandler):
         headers, payload = self.build_response()
         self.connection.sendall(headers)
         self.connection.sendall(payload)
-        if self.path in ('/missing-content-length', '/empty-response'):
+        if self.path in (
+                '/missing-content-length', '/empty-response',
+                '/incomplete-read'):
             # server must close the connection, else client has no idea if
             # there is more data coming
             self.connection.shutdown(socket.SHUT_RDWR)
@@ -1614,12 +1624,10 @@ def test_controller_with_defaults():
     assert not wwp.writer_pool.default_warc_writer.record_builder.base32
     assert wwp.writer_pool.default_warc_writer.record_builder.digest_algorithm == 'sha1'
 
-
 class EarlyPlugin(warcprox.BaseStandardPostfetchProcessor):
     CHAIN_POSITION = 'early'
     def _process_url(self):
         pass
-
 
 def test_load_plugin():
     options = warcprox.Options(port=0, plugins=[
@@ -2225,6 +2233,18 @@ def test_dedup_min_binary_size(http_daemon, warcprox_, archiving_proxies):
             assert record.rec_headers.get_header('warc-target-uri') == url
         with pytest.raises(StopIteration):
             next(rec_iter)
+
+def test_incomplete_read(http_daemon, warcprox_, archiving_proxies):
+    urls_before = warcprox_.proxy.running_stats.urls
+
+    # see https://github.com/internetarchive/warcprox/pull/123
+    url = 'http://localhost:%s/incomplete-read' % http_daemon.server_port
+    with pytest.raises(requests.exceptions.ChunkedEncodingError):
+        response = requests.get(
+            url, proxies=archiving_proxies, verify=False, timeout=10)
+
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
 
 if __name__ == '__main__':
     pytest.main()
