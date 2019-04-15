@@ -2243,6 +2243,11 @@ def test_incomplete_read(http_daemon, warcprox_, archiving_proxies):
         response = requests.get(
             url, proxies=archiving_proxies, verify=False, timeout=10)
 
+    # although `requests.get` raises exception here, other clients like
+    # browsers put up with the server misbehavior; warcprox does too, and will
+    # record the response verbatim in the warc; this `wait()` call tests
+    # that a warc record is written
+
     # wait for postfetch chain
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
 

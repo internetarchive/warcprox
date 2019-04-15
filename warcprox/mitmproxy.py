@@ -493,7 +493,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                     buf = prox_rec_res.read(65536)
                 except http_client.IncompleteRead as e:
                     self.logger.warn('%s from %s', e, self.url)
-                    buf = b''
+                    buf = e.partial
 
                 if (self._max_resource_size and
                         prox_rec_res.recorder.len > self._max_resource_size):
