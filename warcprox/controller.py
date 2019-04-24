@@ -441,7 +441,12 @@ class WarcproxController(object):
                     exc_info=True)
             pass
         finally:
-            self.shutdown()
+            try:
+                self.shutdown()
+            except:
+                self.logger.critical("graceful shutdown failed", exc_info=True)
+                self.logger.critical("killing myself -9")
+                os.kill(os.getpid(), 9)
 
     def _dump_profiling(self):
         import pstats, tempfile, os, io
