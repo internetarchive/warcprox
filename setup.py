@@ -28,7 +28,7 @@ deps = [
     'warctools>=4.10.0',
     'urlcanon>=0.3.0',
     'doublethink>=0.2.0.dev87',
-    'urllib3>=1.14',
+    'urllib3>=1.14,<1.25',
     'requests>=2.0.1',
     'PySocks>=1.6.8',
     'cryptography>=2.3',
@@ -42,7 +42,7 @@ except:
 
 setuptools.setup(
         name='warcprox',
-        version='2.4.6',
+        version='2.4.7',
         description='WARC writing MITM HTTP/S proxy',
         url='https://github.com/internetarchive/warcprox',
         author='Noah Levitt',
