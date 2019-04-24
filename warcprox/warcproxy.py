@@ -47,6 +47,7 @@ from urllib3 import PoolManager
 import tempfile
 import hashlib
 import doublethink
+import re
 
 class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
     '''
@@ -387,9 +388,8 @@ class RecordedUrl:
 
         self.mimetype = content_type
         if self.mimetype:
-            n = self.mimetype.find(";")
-            if n >= 0:
-                self.mimetype = self.mimetype[:n]
+            # chop off subtype, and ensure there's no whitespace
+            self.mimetype = re.split(r'[;\s]', self.mimetype, 2)[0]
 
         self.custom_type = custom_type
         self.status = status
