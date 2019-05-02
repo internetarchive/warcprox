@@ -35,6 +35,13 @@ try:
     import urllib.parse as urllib_parse
 except ImportError:
     import urlparse as urllib_parse
+# In python2/3, urllib parse caches in memory URL parsing results to avoid
+# repeating the process for the same URL. The problem is that the default
+# in memory cache size is just 20.
+# https://github.com/python/cpython/blob/3.7/Lib/urllib/parse.py#L80
+# since we do a lot of URL parsing, it makes sense to increase cache size.
+urllib_parse.MAX_CACHE_SIZE = 2000
+
 try:
     import http.client as http_client
     # In python3 http.client.parse_headers() enforces http_client._MAXLINE
