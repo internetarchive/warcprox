@@ -27,6 +27,7 @@ import logging
 from argparse import Namespace as _Namespace
 from pkg_resources import get_distribution as _get_distribution
 import concurrent.futures
+from functools import lru_cache
 try:
     import queue
 except ImportError:
@@ -35,6 +36,7 @@ import json
 
 __version__ = _get_distribution('warcprox').version
 
+@lru_cache(maxsize=1024)
 def digest_str(hash_obj, base32=False):
     import base64
     return hash_obj.name.encode('utf-8') + b':' + (
