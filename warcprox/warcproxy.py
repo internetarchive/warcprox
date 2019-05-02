@@ -350,6 +350,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         # logging better handled elsewhere?
         pass
 
+RE_MIMETYPE = re.compile(r'[;\s]')
 
 class RecordedUrl:
     logger = logging.getLogger("warcprox.warcproxy.RecordedUrl")
@@ -389,7 +390,7 @@ class RecordedUrl:
         self.mimetype = content_type
         if self.mimetype:
             # chop off subtype, and ensure there's no whitespace
-            self.mimetype = re.split(r'[;\s]', self.mimetype, 2)[0]
+            self.mimetype = RE_MIMETYPE.split(self.mimetype, 2)[0]
 
         self.custom_type = custom_type
         self.status = status
