@@ -125,48 +125,59 @@ class WarcRecordBuilder:
             headers.append((warctools.WarcRecord.CONCURRENT_TO, concurrent_to))
         if content_type is not None:
             headers.append((warctools.WarcRecord.CONTENT_TYPE, content_type))
-        if payload_digest is not None:
-            headers.append((warctools.WarcRecord.PAYLOAD_DIGEST, payload_digest))
         # truncated value may be 'length' or 'time'
         if truncated is not None:
             headers.append((b'WARC-Truncated', truncated))
+        if content_length is not None:
+            headers.append((
+                warctools.WarcRecord.CONTENT_LENGTH,
+                str(content_length).encode('latin1')))
 
         if recorder is not None:
-            if content_length is not None:
-                headers.append((
-                    warctools.WarcRecord.CONTENT_LENGTH,
-                    str(content_length).encode('latin1')))
-            else:
+            if payload_digest is not None:
+                headers.append(
+                        (warctools.WarcRecord.PAYLOAD_DIGEST, payload_digest))
+            if content_length is None:
                 headers.append((
                     warctools.WarcRecord.CONTENT_LENGTH,
                     str(len(recorder)).encode('latin1')))
             headers.append((warctools.WarcRecord.BLOCK_DIGEST,
                 warcprox.digest_str(recorder.block_digest, self.base32)))
             recorder.tempfile.seek(0)
-            record = warctools.WarcRecord(headers=headers, content_file=recorder.tempfile)
+            record = warctools.WarcRecord(
+                    headers=headers, content_file=recorder.tempfile)
         else:
-            if content_length is not None:
-                headers.append((
-                    warctools.WarcRecord.CONTENT_LENGTH,
-                    str(content_length).encode('latin1')))
-            else:
+            if content_length is None:
                 headers.append((
                     warctools.WarcRecord.CONTENT_LENGTH,
                     str(len(data)).encode('latin1')))
-            # no http headers so block digest == payload digest
-            if not payload_digest:
-                payload_digest = warcprox.digest_str(
+
+            block_digest = None
+            if not hasattr(data, 'read'):
+                block_digest = warcprox.digest_str(
                         hashlib.new(self.digest_algorithm, data), self.base32)
-                headers.append((
-                    warctools.WarcRecord.PAYLOAD_DIGEST, payload_digest))
-            headers.append((warctools.WarcRecord.BLOCK_DIGEST, payload_digest))
+
+            if not content_type.lower().startswith(b'application/http'):
+                # no http headers, so block digest == payload digest
+                if payload_digest and not block_digest:
+                    block_digest = payload_digest
+                elif block_digest and not payload_digest:
+                    payload_digest = block_digest
+
+            if block_digest:
+                headers.append(
+                        (warctools.WarcRecord.BLOCK_DIGEST, block_digest))
+            if payload_digest:
+                headers.append(
+                        (warctools.WarcRecord.PAYLOAD_DIGEST, payload_digest))
+
             if hasattr(data, 'read'):
                 record = warctools.WarcRecord(
                         headers=headers, content_file=data)
             else:
                 content_tuple = content_type, data
                 record = warctools.WarcRecord(
-                        headers=headers, content=content_tuple)
+                        headers=headers, content=(content_type, data))
 
         return record
 
