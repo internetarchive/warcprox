@@ -240,7 +240,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         else:
             self.url = self.path
             u = urllib_parse.urlparse(self.url)
-            if u.scheme != 'http':
+            if u.scheme != 'http' or u.netloc == '':
                 raise Exception(
                         'unable to parse request %r as a proxy request' % (
                             self.requestline))
