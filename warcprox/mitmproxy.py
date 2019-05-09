@@ -549,12 +549,6 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             if not is_connection_dropped(self._remote_server_conn):
                 self._conn_pool._put_conn(self._remote_server_conn)
         except Exception as e:
-            if type(e) in (socket.timeout, NewConnectionError):
-                with self.server.bad_hostnames_ports_lock:
-                    hostname_port = self._hostname_port_cache_key()
-                    self.server.bad_hostnames_ports[hostname_port] = 1
-                    self.logger.info('bad_hostnames_ports cache size: %d',
-                                     len(self.server.bad_hostnames_ports))
             self._remote_server_conn.sock.shutdown(socket.SHUT_RDWR)
             self._remote_server_conn.sock.close()
             raise
