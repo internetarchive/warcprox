@@ -48,6 +48,8 @@ import tempfile
 import hashlib
 import doublethink
 import re
+from threading import RLock
+from cachetools import TTLCache
 
 class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
     '''
@@ -431,6 +433,11 @@ class SingleThreadedWarcProxy(http_server.HTTPServer, object):
         self.status_callback = status_callback
         self.stats_db = stats_db
         self.options = options
+        # TTLCache is not thread-safe. Access to the shared cache from multiple
+        # threads must be properly synchronized with an RLock according to ref:
+        # https://cachetools.readthedocs.io/en/latest/
+        self.bad_hostnames_ports = TTLCache(maxsize=1024, ttl=60)
+        self.bad_hostnames_ports_lock = RLock()
         self.remote_connection_pool = PoolManager(
             num_pools=max(round(options.max_threads / 6), 200) if options.max_threads else 200)
         server_address = (
