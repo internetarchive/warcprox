@@ -549,6 +549,18 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             if not is_connection_dropped(self._remote_server_conn):
                 self._conn_pool._put_conn(self._remote_server_conn)
         except Exception as e:
+            # A common error is to connect to the remote server successfully
+            # but raise a `RemoteDisconnected` exception when trying to begin
+            # downloading. Its caused by prox_rec_res.begin(...) which calls
+            # http_client._read_status(). In that case, the host is also bad
+            # and we must add it to `bad_hostnames_ports` cache.
+            if type(e) == http_client.RemoteDisconnected:
+                with self.server.bad_hostnames_ports_lock:
+                    host_port = self._hostname_port_cache_key()
+                    self.server.bad_hostnames_ports[host_port] = 1
+                    self.logger.info('bad_hostnames_ports cache size: %d',
+                                     len(self.server.bad_hostnames_ports))
+
             self._remote_server_conn.sock.shutdown(socket.SHUT_RDWR)
             self._remote_server_conn.sock.close()
             raise
