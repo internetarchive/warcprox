@@ -42,6 +42,7 @@ from warcprox.mitmproxy import MitmProxyHandler
 import warcprox
 import sqlite3
 import threading
+from cachetools import TTLCache
 
 class PlaybackProxyHandler(MitmProxyHandler):
     logger = logging.getLogger("warcprox.playback.PlaybackProxyHandler")
@@ -219,6 +220,8 @@ class PlaybackProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
         self.playback_index_db = playback_index_db
         self.warcs_dir = options.directory
         self.options = options
+        self.bad_hostnames_ports = TTLCache(maxsize=1024, ttl=60)
+        self.bad_hostnames_ports_lock = threading.RLock()
 
     def server_activate(self):
         http_server.HTTPServer.server_activate(self)

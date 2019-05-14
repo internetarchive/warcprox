@@ -1986,6 +1986,10 @@ def test_socket_timeout_response(
 def test_empty_response(
         warcprox_, http_daemon, https_daemon, archiving_proxies,
         playback_proxies):
+    # localhost:server_port was added to the `bad_hostnames_ports` cache by
+    # previous tests and this causes subsequent tests to fail. We clear it.
+    warcprox_.proxy.bad_hostnames_ports.clear()
+
     url = 'http://localhost:%s/empty-response' % http_daemon.server_port
     response = requests.get(url, proxies=archiving_proxies, verify=False)
     assert response.status_code == 502
@@ -2001,6 +2005,10 @@ def test_payload_digest(warcprox_, http_daemon):
     Tests that digest is of RFC2616 "entity body"
     (transfer-decoded but not content-decoded)
     '''
+    # localhost:server_port was added to the `bad_hostnames_ports` cache by
+    # previous tests and this causes subsequent tests to fail. We clear it.
+    warcprox_.proxy.bad_hostnames_ports.clear()
+
     class HalfMockedMitm(warcprox.mitmproxy.MitmProxyHandler):
         def __init__(self, url):
             self.path = url

@@ -34,6 +34,7 @@ deps = [
     'cryptography>=2.3',
     'idna>=2.5',
     'PyYAML>=5.1',
+    'cachetools',
 ]
 try:
     import concurrent.futures

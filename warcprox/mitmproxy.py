@@ -77,6 +77,7 @@ import time
 import collections
 import cProfile
 from urllib3.util import is_connection_dropped
+from urllib3.exceptions import NewConnectionError
 import doublethink
 
 class ProxyingRecorder(object):
@@ -252,6 +253,9 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                     query=u.query, fragment=u.fragment))
         self.hostname = urlcanon.normalize_host(host).decode('ascii')
 
+    def _hostname_port_cache_key(self):
+        return '%s:%s' % (self.hostname, self.port)
+
     def _connect_to_remote_server(self):
         '''
         Connect to destination.
@@ -380,7 +384,17 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             else:
                 self._determine_host_port()
                 assert self.url
-
+            # Check if target hostname:port is in `bad_hostnames_ports` cache
+            # to avoid retrying to connect. cached is a tuple containing
+            # (status_code, error message)
+            cached = None
+            hostname_port = self._hostname_port_cache_key()
+            with self.server.bad_hostnames_ports_lock:
+                cached = self.server.bad_hostnames_ports.get(hostname_port)
+            if cached:
+                self.logger.info('Cannot connect to %s (cache)', hostname_port)
+                self.send_error(cached[0], cached[1])
+                return
             # Connect to destination
             self._connect_to_remote_server()
         except warcprox.RequestBlockedByRule as e:
@@ -388,6 +402,15 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             self.logger.info("%r: %r", self.requestline, e)
             return
         except Exception as e:
+            # If connection fails, add hostname:port to cache to avoid slow
+            # subsequent reconnection attempts. `NewConnectionError` can be
+            # caused by many types of errors which are handled by urllib3.
+            if type(e) in (socket.timeout, NewConnectionError):
+                host_port = self._hostname_port_cache_key()
+                with self.server.bad_hostnames_ports_lock:
+                    self.server.bad_hostnames_ports[host_port] = (500, str(e))
+                self.logger.info('bad_hostnames_ports cache size: %d',
+                                 len(self.server.bad_hostnames_ports))
             self.logger.error(
                     "problem processing request %r: %r",
                     self.requestline, e, exc_info=True)
@@ -527,7 +550,19 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             # put it back in the pool to reuse it later.
             if not is_connection_dropped(self._remote_server_conn):
                 self._conn_pool._put_conn(self._remote_server_conn)
-        except:
+        except Exception as e:
+            # A common error is to connect to the remote server successfully
+            # but raise a `RemoteDisconnected` exception when trying to begin
+            # downloading. Its caused by prox_rec_res.begin(...) which calls
+            # http_client._read_status(). In that case, the host is also bad
+            # and we must add it to `bad_hostnames_ports` cache.
+            if type(e) == http_client.RemoteDisconnected:
+                host_port = self._hostname_port_cache_key()
+                with self.server.bad_hostnames_ports_lock:
+                    self.server.bad_hostnames_ports[host_port] = (502, str(e))
+                self.logger.info('bad_hostnames_ports cache size: %d',
+                                 len(self.server.bad_hostnames_ports))
+
             self._remote_server_conn.sock.shutdown(socket.SHUT_RDWR)
             self._remote_server_conn.sock.close()
             raise
