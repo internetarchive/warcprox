@@ -170,7 +170,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         if warcprox_meta and 'warc-prefix' in warcprox_meta and (
                 '/' in warcprox_meta['warc-prefix']
                 or '\\' in warcprox_meta['warc-prefix']):
-            raise Exception(
+            raise warcprox.BadRequest(
                 "request rejected by warcprox: slash and backslash are not "
                 "permitted in warc-prefix")
 

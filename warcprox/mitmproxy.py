@@ -77,7 +77,7 @@ import time
 import collections
 import cProfile
 from urllib3.util import is_connection_dropped
-from urllib3.exceptions import NewConnectionError
+from urllib3.exceptions import TimeoutError, HTTPError
 import doublethink
 
 class ProxyingRecorder(object):
@@ -385,15 +385,14 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 self._determine_host_port()
                 assert self.url
             # Check if target hostname:port is in `bad_hostnames_ports` cache
-            # to avoid retrying to connect. cached is a tuple containing
-            # (status_code, error message)
+            # to avoid retrying to connect. Cached value is http status code.
             cached = None
             hostname_port = self._hostname_port_cache_key()
             with self.server.bad_hostnames_ports_lock:
                 cached = self.server.bad_hostnames_ports.get(hostname_port)
             if cached:
                 self.logger.info('Cannot connect to %s (cache)', hostname_port)
-                self.send_error(cached[0], cached[1])
+                self.send_error(cached)
                 return
             # Connect to destination
             self._connect_to_remote_server()
@@ -401,20 +400,32 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             # limit enforcers have already sent the appropriate response
             self.logger.info("%r: %r", self.requestline, e)
             return
+        except warcprox.BadRequest as e:
+            self.send_error(400, e.msg)
+            return
         except Exception as e:
             # If connection fails, add hostname:port to cache to avoid slow
             # subsequent reconnection attempts. `NewConnectionError` can be
             # caused by many types of errors which are handled by urllib3.
-            if type(e) in (socket.timeout, NewConnectionError):
+            response_code = 500
+            cache = False
+            if isinstance(e, (socket.timeout, TimeoutError,)):
+                response_code = 504
+                cache = True
+            elif isinstance(e, HTTPError):
+                response_code = 502
+                cache = True
+
+            if cache:
                 host_port = self._hostname_port_cache_key()
                 with self.server.bad_hostnames_ports_lock:
-                    self.server.bad_hostnames_ports[host_port] = (500, str(e))
+                    self.server.bad_hostnames_ports[host_port] = response_code
                 self.logger.info('bad_hostnames_ports cache size: %d',
                                  len(self.server.bad_hostnames_ports))
             self.logger.error(
                     "problem processing request %r: %r",
                     self.requestline, e, exc_info=True)
-            self.send_error(500, str(e))
+            self.send_error(response_code)
             return
 
         try:
@@ -429,7 +440,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 self.logger.error(
                         'error from remote server(?) %r: %r',
                         self.requestline, e, exc_info=True)
-                self.send_error(502, str(e))
+                self.send_error(502)
             return
 
     def send_error(self, code, message=None, explain=None):
@@ -556,10 +567,10 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             # downloading. Its caused by prox_rec_res.begin(...) which calls
             # http_client._read_status(). In that case, the host is also bad
             # and we must add it to `bad_hostnames_ports` cache.
-            if type(e) == http_client.RemoteDisconnected:
+            if isinstance(e, http_client.RemoteDisconnected):
                 host_port = self._hostname_port_cache_key()
                 with self.server.bad_hostnames_ports_lock:
-                    self.server.bad_hostnames_ports[host_port] = (502, str(e))
+                    self.server.bad_hostnames_ports[host_port] = 502
                 self.logger.info('bad_hostnames_ports cache size: %d',
                                  len(self.server.bad_hostnames_ports))
 

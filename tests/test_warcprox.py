@@ -1724,13 +1724,13 @@ def test_slash_in_warc_prefix(warcprox_, http_daemon, archiving_proxies):
     url = 'http://localhost:%s/b/b' % http_daemon.server_port
     headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"../../../../etc/a"})}
     response = requests.get(url, proxies=archiving_proxies, headers=headers)
-    assert response.status_code == 500
+    assert response.status_code == 400
     assert response.reason == 'request rejected by warcprox: slash and backslash are not permitted in warc-prefix'
 
     url = 'http://localhost:%s/b/c' % http_daemon.server_port
     headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"..\\..\\..\\derp\\monkey"})}
     response = requests.get(url, proxies=archiving_proxies, headers=headers)
-    assert response.status_code == 500
+    assert response.status_code == 400
     assert response.reason == 'request rejected by warcprox: slash and backslash are not permitted in warc-prefix'
 
 def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
