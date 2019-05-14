@@ -404,11 +404,11 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             # subsequent reconnection attempts. `NewConnectionError` can be
             # caused by many types of errors which are handled by urllib3.
             if type(e) in (socket.timeout, NewConnectionError):
+                host_port = self._hostname_port_cache_key()
                 with self.server.bad_hostnames_ports_lock:
-                    host_port = self._hostname_port_cache_key()
                     self.server.bad_hostnames_ports[host_port] = 1
-                    self.logger.info('bad_hostnames_ports cache size: %d',
-                                     len(self.server.bad_hostnames_ports))
+                self.logger.info('bad_hostnames_ports cache size: %d',
+                                 len(self.server.bad_hostnames_ports))
             self.logger.error(
                     "problem processing request %r: %r",
                     self.requestline, e, exc_info=True)
@@ -555,11 +555,11 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             # http_client._read_status(). In that case, the host is also bad
             # and we must add it to `bad_hostnames_ports` cache.
             if type(e) == http_client.RemoteDisconnected:
+                host_port = self._hostname_port_cache_key()
                 with self.server.bad_hostnames_ports_lock:
-                    host_port = self._hostname_port_cache_key()
                     self.server.bad_hostnames_ports[host_port] = 1
-                    self.logger.info('bad_hostnames_ports cache size: %d',
-                                     len(self.server.bad_hostnames_ports))
+                self.logger.info('bad_hostnames_ports cache size: %d',
+                                 len(self.server.bad_hostnames_ports))
 
             self._remote_server_conn.sock.shutdown(socket.SHUT_RDWR)
             self._remote_server_conn.sock.close()
