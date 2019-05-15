@@ -274,7 +274,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         '''
         self._conn_pool = self.server.remote_connection_pool.connection_from_host(
             host=self.hostname, port=int(self.port), scheme='http',
-            pool_kwargs={'maxsize': 6, 'timeout': self._socket_timeout})
+            pool_kwargs={'maxsize': 12, 'timeout': self._socket_timeout})
 
         self._remote_server_conn = self._conn_pool._get_conn()
         if is_connection_dropped(self._remote_server_conn):
@@ -759,7 +759,7 @@ class SingleThreadedMitmProxy(http_server.HTTPServer):
         self.bad_hostnames_ports_lock = RLock()
 
         self.remote_connection_pool = PoolManager(
-            num_pools=max(round(options.max_threads / 6), 200) if options.max_threads else 200)
+            num_pools=max((options.max_threads or 0) // 6, 400))
 
         if options.onion_tor_socks_proxy:
             try:
