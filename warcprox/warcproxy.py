@@ -38,18 +38,14 @@ import logging
 import json
 import socket
 from hanzo import warctools
-from certauth.certauth import CertificateAuthority
 import warcprox
 import datetime
 import urlcanon
 import os
-from urllib3 import PoolManager
 import tempfile
 import hashlib
 import doublethink
 import re
-from threading import RLock
-from cachetools import TTLCache
 
 class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
     '''
@@ -423,56 +419,20 @@ class RecordedUrl:
 # inherit from object so that multiple inheritance from this class works
 # properly in python 2
 # http://stackoverflow.com/questions/1713038/super-fails-with-error-typeerror-argument-1-must-be-type-not-classobj#18392639
-class SingleThreadedWarcProxy(http_server.HTTPServer, object):
+class SingleThreadedWarcProxy(warcprox.mitmproxy.SingleThreadedMitmProxy):
     logger = logging.getLogger("warcprox.warcproxy.WarcProxy")
 
     def __init__(
             self, stats_db=None, status_callback=None,
             options=warcprox.Options()):
         self.start_time = doublethink.utcnow()
+
+        warcprox.mitmproxy.SingleThreadedMitmProxy.__init__(
+                self, WarcProxyHandler, options)
+
         self.status_callback = status_callback
         self.stats_db = stats_db
-        self.options = options
-        # TTLCache is not thread-safe. Access to the shared cache from multiple
-        # threads must be properly synchronized with an RLock according to ref:
-        # https://cachetools.readthedocs.io/en/latest/
-        self.bad_hostnames_ports = TTLCache(maxsize=1024, ttl=60)
-        self.bad_hostnames_ports_lock = RLock()
-        self.remote_connection_pool = PoolManager(
-            num_pools=max(round(options.max_threads / 6), 200) if options.max_threads else 200)
-        server_address = (
-                options.address or 'localhost',
-                options.port if options.port is not None else 8000)
-
-        if options.onion_tor_socks_proxy:
-            try:
-                host, port = options.onion_tor_socks_proxy.split(':')
-                WarcProxyHandler.onion_tor_socks_proxy_host = host
-                WarcProxyHandler.onion_tor_socks_proxy_port = int(port)
-            except ValueError:
-                WarcProxyHandler.onion_tor_socks_proxy_host = options.onion_tor_socks_proxy
-                WarcProxyHandler.onion_tor_socks_proxy_port = None
-
-        if options.socket_timeout:
-            WarcProxyHandler._socket_timeout = options.socket_timeout
-        if options.max_resource_size:
-            WarcProxyHandler._max_resource_size = options.max_resource_size
-        if options.tmp_file_max_memory_size:
-            WarcProxyHandler._tmp_file_max_memory_size = options.tmp_file_max_memory_size
-
-        http_server.HTTPServer.__init__(
-                self, server_address, WarcProxyHandler, bind_and_activate=True)
-
-        self.digest_algorithm = options.digest_algorithm or 'sha1'
-
-        ca_name = ('Warcprox CA on %s' % socket.gethostname())[:64]
-        self.ca = CertificateAuthority(
-                ca_file=options.cacert or 'warcprox-ca.pem',
-                certs_dir=options.certs_dir or './warcprox-ca',
-                ca_name=ca_name)
-
         self.recorded_url_q = queue.Queue(maxsize=options.queue_size or 1000)
-
         self.running_stats = warcprox.stats.RunningStats()
 
     def status(self):

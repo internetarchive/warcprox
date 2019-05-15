@@ -76,9 +76,13 @@ import urlcanon
 import time
 import collections
 import cProfile
+from urllib3 import PoolManager
 from urllib3.util import is_connection_dropped
 from urllib3.exceptions import TimeoutError, HTTPError
 import doublethink
+from cachetools import TTLCache
+from threading import RLock
+from certauth.certauth import CertificateAuthority
 
 class ProxyingRecorder(object):
     """
@@ -223,9 +227,12 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
     and records the bytes in transit as it proxies them.
     '''
     logger = logging.getLogger("warcprox.mitmproxy.MitmProxyHandler")
+
     _socket_timeout = 60
     _max_resource_size = None
     _tmp_file_max_memory_size = 512 * 1024
+    onion_tor_socks_proxy_host = None
+    onion_tor_socks_proxy_port = None
 
     def __init__(self, request, client_address, server):
         threading.current_thread().name = 'MitmProxyHandler(tid={},started={},client={}:{})'.format(warcprox.gettid(), datetime.datetime.utcnow().isoformat(), client_address[0], client_address[1])
@@ -736,4 +743,53 @@ class PooledMitmProxy(PooledMixIn, MitmProxy):
         self.shutting_down = True
         for sock in self.remote_server_socks:
             self.shutdown_request(sock)
+
+class SingleThreadedMitmProxy(http_server.HTTPServer):
+    logger = logging.getLogger('warcprox.warcproxy.SingleThreadedMitmProxy')
+
+    def __init__(
+            self, MitmProxyHandlerClass=MitmProxyHandler,
+            options=warcprox.Options()):
+        self.options = options
+
+        # TTLCache is not thread-safe. Access to the shared cache from multiple
+        # threads must be properly synchronized with an RLock according to ref:
+        # https://cachetools.readthedocs.io/en/latest/
+        self.bad_hostnames_ports = TTLCache(maxsize=1024, ttl=60)
+        self.bad_hostnames_ports_lock = RLock()
+
+        self.remote_connection_pool = PoolManager(
+            num_pools=max(round(options.max_threads / 6), 200) if options.max_threads else 200)
+
+        if options.onion_tor_socks_proxy:
+            try:
+                host, port = options.onion_tor_socks_proxy.split(':')
+                MitmProxyHandlerClass.onion_tor_socks_proxy_host = host
+                MitmProxyHandlerClass.onion_tor_socks_proxy_port = int(port)
+            except ValueError:
+                MitmProxyHandlerClass.onion_tor_socks_proxy_host = options.onion_tor_socks_proxy
+                MitmProxyHandlerClass.onion_tor_socks_proxy_port = None
+
+        if options.socket_timeout:
+            MitmProxyHandlerClass._socket_timeout = options.socket_timeout
+        if options.max_resource_size:
+            MitmProxyHandlerClass._max_resource_size = options.max_resource_size
+        if options.tmp_file_max_memory_size:
+            MitmProxyHandlerClass._tmp_file_max_memory_size = options.tmp_file_max_memory_size
+
+        self.digest_algorithm = options.digest_algorithm or 'sha1'
+
+        ca_name = ('Warcprox CA on %s' % socket.gethostname())[:64]
+        self.ca = CertificateAuthority(
+                ca_file=options.cacert or 'warcprox-ca.pem',
+                certs_dir=options.certs_dir or './warcprox-ca',
+                ca_name=ca_name)
+
+        server_address = (
+                options.address or 'localhost',
+                options.port if options.port is not None else 8000)
+
+        http_server.HTTPServer.__init__(
+                self, server_address, MitmProxyHandlerClass,
+                bind_and_activate=True)
 
