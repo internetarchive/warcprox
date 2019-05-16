@@ -168,7 +168,7 @@ class ServiceRegistry(object):
         if result != {
                 'deleted':1, 'errors':0,'inserted':0,
                 'replaced':0,'skipped':0,'unchanged':0}:
-            self.logger.warn(
+            self.logger.warning(
                     'unexpected result attempting to delete id=%s from '
                     'rethinkdb services table: %s', id, result)
 
