@@ -66,117 +66,31 @@ def test_orm(rr):
         'i': ['j', {'k': 'l'}]})
     d.save()
 
-    assert d._updates == {}
     d.m = 'n'
-    assert d._updates == {'m': 'n'}
     d['c']['o'] = 'p'
-    assert d._updates == {'m': 'n', 'c': {'d': 'e', 'o': 'p'}}
     d.f[0] = 'q'
-    assert d._updates == {'m': 'n', 'c': {'d': 'e', 'o': 'p'}, 'f': ['q', 'h']}
     d['i'][1]['k'] = 's'
-    assert d._updates == {
-            'm': 'n',
-            'c': {'d': 'e', 'o': 'p'},
-            'f': ['q', 'h'],
-            'i': ['j', {'k': 's'}]}
-
     del d['i']
-    assert d._deletes == {'i'}
-    assert d._updates == {'m': 'n', 'c': {'d': 'e', 'o': 'p'}, 'f': ['q', 'h']}
-
     d.i = 't'
-    assert d._deletes == set()
-    assert d._updates == {
-            'm': 'n', 'c': {'d': 'e', 'o': 'p'}, 'f': ['q', 'h'], 'i': 't'}
-
     # list manipulations
     d.f.append(['sublist'])
-    assert d._updates == {
-            'm': 'n', 'c': {'d': 'e', 'o': 'p'},
-            'f': ['q', 'h', ['sublist']], 'i': 't'}
-
-    with pytest.raises(TypeError):
-        d.f[2].clear()
-
     result = d.f.pop()
     assert result == ['sublist']
-    assert d._updates == {
-            'm': 'n', 'c': {'d': 'e', 'o': 'p'},
-            'f': ['q', 'h'], 'i': 't'}
-
     del d.f[0]
-    assert d._updates == {
-            'm': 'n', 'c': {'d': 'e', 'o': 'p'},
-            'f': ['h'], 'i': 't'}
-
     d.f.insert(0, 'u')
-    assert d._updates == {
-            'm': 'n', 'c': {'d': 'e', 'o': 'p'},
-            'f': ['u', 'h'], 'i': 't'}
-
     d.f.extend(('v', {'w': 'x'}))
-    assert d._updates == {
-            'm': 'n', 'c': {'d': 'e', 'o': 'p'},
-            'f': ['u', 'h', 'v', {'w': 'x'}], 'i': 't'}
-
-    # check that stuff added by extend() is watched properly
     d.f[3]['y'] = 'z'
-    assert d._updates == {
-            'm': 'n', 'c': {'d': 'e', 'o': 'p'},
-            'f': ['u', 'h', 'v', {'w': 'x', 'y': 'z'}], 'i': 't'}
-
     d.f.remove('h')
-    assert d._updates == {
-            'm': 'n', 'c': {'d': 'e', 'o': 'p'},
-            'f': ['u', 'v', {'w': 'x', 'y': 'z'}], 'i': 't'}
-
-    # more nested field dict operations
     del d['c']['d']
-    assert d._updates == {
-            'm': 'n', 'c': {'o': 'p'},
-            'f': ['u', 'v', {'w': 'x', 'y': 'z'}], 'i': 't'}
-
     d['c'].clear()
-    assert d._updates == {
-            'm': 'n', 'c': {},
-            'f': ['u', 'v', {'w': 'x', 'y': 'z'}], 'i': 't'}
-
     assert d['c'].setdefault('aa') is None
-    assert d._updates == {
-            'm': 'n', 'c': {'aa': None},
-            'f': ['u', 'v', {'w': 'x', 'y': 'z'}], 'i': 't'}
-
     d['c'].setdefault('aa', 'bb') is None
-    assert d._updates == {
-            'm': 'n', 'c': {'aa': None},
-            'f': ['u', 'v', {'w': 'x', 'y': 'z'}], 'i': 't'}
-
     d['c'].setdefault('cc', 'dd') == 'dd'
-    assert d._updates == {
-            'm': 'n', 'c': {'aa': None, 'cc': 'dd'},
-            'f': ['u', 'v', {'w': 'x', 'y': 'z'}], 'i': 't'}
-
     d['c'].setdefault('cc') == 'dd'
-    assert d._updates == {
-            'm': 'n', 'c': {'aa': None, 'cc': 'dd'},
-            'f': ['u', 'v', {'w': 'x', 'y': 'z'}], 'i': 't'}
-
     d['c'].setdefault('cc', 'ee') == 'dd'
-    assert d._updates == {
-            'm': 'n', 'c': {'aa': None, 'cc': 'dd'},
-            'f': ['u', 'v', {'w': 'x', 'y': 'z'}], 'i': 't'}
-
     assert d['c'].pop('cc') == 'dd'
-    assert d._updates == {
-            'm': 'n', 'c': {'aa': None},
-            'f': ['u', 'v', {'w': 'x', 'y': 'z'}], 'i': 't'}
-
     assert d['f'][2].popitem()
-    assert d._updates['f'][2] in ({'w':'x'}, {'y':'z'})
-
     d.save()
-    assert d._updates == {}
-    assert d._deletes == set()
 
     d_copy = SomeDoc.load(rr, d.id)
     assert d == d_copy
@@ -186,37 +100,12 @@ def test_orm(rr):
     d_copy.refresh()
     assert d == d_copy
 
-    # top level dict operations
-    with pytest.raises(TypeError):
-        d.clear()
-
-    with pytest.raises(TypeError):
-        d.pop('m')
-
-    with pytest.raises(TypeError):
-        d.popitem()
-
-    with pytest.raises(TypeError):
-        d.update({'x':'y'})
-
     assert d.setdefault('ee') is None
-    assert d._updates == {'ee': None}
-
     d.setdefault('ee', 'ff') is None
-    assert d._updates == {'ee': None}
-
     d.setdefault('gg', 'hh') == 'hh'
-    assert d._updates == {'ee': None, 'gg': 'hh'}
-
     d.setdefault('gg') == 'hh'
-    assert d._updates == {'ee': None, 'gg': 'hh'}
-
     d.setdefault('gg', 'ii') == 'hh'
-    assert d._updates == {'ee': None, 'gg': 'hh'}
-
     d.save()
-    assert d._updates == {}
-    assert d._deletes == set()
 
     d_copy = SomeDoc.load(rr, d.id)
     assert d == d_copy

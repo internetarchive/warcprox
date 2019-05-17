@@ -53,7 +53,7 @@ class RethinkerWrapper(object):
                             '^Cannot perform.*replica.*', e.args[0]):
                         if error_count < 20:
                             error_count += 1
-                            self.logger.warn(
+                            self.logger.warning(
                                     'will keep trying after potentially '
                                     'recoverable error (%s/20): %s',
                                     error_count, e)
@@ -90,7 +90,7 @@ class RethinkerWrapper(object):
             except r.ReqlOpFailedError as e:
                 if e.args and re.match(
                         '^Cannot perform.*replica.*', e.args[0]):
-                    self.logger.warn(
+                    self.logger.warning(
                             'will keep trying after potentially recoverable '
                             'error: %s', e)
                     time.sleep(0.5)
@@ -129,7 +129,7 @@ class Rethinker(object):
                     return r.connect(host=server)
             except Exception as e:
                 self.last_error[server] = time.time()
-                self.logger.warn(
+                self.logger.warning(
                         'will keep trying after failure connecting to '
                         'rethinkdb server at %s: %s (sleeping for %s sec)',
                         server, e, retry_wait)
