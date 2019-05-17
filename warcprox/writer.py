@@ -148,7 +148,10 @@ class WarcWriter:
                     record.get_header(warctools.WarcRecord.CONTENT_LENGTH),
                     record.get_header(b'WARC-Payload-Digest'), record.offset,
                     self.path, record.get_header(warctools.WarcRecord.URL))
-        self.f.flush()
+        # We disable flush() and let the BufferedWriter flush when the buffer
+        # is full to improve performance. We increased `io.DEFAULT_BUFFER_SIZE
+        # to 1 MB to reduce disk flush frequency.
+        # self.f.flush()
         self.last_activity = time.time()
 
         return records

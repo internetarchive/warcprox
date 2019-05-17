@@ -57,6 +57,14 @@ except ImportError:
 # https://github.com/python/cpython/blob/3.7/Lib/http/client.py#L113
 http_client._MAXHEADERS = 7000
 
+# Default io buffer size is 8192 which is too small. We set it to 1MB improve
+# file writing performance.
+# https://github.com/python/cpython/blob/master/Modules/_io/_iomodule.c#L169
+# When we open a binary file to write, we use a BufferedWriter internally by
+# default, which uses DEFAULT_BUFFER_SIZE.
+import io
+io.DEFAULT_BUFFER_SIZE = 1048576
+
 import json
 import socket
 import logging
