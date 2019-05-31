@@ -157,8 +157,11 @@ class RethinkCaptures:
             sha1base32 = base64.b32encode(digest.digest()).decode("utf-8")
 
         if (recorded_url.warcprox_meta
-                and "dedup-bucket" in recorded_url.warcprox_meta):
-            bucket = recorded_url.warcprox_meta["dedup-bucket"]
+                and "dedup-buckets" in recorded_url.warcprox_meta):
+            for bucket, bucket_mode in recorded_url.warcprox_meta["dedup-buckets"].items():
+                if not bucket_mode == 'ro':
+                    # maybe this is the right thing to do here? or should we return an entry for each? or ?
+                    break
         else:
             bucket = "__unspecified__"
 

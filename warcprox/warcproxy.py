@@ -377,7 +377,8 @@ class RecordedUrl:
         if warcprox_meta:
             if 'captures-bucket' in warcprox_meta:
                 # backward compatibility
-                warcprox_meta['dedup-bucket'] = warcprox_meta['captures-bucket']
+                warcprox_meta['dedup-buckets'] = {}
+                warcprox_meta['dedup-buckets'][warcprox_meta['captures-bucket']] = 'rw'
                 del warcprox_meta['captures-bucket']
             self.warcprox_meta = warcprox_meta
         else:
