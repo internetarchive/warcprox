@@ -790,7 +790,7 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
     url2 = 'https://localhost:{}/k/l'.format(https_daemon.server_port)
 
     # archive url1 bucket_a
-    headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"test_dedup_buckets","dedup-bucket":"bucket_a"})}
+    headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"test_dedup_buckets","dedup-buckets":{"bucket_a":"rw"}})}
     response = requests.get(url1, proxies=archiving_proxies, verify=False, headers=headers)
     assert response.status_code == 200
     assert response.headers['warcprox-test-header'] == 'k!'
@@ -816,7 +816,7 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
     assert dedup_lookup is None
 
     # archive url2 bucket_b
-    headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"test_dedup_buckets","dedup-bucket":"bucket_b"})}
+    headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"test_dedup_buckets","dedup-buckets":{"bucket_b":""}})}
     response = requests.get(url2, proxies=archiving_proxies, verify=False, headers=headers)
     assert response.status_code == 200
     assert response.headers['warcprox-test-header'] == 'k!'
@@ -845,7 +845,7 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 3)
 
     # archive url1 bucket_b
-    headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"test_dedup_buckets","dedup-bucket":"bucket_b"})}
+    headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"test_dedup_buckets","dedup-buckets":{"bucket_b":""}})}
     response = requests.get(url1, proxies=archiving_proxies, verify=False, headers=headers)
     assert response.status_code == 200
     assert response.headers['warcprox-test-header'] == 'k!'
@@ -928,7 +928,7 @@ def test_dedup_bucket_concurrency(https_daemon, http_daemon, warcprox_, archivin
                     http_daemon.server_port, i)
             headers = {"Warcprox-Meta": json.dumps({
                 "warc-prefix":"test_dedup_buckets",
-                "dedup-bucket":"bucket_%s" % i})}
+                "dedup-buckets":{"bucket_%s" % i:"rw"}})}
             pool.submit(
                     requests.get, url, proxies=archiving_proxies, verify=False,
                     headers=headers)
@@ -944,7 +944,7 @@ def test_dedup_bucket_concurrency(https_daemon, http_daemon, warcprox_, archivin
                     http_daemon.server_port, -i - 1)
             headers = {"Warcprox-Meta": json.dumps({
                 "warc-prefix":"test_dedup_buckets",
-                "dedup-bucket":"bucket_%s" % i})}
+                "dedup-buckets":{"bucket_%s" % i:"rw"}})}
             pool.submit(
                     requests.get, url, proxies=archiving_proxies, verify=False,
                     headers=headers)
@@ -959,7 +959,7 @@ def test_dedup_bucket_concurrency(https_daemon, http_daemon, warcprox_, archivin
                     http_daemon.server_port, i)
             headers = {"Warcprox-Meta": json.dumps({
                 "warc-prefix":"test_dedup_buckets",
-                "dedup-bucket":"bucket_%s" % i})}
+                "dedup-buckets":{"bucket_%s" % i:"rw"}})}
             pool.submit(
                     requests.get, url, proxies=archiving_proxies, verify=False,
                     headers=headers)
@@ -1500,7 +1500,7 @@ def test_dedup_ok_flag(
     assert dedup_lookup is None
 
     # archive with dedup_ok:False
-    request_meta = {'dedup-bucket':'test_dedup_ok_flag','dedup-ok':False}
+    request_meta = {'dedup-buckets':{'test_dedup_ok_flag':''},'dedup-ok':False}
     headers = {'Warcprox-Meta': json.dumps(request_meta)}
     response = requests.get(
             url, proxies=archiving_proxies, headers=headers, verify=False)
@@ -1518,7 +1518,7 @@ def test_dedup_ok_flag(
     assert dedup_lookup is None
 
     # archive without dedup_ok:False
-    request_meta = {'dedup-bucket':'test_dedup_ok_flag'}
+    request_meta = {'dedup-buckets':{'test_dedup_ok_flag':''}}
     headers = {'Warcprox-Meta': json.dumps(request_meta)}
     response = requests.get(
             url, proxies=archiving_proxies, headers=headers, verify=False)
