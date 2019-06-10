@@ -572,9 +572,15 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             # A common error is to connect to the remote server successfully
             # but raise a `RemoteDisconnected` exception when trying to begin
             # downloading. Its caused by prox_rec_res.begin(...) which calls
-            # http_client._read_status(). In that case, the host is also bad
-            # and we must add it to `bad_hostnames_ports` cache.
-            if isinstance(e, http_client.RemoteDisconnected):
+            # http_client._read_status(). The connection fails there.
+            # https://github.com/python/cpython/blob/3.7/Lib/http/client.py#L275
+            # Another case is when the connection is fine but the response
+            # status is problematic, raising `BadStatusLine`.
+            # https://github.com/python/cpython/blob/3.7/Lib/http/client.py#L296
+            # In both cases, the host is bad and we must add it to
+            # `bad_hostnames_ports` cache.
+            if isinstance(e, (http_client.RemoteDisconnected,
+                              http_client.BadStatusLine)):
                 host_port = self._hostname_port_cache_key()
                 with self.server.bad_hostnames_ports_lock:
                     self.server.bad_hostnames_ports[host_port] = 502
