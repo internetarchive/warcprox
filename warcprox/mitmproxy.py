@@ -587,8 +587,12 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 self.logger.info('bad_hostnames_ports cache size: %d',
                                  len(self.server.bad_hostnames_ports))
 
-            self._remote_server_conn.sock.shutdown(socket.SHUT_RDWR)
-            self._remote_server_conn.sock.close()
+            # Close the connection only if its still open. If its already
+            # closed, an `OSError` "([Errno 107] Transport endpoint is not
+            # connected)" would be raised.
+            if not is_connection_dropped(self._remote_server_conn):
+                self._remote_server_conn.sock.shutdown(socket.SHUT_RDWR)
+                self._remote_server_conn.sock.close()
             raise
         finally:
             if prox_rec_res:
