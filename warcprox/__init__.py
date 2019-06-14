@@ -78,6 +78,15 @@ class RequestBlockedByRule(Exception):
     def __str__(self):
         return "%s: %s" % (self.__class__.__name__, self.msg)
 
+class BadRequest(Exception):
+    '''
+    Raised in case of a request deemed unacceptable by warcprox.
+    '''
+    def __init__(self, msg):
+        self.msg = msg
+    def __str__(self):
+        return "%s: %s" % (self.__class__.__name__, self.msg)
+
 class BasePostfetchProcessor(threading.Thread):
     logger = logging.getLogger("warcprox.BasePostfetchProcessor")
 

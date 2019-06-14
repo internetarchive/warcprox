@@ -81,7 +81,7 @@ def unravel_buckets(url, warcprox_meta):
         for bucket in warcprox_meta["stats"]["buckets"]:
             if isinstance(bucket, dict):
                 if not 'bucket' in bucket:
-                    self.logger.warn(
+                    self.logger.warning(
                             'ignoring invalid stats bucket in '
                             'warcprox-meta header %s', bucket)
                     continue

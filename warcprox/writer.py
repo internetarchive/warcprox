@@ -149,6 +149,7 @@ class WarcWriter:
                     record.get_header(b'WARC-Payload-Digest'), record.offset,
                     self.path, record.get_header(warctools.WarcRecord.URL))
         self.f.flush()
+        self.last_activity = time.time()
 
         return records
 

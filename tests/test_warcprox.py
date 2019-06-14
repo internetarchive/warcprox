@@ -93,9 +93,11 @@ logging.basicConfig(
         stream=sys.stdout, level=logging.TRACE,
         format='%(asctime)s %(process)d %(levelname)s %(threadName)s '
         '%(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s')
+
+logging.getLogger("urllib3").setLevel(logging.WARN)
 logging.getLogger("requests.packages.urllib3").setLevel(logging.WARN)
-warnings.simplefilter("ignore", category=requests.packages.urllib3.exceptions.InsecureRequestWarning)
-warnings.simplefilter("ignore", category=requests.packages.urllib3.exceptions.InsecurePlatformWarning)
+import urllib3 ; urllib3.disable_warnings()
+import requests.packages.urllib3 ; requests.packages.urllib3.disable_warnings()
 
 def wait(callback, timeout=10):
     start = time.time()
@@ -144,7 +146,7 @@ def dump_state(signum=None, frame=None):
         stack = traceback.format_stack(sys._current_frames()[th.ident])
         state_strs.append("".join(stack))
 
-    logging.warn("dumping state (caught signal {})\n{}".format(signum, "\n".join(state_strs)))
+    logging.warning("dumping state (caught signal {})\n{}".format(signum, "\n".join(state_strs)))
 
 signal.signal(signal.SIGQUIT, dump_state)
 
@@ -279,6 +281,15 @@ class _TestHttpRequestHandler(http_server.BaseHTTPRequestHandler):
             payload = b'Test.'
             actual_headers = (b'Content-Type: text/plain\r\n'
                            + b'Content-Length: ' + str(len(payload)).encode('ascii') + b'\r\n')
+        elif self.path == '/incomplete-read':
+            headers = (b'HTTP/1.1 200 OK\r\n'
+                     + b'Content-Type: text/plain\r\n'
+                     + b'Transfer-Encoding: chunked\r\n'
+                     + b'\r\n')
+            # payload = b'''1\r\na'''
+            payload = chunkify(
+                    b'Server closes connection when client expects next chunk')
+            payload = payload[:-7]
         else:
             payload = b'404 Not Found\n'
             headers = (b'HTTP/1.1 404 Not Found\r\n'
@@ -292,7 +303,9 @@ class _TestHttpRequestHandler(http_server.BaseHTTPRequestHandler):
         headers, payload = self.build_response()
         self.connection.sendall(headers)
         self.connection.sendall(payload)
-        if self.path in ('/missing-content-length', '/empty-response'):
+        if self.path in (
+                '/missing-content-length', '/empty-response',
+                '/incomplete-read'):
             # server must close the connection, else client has no idea if
             # there is more data coming
             self.connection.shutdown(socket.SHUT_RDWR)
@@ -446,7 +459,7 @@ def warcprox_(request, http_daemon, https_daemon):
                 logging.info('dropping rethinkdb database %r', parsed.database)
                 rr.db_drop(parsed.database).run()
             except Exception as e:
-                logging.warn(
+                logging.warning(
                         'problem deleting rethinkdb database %r: %s',
                         parsed.database, e)
         logging.info('deleting working directory %r', work_dir)
@@ -777,7 +790,7 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
     url2 = 'https://localhost:{}/k/l'.format(https_daemon.server_port)
 
     # archive url1 bucket_a
-    headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"test_dedup_buckets","dedup-bucket":"bucket_a"})}
+    headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"test_dedup_buckets","dedup-buckets":{"bucket_a":"rw"}})}
     response = requests.get(url1, proxies=archiving_proxies, verify=False, headers=headers)
     assert response.status_code == 200
     assert response.headers['warcprox-test-header'] == 'k!'
@@ -803,7 +816,7 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
     assert dedup_lookup is None
 
     # archive url2 bucket_b
-    headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"test_dedup_buckets","dedup-bucket":"bucket_b"})}
+    headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"test_dedup_buckets","dedup-buckets":{"bucket_b":""}})}
     response = requests.get(url2, proxies=archiving_proxies, verify=False, headers=headers)
     assert response.status_code == 200
     assert response.headers['warcprox-test-header'] == 'k!'
@@ -903,6 +916,71 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
     finally:
         fh.close()
 
+def test_dedup_buckets_readonly(https_daemon, http_daemon, warcprox_, archiving_proxies, playback_proxies):
+    urls_before = warcprox_.proxy.running_stats.urls
+
+    url1 = 'http://localhost:{}/k/l'.format(http_daemon.server_port)
+
+    # archive url1
+    headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"test_dedup_buckets_readonly",
+                                            "dedup-buckets":{"bucket_1":"rw", "bucket_2":"ro"}})
+              }
+    response = requests.get(url1, proxies=archiving_proxies, verify=False, headers=headers)
+    assert response.status_code == 200
+    assert response.headers['warcprox-test-header'] == 'k!'
+    assert response.content == b'I am the warcprox test payload! llllllllll!\n'
+
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
+
+    # check url1 in dedup db bucket_1 (rw)
+    # logging.info('looking up sha1:bc3fac8847c9412f49d955e626fb58a76befbf81 in bucket_1')
+    dedup_lookup = warcprox_.dedup_db.lookup(
+            b'sha1:bc3fac8847c9412f49d955e626fb58a76befbf81', bucket="bucket_1")
+    assert dedup_lookup
+    assert dedup_lookup['url'] == url1.encode('ascii')
+    assert re.match(br'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$', dedup_lookup['id'])
+    assert re.match(br'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$', dedup_lookup['date'])
+    record_id = dedup_lookup['id']
+    dedup_date = dedup_lookup['date']
+
+    # check url1 not in dedup db bucket_2 (ro)
+    dedup_lookup = warcprox_.dedup_db.lookup(
+            b'sha1:bc3fac8847c9412f49d955e626fb58a76befbf81', bucket="bucket_2")
+    assert dedup_lookup is None
+
+    # close the warc
+    assert warcprox_.warc_writer_processor.writer_pool.warc_writers["test_dedup_buckets_readonly"]
+    writer = warcprox_.warc_writer_processor.writer_pool.warc_writers["test_dedup_buckets_readonly"]
+    warc_path = os.path.join(writer.directory, writer.finalname)
+    assert not os.path.exists(warc_path)
+    warcprox_.warc_writer_processor.writer_pool.warc_writers["test_dedup_buckets_readonly"].close()
+    assert os.path.exists(warc_path)
+
+    # read the warc
+    fh = warctools.ArchiveRecord.open_archive(warc_path)
+    record_iter = fh.read_records(limit=None, offsets=True)
+    try:
+        (offset, record, errors) = next(record_iter)
+        assert record.type == b'warcinfo'
+
+        # url1 bucket_1
+        (offset, record, errors) = next(record_iter)
+        assert record.type == b'response'
+        assert record.url == url1.encode('ascii')
+        # check for duplicate warc record headers
+        assert Counter(h[0] for h in record.headers).most_common(1)[0][1] == 1
+        assert record.content[1] == b'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nwarcprox-test-header: k!\r\nContent-Length: 44\r\n\r\nI am the warcprox test payload! llllllllll!\n'
+        (offset, record, errors) = next(record_iter)
+        assert record.type == b'request'
+
+        # that's all folks
+        assert next(record_iter)[1] == None
+        assert next(record_iter, None) == None
+
+    finally:
+        fh.close()
+
 def test_dedup_bucket_concurrency(https_daemon, http_daemon, warcprox_, archiving_proxies):
     urls_before = warcprox_.proxy.running_stats.urls
     revisits_before = warcprox_.proxy.stats_db.value(
@@ -915,7 +993,7 @@ def test_dedup_bucket_concurrency(https_daemon, http_daemon, warcprox_, archivin
                     http_daemon.server_port, i)
             headers = {"Warcprox-Meta": json.dumps({
                 "warc-prefix":"test_dedup_buckets",
-                "dedup-bucket":"bucket_%s" % i})}
+                "dedup-buckets":{"bucket_%s" % i:"rw"}})}
             pool.submit(
                     requests.get, url, proxies=archiving_proxies, verify=False,
                     headers=headers)
@@ -931,7 +1009,7 @@ def test_dedup_bucket_concurrency(https_daemon, http_daemon, warcprox_, archivin
                     http_daemon.server_port, -i - 1)
             headers = {"Warcprox-Meta": json.dumps({
                 "warc-prefix":"test_dedup_buckets",
-                "dedup-bucket":"bucket_%s" % i})}
+                "dedup-buckets":{"bucket_%s" % i:"rw"}})}
             pool.submit(
                     requests.get, url, proxies=archiving_proxies, verify=False,
                     headers=headers)
@@ -946,7 +1024,7 @@ def test_dedup_bucket_concurrency(https_daemon, http_daemon, warcprox_, archivin
                     http_daemon.server_port, i)
             headers = {"Warcprox-Meta": json.dumps({
                 "warc-prefix":"test_dedup_buckets",
-                "dedup-bucket":"bucket_%s" % i})}
+                "dedup-buckets":{"bucket_%s" % i:"rw"}})}
             pool.submit(
                     requests.get, url, proxies=archiving_proxies, verify=False,
                     headers=headers)
@@ -965,12 +1043,12 @@ def test_block_rules(http_daemon, https_daemon, warcprox_, archiving_proxies):
         },
         {
             "url_match": "SURT_MATCH",
-            "value": "http://(localhost:%s,)/fuh/" % (http_daemon.server_port),
+            "value": "http://(localhost,:%s)/fuh/" % (http_daemon.server_port),
         },
         {
             "url_match": "SURT_MATCH",
             # this rule won't match because of http scheme, https port
-            "value": "http://(localhost:%s,)/fuh/" % (https_daemon.server_port),
+            "value": "http://(localhost,:%s)/fuh/" % (https_daemon.server_port),
         },
         {
             "domain": "bad.domain.com",
@@ -1487,7 +1565,7 @@ def test_dedup_ok_flag(
     assert dedup_lookup is None
 
     # archive with dedup_ok:False
-    request_meta = {'dedup-bucket':'test_dedup_ok_flag','dedup-ok':False}
+    request_meta = {'dedup-buckets':{'test_dedup_ok_flag':''},'dedup-ok':False}
     headers = {'Warcprox-Meta': json.dumps(request_meta)}
     response = requests.get(
             url, proxies=archiving_proxies, headers=headers, verify=False)
@@ -1505,7 +1583,7 @@ def test_dedup_ok_flag(
     assert dedup_lookup is None
 
     # archive without dedup_ok:False
-    request_meta = {'dedup-bucket':'test_dedup_ok_flag'}
+    request_meta = {'dedup-buckets':{'test_dedup_ok_flag':''}}
     headers = {'Warcprox-Meta': json.dumps(request_meta)}
     response = requests.get(
             url, proxies=archiving_proxies, headers=headers, verify=False)
@@ -1611,12 +1689,10 @@ def test_controller_with_defaults():
     assert not wwp.writer_pool.default_warc_writer.record_builder.base32
     assert wwp.writer_pool.default_warc_writer.record_builder.digest_algorithm == 'sha1'
 
-
 class EarlyPlugin(warcprox.BaseStandardPostfetchProcessor):
     CHAIN_POSITION = 'early'
     def _process_url(self):
         pass
-
 
 def test_load_plugin():
     options = warcprox.Options(port=0, plugins=[
@@ -1714,13 +1790,13 @@ def test_slash_in_warc_prefix(warcprox_, http_daemon, archiving_proxies):
     url = 'http://localhost:%s/b/b' % http_daemon.server_port
     headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"../../../../etc/a"})}
     response = requests.get(url, proxies=archiving_proxies, headers=headers)
-    assert response.status_code == 500
+    assert response.status_code == 400
     assert response.reason == 'request rejected by warcprox: slash and backslash are not permitted in warc-prefix'
 
     url = 'http://localhost:%s/b/c' % http_daemon.server_port
     headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"..\\..\\..\\derp\\monkey"})}
     response = requests.get(url, proxies=archiving_proxies, headers=headers)
-    assert response.status_code == 500
+    assert response.status_code == 400
     assert response.reason == 'request rejected by warcprox: slash and backslash are not permitted in warc-prefix'
 
 def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
@@ -1763,7 +1839,7 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
 
     crawl_log = open(default_crawl_log_path, 'rb').read()
     # tests will fail in year 3000 :)
-    assert re.match(b'\A2[^\n]+\n\Z', crawl_log)
+    assert re.match(br'\A2[^\n]+\n\Z', crawl_log)
     assert crawl_log[24:31] == b'   200 '
     assert crawl_log[31:42] == b'        54 '
     fields = crawl_log.split()
@@ -1783,7 +1859,7 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     assert extra_info['contentSize'] == 145
 
     crawl_log_1 = open(file, 'rb').read()
-    assert re.match(b'\A2[^\n]+\n\Z', crawl_log_1)
+    assert re.match(br'\A2[^\n]+\n\Z', crawl_log_1)
     assert crawl_log_1[24:31] == b'   200 '
     assert crawl_log_1[31:42] == b'        54 '
     fields = crawl_log_1.split()
@@ -1821,7 +1897,7 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
 
     crawl_log_2 = open(file, 'rb').read()
 
-    assert re.match(b'\A2[^\n]+\n\Z', crawl_log_2)
+    assert re.match(br'\A2[^\n]+\n\Z', crawl_log_2)
     assert crawl_log_2[24:31] == b'   200 '
     assert crawl_log_2[31:42] == b'        54 '
     fields = crawl_log_2.split()
@@ -1854,7 +1930,7 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
 
     assert os.path.exists(file)
     crawl_log_3 = open(file, 'rb').read()
-    assert re.match(b'\A2[^\n]+\n\Z', crawl_log_3)
+    assert re.match(br'\A2[^\n]+\n\Z', crawl_log_3)
     assert crawl_log_3[24:31] == b'   200 '
     assert crawl_log_3[31:42] == b'         0 '
     fields = crawl_log_3.split()
@@ -1894,7 +1970,7 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     assert os.path.exists(file)
     crawl_log_4 = open(file, 'rb').read()
 
-    assert re.match(b'\A2[^\n]+\n\Z', crawl_log_4)
+    assert re.match(br'\A2[^\n]+\n\Z', crawl_log_4)
     assert crawl_log_4[24:31] == b'   204 '
     assert crawl_log_4[31:42] == b'        38 '
     fields = crawl_log_4.split()
@@ -1976,6 +2052,10 @@ def test_socket_timeout_response(
 def test_empty_response(
         warcprox_, http_daemon, https_daemon, archiving_proxies,
         playback_proxies):
+    # localhost:server_port was added to the `bad_hostnames_ports` cache by
+    # previous tests and this causes subsequent tests to fail. We clear it.
+    warcprox_.proxy.bad_hostnames_ports.clear()
+
     url = 'http://localhost:%s/empty-response' % http_daemon.server_port
     response = requests.get(url, proxies=archiving_proxies, verify=False)
     assert response.status_code == 502
@@ -1991,6 +2071,10 @@ def test_payload_digest(warcprox_, http_daemon):
     Tests that digest is of RFC2616 "entity body"
     (transfer-decoded but not content-decoded)
     '''
+    # localhost:server_port was added to the `bad_hostnames_ports` cache by
+    # previous tests and this causes subsequent tests to fail. We clear it.
+    warcprox_.proxy.bad_hostnames_ports.clear()
+
     class HalfMockedMitm(warcprox.mitmproxy.MitmProxyHandler):
         def __init__(self, url):
             self.path = url
@@ -2223,6 +2307,23 @@ def test_dedup_min_binary_size(http_daemon, warcprox_, archiving_proxies):
             assert record.rec_headers.get_header('warc-target-uri') == url
         with pytest.raises(StopIteration):
             next(rec_iter)
+
+def test_incomplete_read(http_daemon, warcprox_, archiving_proxies):
+    urls_before = warcprox_.proxy.running_stats.urls
+
+    # see https://github.com/internetarchive/warcprox/pull/123
+    url = 'http://localhost:%s/incomplete-read' % http_daemon.server_port
+    with pytest.raises(requests.exceptions.ChunkedEncodingError):
+        response = requests.get(
+            url, proxies=archiving_proxies, verify=False, timeout=10)
+
+    # although `requests.get` raises exception here, other clients like
+    # browsers put up with the server misbehavior; warcprox does too, and will
+    # record the response verbatim in the warc; this `wait()` call tests
+    # that a warc record is written
+
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
 
 if __name__ == '__main__':
     pytest.main()

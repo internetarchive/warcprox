@@ -137,14 +137,16 @@ Example::
 
     Warcprox-Meta: {"warc-prefix": "special-warc"}
 
-``dedup-bucket`` (string)
+``dedup-buckets`` (string)
 ~~~~~~~~~~~~~~~~~~~~~~~~~
-Specifies the deduplication bucket. For more information about deduplication
+Specifies the deduplication bucket(s). For more information about deduplication
 see `<README.rst#deduplication>`_.
 
-Example::
+Examples::
 
-    Warcprox-Meta: {"dedup-bucket":"my-dedup-bucket"}
+    Warcprox-Meta: {"dedup-buckets":{"my-dedup-bucket":"rw"}}
+
+    Warcprox-Meta: {"dedup-buckets":{"my-dedup-bucket":"rw", "my-read-only-dedup-bucket": "ro"}}
 
 ``blocks`` (list)
 ~~~~~~~~~~~~~~~~~

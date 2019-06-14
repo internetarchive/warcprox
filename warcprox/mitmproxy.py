@@ -35,6 +35,13 @@ try:
     import urllib.parse as urllib_parse
 except ImportError:
     import urlparse as urllib_parse
+# In python2/3, urllib parse caches in memory URL parsing results to avoid
+# repeating the process for the same URL. The problem is that the default
+# in memory cache size is just 20.
+# https://github.com/python/cpython/blob/3.7/Lib/urllib/parse.py#L80
+# since we do a lot of URL parsing, it makes sense to increase cache size.
+urllib_parse.MAX_CACHE_SIZE = 2000
+
 try:
     import http.client as http_client
     # In python3 http.client.parse_headers() enforces http_client._MAXLINE
@@ -45,6 +52,11 @@ try:
     http_client._MAXLINE = 4194304  # 4 MiB
 except ImportError:
     import httplib as http_client
+# http_client has an arbitrary limit of 100 HTTP Headers which is too low and
+# it raises an HTTPException if the target URL has more.
+# https://github.com/python/cpython/blob/3.7/Lib/http/client.py#L113
+http_client._MAXHEADERS = 7000
+
 import json
 import socket
 import logging
@@ -64,8 +76,13 @@ import urlcanon
 import time
 import collections
 import cProfile
+from urllib3 import PoolManager
 from urllib3.util import is_connection_dropped
+from urllib3.exceptions import TimeoutError, HTTPError
 import doublethink
+from cachetools import TTLCache
+from threading import RLock
+from certauth.certauth import CertificateAuthority
 
 class ProxyingRecorder(object):
     """
@@ -100,7 +117,7 @@ class ProxyingRecorder(object):
                 self.proxy_client.sendall(hunk)
             except BaseException as e:
                 self._proxy_client_conn_open = False
-                self.logger.warn(
+                self.logger.warning(
                         '%s sending data to proxy client for url %s',
                         e, self.url)
                 self.logger.info(
@@ -210,9 +227,12 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
     and records the bytes in transit as it proxies them.
     '''
     logger = logging.getLogger("warcprox.mitmproxy.MitmProxyHandler")
+
     _socket_timeout = 60
     _max_resource_size = None
     _tmp_file_max_memory_size = 512 * 1024
+    onion_tor_socks_proxy_host = None
+    onion_tor_socks_proxy_port = None
 
     def __init__(self, request, client_address, server):
         threading.current_thread().name = 'MitmProxyHandler(tid={},started={},client={}:{})'.format(warcprox.gettid(), datetime.datetime.utcnow().isoformat(), client_address[0], client_address[1])
@@ -228,7 +248,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         else:
             self.url = self.path
             u = urllib_parse.urlparse(self.url)
-            if u.scheme != 'http':
+            if u.scheme != 'http' or u.netloc == '':
                 raise Exception(
                         'unable to parse request %r as a proxy request' % (
                             self.requestline))
@@ -239,6 +259,9 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                     scheme='', netloc='', params=u.params, path=u.path or '/',
                     query=u.query, fragment=u.fragment))
         self.hostname = urlcanon.normalize_host(host).decode('ascii')
+
+    def _hostname_port_cache_key(self):
+        return '%s:%s' % (self.hostname, self.port)
 
     def _connect_to_remote_server(self):
         '''
@@ -251,7 +274,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         '''
         self._conn_pool = self.server.remote_connection_pool.connection_from_host(
             host=self.hostname, port=int(self.port), scheme='http',
-            pool_kwargs={'maxsize': 6, 'timeout': self._socket_timeout})
+            pool_kwargs={'maxsize': 12, 'timeout': self._socket_timeout})
 
         self._remote_server_conn = self._conn_pool._get_conn()
         if is_connection_dropped(self._remote_server_conn):
@@ -283,7 +306,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                         self._remote_server_conn.sock = ssl.wrap_socket(
                                 self._remote_server_conn.sock)
                     except ssl.SSLError:
-                        self.logger.warn(
+                        self.logger.warning(
                                 "failed to establish ssl connection to %s; "
                                 "python ssl library does not support SNI, "
                                 "consider upgrading to python 2.7.9+ or 3.4+",
@@ -332,7 +355,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 else:
                     self.send_error(500, str(e))
             except Exception as f:
-                self.logger.warn("failed to send error response ({}) to proxy client: {}".format(e, f))
+                self.logger.warning("failed to send error response ({}) to proxy client: {}".format(e, f))
             return
 
         # Reload!
@@ -368,25 +391,55 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             else:
                 self._determine_host_port()
                 assert self.url
-
+            # Check if target hostname:port is in `bad_hostnames_ports` cache
+            # to avoid retrying to connect. Cached value is http status code.
+            cached = None
+            hostname_port = self._hostname_port_cache_key()
+            with self.server.bad_hostnames_ports_lock:
+                cached = self.server.bad_hostnames_ports.get(hostname_port)
+            if cached:
+                self.logger.info('Cannot connect to %s (cache)', hostname_port)
+                self.send_error(cached)
+                return
             # Connect to destination
             self._connect_to_remote_server()
         except warcprox.RequestBlockedByRule as e:
             # limit enforcers have already sent the appropriate response
             self.logger.info("%r: %r", self.requestline, e)
             return
+        except warcprox.BadRequest as e:
+            self.send_error(400, e.msg)
+            return
         except Exception as e:
+            # If connection fails, add hostname:port to cache to avoid slow
+            # subsequent reconnection attempts. `NewConnectionError` can be
+            # caused by many types of errors which are handled by urllib3.
+            response_code = 500
+            cache = False
+            if isinstance(e, (socket.timeout, TimeoutError,)):
+                response_code = 504
+                cache = True
+            elif isinstance(e, HTTPError):
+                response_code = 502
+                cache = True
+
+            if cache:
+                host_port = self._hostname_port_cache_key()
+                with self.server.bad_hostnames_ports_lock:
+                    self.server.bad_hostnames_ports[host_port] = response_code
+                self.logger.info('bad_hostnames_ports cache size: %d',
+                                 len(self.server.bad_hostnames_ports))
             self.logger.error(
                     "problem processing request %r: %r",
                     self.requestline, e, exc_info=True)
-            self.send_error(500, str(e))
+            self.send_error(response_code)
             return
 
         try:
             return self._proxy_request()
         except Exception as e:
             if self.server.shutting_down:
-                self.logger.warn(
+                self.logger.warning(
                         'sending 503 warcprox shutting down %r: %r',
                         self.requestline, e)
                 self.send_error(503, 'warcprox shutting down')
@@ -394,7 +447,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 self.logger.error(
                         'error from remote server(?) %r: %r',
                         self.requestline, e, exc_info=True)
-                self.send_error(502, str(e))
+                self.send_error(502)
             return
 
     def send_error(self, code, message=None, explain=None):
@@ -410,9 +463,13 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         try:
             return http_server.BaseHTTPRequestHandler.send_error(
                     self, code, message, explain)
-        except:
-            self.logger.error(
-                    'send_error(%r, %r, %r) raised exception', exc_info=True)
+        except Exception as e:
+            level = logging.ERROR
+            if isinstance(e, OSError) and e.errno == 9:
+                level = logging.TRACE
+            self.logger.log(
+                    level, 'send_error(%r, %r, %r) raised exception',
+                    exc_info=True)
             return None
 
     def _proxy_request(self, extra_response_headers={}):
@@ -478,9 +535,14 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                     tmp_file_max_memory_size=self._tmp_file_max_memory_size)
             prox_rec_res.begin(extra_response_headers=extra_response_headers)
 
-            buf = prox_rec_res.read(65536)
+            buf = None
             while buf != b'':
-                buf = prox_rec_res.read(65536)
+                try:
+                    buf = prox_rec_res.read(65536)
+                except http_client.IncompleteRead as e:
+                    self.logger.warn('%s from %s', e, self.url)
+                    buf = e.partial
+
                 if (self._max_resource_size and
                         prox_rec_res.recorder.len > self._max_resource_size):
                     prox_rec_res.truncated = b'length'
@@ -506,7 +568,19 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             # put it back in the pool to reuse it later.
             if not is_connection_dropped(self._remote_server_conn):
                 self._conn_pool._put_conn(self._remote_server_conn)
-        except:
+        except Exception as e:
+            # A common error is to connect to the remote server successfully
+            # but raise a `RemoteDisconnected` exception when trying to begin
+            # downloading. Its caused by prox_rec_res.begin(...) which calls
+            # http_client._read_status(). In that case, the host is also bad
+            # and we must add it to `bad_hostnames_ports` cache.
+            if isinstance(e, http_client.RemoteDisconnected):
+                host_port = self._hostname_port_cache_key()
+                with self.server.bad_hostnames_ports_lock:
+                    self.server.bad_hostnames_ports[host_port] = 502
+                self.logger.info('bad_hostnames_ports cache size: %d',
+                                 len(self.server.bad_hostnames_ports))
+
             self._remote_server_conn.sock.shutdown(socket.SHUT_RDWR)
             self._remote_server_conn.sock.close()
             raise
@@ -521,7 +595,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             return self.do_COMMAND
 
     def log_error(self, fmt, *args):
-        self.logger.warn(fmt, *args)
+        self.logger.warning(fmt, *args)
 
 class PooledMixIn(socketserver.ThreadingMixIn):
     logger = logging.getLogger("warcprox.mitmproxy.PooledMixIn")
@@ -669,4 +743,53 @@ class PooledMitmProxy(PooledMixIn, MitmProxy):
         self.shutting_down = True
         for sock in self.remote_server_socks:
             self.shutdown_request(sock)
+
+class SingleThreadedMitmProxy(http_server.HTTPServer):
+    logger = logging.getLogger('warcprox.warcproxy.SingleThreadedMitmProxy')
+
+    def __init__(
+            self, MitmProxyHandlerClass=MitmProxyHandler,
+            options=warcprox.Options()):
+        self.options = options
+
+        # TTLCache is not thread-safe. Access to the shared cache from multiple
+        # threads must be properly synchronized with an RLock according to ref:
+        # https://cachetools.readthedocs.io/en/latest/
+        self.bad_hostnames_ports = TTLCache(maxsize=1024, ttl=60)
+        self.bad_hostnames_ports_lock = RLock()
+
+        self.remote_connection_pool = PoolManager(
+            num_pools=max((options.max_threads or 0) // 6, 400))
+
+        if options.onion_tor_socks_proxy:
+            try:
+                host, port = options.onion_tor_socks_proxy.split(':')
+                MitmProxyHandlerClass.onion_tor_socks_proxy_host = host
+                MitmProxyHandlerClass.onion_tor_socks_proxy_port = int(port)
+            except ValueError:
+                MitmProxyHandlerClass.onion_tor_socks_proxy_host = options.onion_tor_socks_proxy
+                MitmProxyHandlerClass.onion_tor_socks_proxy_port = None
+
+        if options.socket_timeout:
+            MitmProxyHandlerClass._socket_timeout = options.socket_timeout
+        if options.max_resource_size:
+            MitmProxyHandlerClass._max_resource_size = options.max_resource_size
+        if options.tmp_file_max_memory_size:
+            MitmProxyHandlerClass._tmp_file_max_memory_size = options.tmp_file_max_memory_size
+
+        self.digest_algorithm = options.digest_algorithm or 'sha1'
+
+        ca_name = ('Warcprox CA on %s' % socket.gethostname())[:64]
+        self.ca = CertificateAuthority(
+                ca_file=options.cacert or 'warcprox-ca.pem',
+                certs_dir=options.certs_dir or './warcprox-ca',
+                ca_name=ca_name)
+
+        server_address = (
+                options.address or 'localhost',
+                options.port if options.port is not None else 8000)
+
+        http_server.HTTPServer.__init__(
+                self, server_address, MitmProxyHandlerClass,
+                bind_and_activate=True)
 

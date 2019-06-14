@@ -30,6 +30,7 @@ except ImportError:
     import Queue as queue
 
 import logging
+import logging.config
 import sys
 import hashlib
 import argparse
@@ -39,6 +40,7 @@ import traceback
 import signal
 import threading
 import certauth.certauth
+import yaml
 import warcprox
 import doublethink
 import cryptography.hazmat.backends.openssl
@@ -168,6 +170,10 @@ def _build_arg_parser(prog='warcprox', show_hidden=False):
             help=suppress(
                 'value of Cookie header to include in requests to the cdx '
                 'server, when using --cdxserver-dedup'))
+    hidden.add_argument(
+            '--cdxserver-dedup-max-threads', dest='cdxserver_dedup_max_threads',
+            type=int, default=50, help=suppress(
+                'maximum number of cdx server dedup threads'))
     arg_parser.add_argument('--dedup-min-text-size', dest='dedup_min_text_size',
                             type=int, default=0,
                             help=('try to dedup text resources with payload size over this limit in bytes'))
@@ -236,6 +242,9 @@ def _build_arg_parser(prog='warcprox', show_hidden=False):
             '--trace', dest='trace', action='store_true',
             help='very verbose logging')
     arg_parser.add_argument(
+            '--logging-conf-file', dest='logging_conf_file', default=None,
+            help=('reads logging configuration from a YAML file'))
+    arg_parser.add_argument(
             '--version', action='version',
             version="warcprox {}".format(warcprox.__version__))
 
@@ -255,7 +264,7 @@ def dump_state(signum=None, frame=None):
         except Exception as e:
             state_strs.append('<n/a:%r>' % e)
 
-    logging.warn(
+    logging.warning(
             'dumping state (caught signal %s)\n%s',
             signum, '\n'.join(state_strs))
 
@@ -298,6 +307,11 @@ def main(argv=None):
                 '%(asctime)s %(process)d %(levelname)s %(threadName)s '
                 '%(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s'))
 
+    if args.logging_conf_file:
+        with open(args.logging_conf_file, 'r') as fd:
+            conf = yaml.safe_load(fd)
+            logging.config.dictConfig(conf)
+
     # see https://github.com/pyca/cryptography/issues/2911
     cryptography.hazmat.backends.openssl.backend.activate_builtin_random()
 
@@ -312,7 +326,11 @@ def main(argv=None):
         # SIGQUIT does not exist on some platforms (windows)
         pass
 
-    controller.run_until_shutdown()
+    try:
+        controller.run_until_shutdown()
+    except:
+        logging.fatal('unhandled exception in controller', exc_info=True)
+        sys.exit(1)
 
 def ensure_rethinkdb_tables(argv=None):
     '''
@@ -384,7 +402,7 @@ def ensure_rethinkdb_tables(argv=None):
         did_something = True
     if args.rethinkdb_trough_db_url:
         dedup_db = warcprox.dedup.TroughDedupDb(options)
-        logging.warn(
+        logging.warning(
                 'trough is responsible for creating most of the rethinkdb '
                 'tables that it uses')
         did_something = True
