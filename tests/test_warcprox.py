@@ -916,88 +916,6 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
     finally:
         fh.close()
 
-def test_multiple_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, playback_proxies):
-    urls_before = warcprox_.proxy.running_stats.urls
-
-    url1 = 'http://localhost:{}/k/l'.format(http_daemon.server_port)
-
-    # archive url1 bucket_a1, bucket_b2, bucket_c3
-    headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"test_multiple_dedup_buckets",
-                                            "dedup-buckets":{"bucket_a1":"rw", "bucket_b2":"", "bucket_c3":"rw"}
-                                            })}
-    response = requests.get(url1, proxies=archiving_proxies, verify=False, headers=headers)
-    assert response.status_code == 200
-    assert response.headers['warcprox-test-header'] == 'k!'
-    assert response.content == b'I am the warcprox test payload! llllllllll!\n'
-
-    # wait for postfetch chain
-    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
-
-    # check url1 in dedup db bucket_a1
-    # logging.info('looking up sha1:bc3fac8847c9412f49d955e626fb58a76befbf81 in bucket_a1')
-    dedup_lookup = warcprox_.dedup_db.lookup(
-            b'sha1:bc3fac8847c9412f49d955e626fb58a76befbf81', bucket="bucket_a1")
-    assert dedup_lookup
-    assert dedup_lookup['url'] == url1.encode('ascii')
-    assert re.match(br'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$', dedup_lookup['id'])
-    assert re.match(br'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$', dedup_lookup['date'])
-    record_id = dedup_lookup['id']
-    dedup_date = dedup_lookup['date']
-
-    # check url1 in dedup db bucket_b2
-    # logging.info('looking up sha1:bc3fac8847c9412f49d955e626fb58a76befbf81 in bucket_b2')
-    dedup_lookup = warcprox_.dedup_db.lookup(
-            b'sha1:bc3fac8847c9412f49d955e626fb58a76befbf81', bucket="bucket_b2")
-    assert dedup_lookup
-    assert dedup_lookup['url'] == url1.encode('ascii')
-    assert re.match(br'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$', dedup_lookup['id'])
-    assert re.match(br'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$', dedup_lookup['date'])
-    record_id = dedup_lookup['id']
-    dedup_date = dedup_lookup['date']
-
-    # check url1 in dedup db bucket_c3
-    # logging.info('looking up sha1:bc3fac8847c9412f49d955e626fb58a76befbf81 in bucket_c3')
-    dedup_lookup = warcprox_.dedup_db.lookup(
-            b'sha1:bc3fac8847c9412f49d955e626fb58a76befbf81', bucket="bucket_c3")
-    assert dedup_lookup
-    assert dedup_lookup['url'] == url1.encode('ascii')
-    assert re.match(br'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$', dedup_lookup['id'])
-    assert re.match(br'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$', dedup_lookup['date'])
-    record_id = dedup_lookup['id']
-    dedup_date = dedup_lookup['date']
-
-    # close the warc
-    assert warcprox_.warc_writer_processor.writer_pool.warc_writers["test_multiple_dedup_buckets"]
-    writer = warcprox_.warc_writer_processor.writer_pool.warc_writers["test_multiple_dedup_buckets"]
-    warc_path = os.path.join(writer.directory, writer.finalname)
-    assert not os.path.exists(warc_path)
-    warcprox_.warc_writer_processor.writer_pool.warc_writers["test_multiple_dedup_buckets"].close()
-    assert os.path.exists(warc_path)
-
-    # read the warc  # should we bother with this?
-    fh = warctools.ArchiveRecord.open_archive(warc_path)
-    record_iter = fh.read_records(limit=None, offsets=True)
-    try:
-        (offset, record, errors) = next(record_iter)
-        assert record.type == b'warcinfo'
-
-        # url1 bucket_a
-        (offset, record, errors) = next(record_iter)
-        assert record.type == b'response'
-        assert record.url == url1.encode('ascii')
-        # check for duplicate warc record headers
-        assert Counter(h[0] for h in record.headers).most_common(1)[0][1] == 1
-        assert record.content[1] == b'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nwarcprox-test-header: k!\r\nContent-Length: 44\r\n\r\nI am the warcprox test payload! llllllllll!\n'
-        (offset, record, errors) = next(record_iter)
-        assert record.type == b'request'
-
-        # that's all folks
-        assert next(record_iter)[1] == None
-        assert next(record_iter, None) == None
-
-    finally:
-        fh.close()
-
 def test_dedup_buckets_readonly(https_daemon, http_daemon, warcprox_, archiving_proxies, playback_proxies):
     urls_before = warcprox_.proxy.running_stats.urls
 
@@ -1015,7 +933,7 @@ def test_dedup_buckets_readonly(https_daemon, http_daemon, warcprox_, archiving_
     # wait for postfetch chain
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
 
-    # check url1 in dedup db bucket_1
+    # check url1 in dedup db bucket_1 (rw)
     # logging.info('looking up sha1:bc3fac8847c9412f49d955e626fb58a76befbf81 in bucket_1')
     dedup_lookup = warcprox_.dedup_db.lookup(
             b'sha1:bc3fac8847c9412f49d955e626fb58a76befbf81', bucket="bucket_1")
@@ -1026,7 +944,7 @@ def test_dedup_buckets_readonly(https_daemon, http_daemon, warcprox_, archiving_
     record_id = dedup_lookup['id']
     dedup_date = dedup_lookup['date']
 
-    # check url1 not in dedup db bucket_2
+    # check url1 not in dedup db bucket_2 (ro)
     dedup_lookup = warcprox_.dedup_db.lookup(
             b'sha1:bc3fac8847c9412f49d955e626fb58a76befbf81', bucket="bucket_2")
     assert dedup_lookup is None
