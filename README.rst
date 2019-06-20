@@ -90,7 +90,7 @@ for deduplication works similarly to deduplication by `Heritrix
 
    a. Write ``response`` record with full payload
    b. Store new entry in deduplication database (can be disabled, see
-      `Warcprox-Meta HTTP request header <api.rst#warcprox-meta-http-request-header>`
+      `Warcprox-Meta HTTP request header <api.rst#warcprox-meta-http-request-header>`_
 
 The deduplication database is partitioned into different "buckets". URLs are
 deduplicated only against other captures in the same bucket. If specified, the
