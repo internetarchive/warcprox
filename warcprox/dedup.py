@@ -47,11 +47,11 @@ class DedupableMixin(object):
     def should_dedup(self, recorded_url):
         """Check if we should try to run dedup on resource based on payload
         size compared with min text/binary dedup size options.
-        When we use option --dedup-only-with-bucket, `dedup-bucket` is required
+        When we use option --dedup-only-with-bucket, `dedup-buckets` is required
         in Warcprox-Meta to perform dedup.
         Return Boolean.
         """
-        if self.dedup_only_with_bucket and "dedup-bucket" not in recorded_url.warcprox_meta:
+        if self.dedup_only_with_bucket and "dedup-buckets" not in recorded_url.warcprox_meta:
             return False
         if recorded_url.is_text():
             return recorded_url.response_recorder.payload_size() > self.min_text_size
@@ -69,10 +69,13 @@ class DedupLoader(warcprox.BaseStandardPostfetchProcessor, DedupableMixin):
                 and recorded_url.payload_digest
                 and self.should_dedup(recorded_url)):
             digest_key = warcprox.digest_str(recorded_url.payload_digest, self.options.base32)
-            if recorded_url.warcprox_meta and "dedup-bucket" in recorded_url.warcprox_meta:
-                recorded_url.dedup_info = self.dedup_db.lookup(
-                    digest_key, recorded_url.warcprox_meta["dedup-bucket"],
-                    recorded_url.url)
+            if recorded_url.warcprox_meta and "dedup-buckets" in recorded_url.warcprox_meta:
+                for bucket, bucket_mode in recorded_url.warcprox_meta["dedup-buckets"].items():
+                    recorded_url.dedup_info = self.dedup_db.lookup(
+                        digest_key, bucket, recorded_url.url)
+                    if recorded_url.dedup_info:
+                        # we found an existing capture
+                        break
             else:
                 recorded_url.dedup_info = self.dedup_db.lookup(
                     digest_key, url=recorded_url.url)
@@ -148,10 +151,12 @@ class DedupDb(DedupableMixin):
                 and self.should_dedup(recorded_url)):
             digest_key = warcprox.digest_str(
                     recorded_url.payload_digest, self.options.base32)
-            if recorded_url.warcprox_meta and "dedup-bucket" in recorded_url.warcprox_meta:
-                self.save(
-                        digest_key, records[0],
-                        bucket=recorded_url.warcprox_meta["dedup-bucket"])
+            if recorded_url.warcprox_meta and "dedup-buckets" in recorded_url.warcprox_meta:
+                for bucket, bucket_mode in recorded_url.warcprox_meta["dedup-buckets"].items():
+                    if not bucket_mode == "ro":
+                        self.save(
+                                digest_key, records[0],
+                                bucket=bucket)
             else:
                 self.save(digest_key, records[0])
 
@@ -213,8 +218,10 @@ class RethinkDedupDb(DedupDb, DedupableMixin):
                 and self.should_dedup(recorded_url)):
             digest_key = warcprox.digest_str(
                     recorded_url.payload_digest, self.options.base32)
-            if recorded_url.warcprox_meta and "dedup-bucket" in recorded_url.warcprox_meta:
-                self.save(digest_key, records[0], bucket=recorded_url.warcprox_meta["dedup-bucket"])
+            if recorded_url.warcprox_meta and "dedup-buckets" in recorded_url.warcprox_meta:
+                for bucket, bucket_mode in recorded_url.warcprox_meta["dedup-buckets"].items():
+                    if not bucket_mode == 'ro':
+                        self.save(digest_key, records[0], bucket=bucket)
             else:
                 self.save(digest_key, records[0])
 
@@ -347,11 +354,12 @@ class BatchTroughStorer(warcprox.BaseBatchPostfetchProcessor):
                     and recorded_url.warc_records[0].type == b'response'
                     and self.trough_dedup_db.should_dedup(recorded_url)):
                 if (recorded_url.warcprox_meta
-                        and 'dedup-bucket' in recorded_url.warcprox_meta):
-                    bucket = recorded_url.warcprox_meta['dedup-bucket']
+                        and 'dedup-buckets' in recorded_url.warcprox_meta):
+                    for bucket, bucket_mode in recorded_url.warcprox_meta["dedup-buckets"].items():
+                        if not bucket_mode == 'ro':
+                            buckets[bucket].append(recorded_url)
                 else:
-                    bucket = '__unspecified__'
-                buckets[bucket].append(recorded_url)
+                    buckets['__unspecified__'].append(recorded_url)
         return buckets
 
     def _process_batch(self, batch):
@@ -399,11 +407,11 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
                     and recorded_url.payload_digest
                     and self.trough_dedup_db.should_dedup(recorded_url)):
                 if (recorded_url.warcprox_meta
-                        and 'dedup-bucket' in recorded_url.warcprox_meta):
-                    bucket = recorded_url.warcprox_meta['dedup-bucket']
+                        and 'dedup-buckets' in recorded_url.warcprox_meta):
+                    for bucket, bucket_mode in recorded_url.warcprox_meta["dedup-buckets"].items():
+                        buckets[bucket].append(recorded_url)
                 else:
-                    bucket = '__unspecified__'
-                buckets[bucket].append(recorded_url)
+                    buckets['__unspecified__'].append(recorded_url)
             else:
                 discards.append(
                         warcprox.digest_str(
@@ -576,9 +584,11 @@ class TroughDedupDb(DedupDb, DedupableMixin):
                 and self.should_dedup(recorded_url)):
             digest_key = warcprox.digest_str(
                     recorded_url.payload_digest, self.options.base32)
-            if recorded_url.warcprox_meta and 'dedup-bucket' in recorded_url.warcprox_meta:
-                self.save(
-                        digest_key, records[0],
-                        bucket=recorded_url.warcprox_meta['dedup-bucket'])
+            if recorded_url.warcprox_meta and 'dedup-buckets' in recorded_url.warcprox_meta:
+                for bucket, bucket_mode in recorded_url.warcprox_meta["dedup-buckets"].items():
+                    if not bucket_mode == 'ro':
+                        self.save(
+                                digest_key, records[0],
+                                bucket=bucket)
             else:
                 self.save(digest_key, records[0])

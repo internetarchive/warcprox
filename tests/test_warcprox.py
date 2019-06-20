@@ -790,7 +790,7 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
     url2 = 'https://localhost:{}/k/l'.format(https_daemon.server_port)
 
     # archive url1 bucket_a
-    headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"test_dedup_buckets","dedup-bucket":"bucket_a"})}
+    headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"test_dedup_buckets","dedup-buckets":{"bucket_a":"rw"}})}
     response = requests.get(url1, proxies=archiving_proxies, verify=False, headers=headers)
     assert response.status_code == 200
     assert response.headers['warcprox-test-header'] == 'k!'
@@ -816,7 +816,7 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
     assert dedup_lookup is None
 
     # archive url2 bucket_b
-    headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"test_dedup_buckets","dedup-bucket":"bucket_b"})}
+    headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"test_dedup_buckets","dedup-buckets":{"bucket_b":""}})}
     response = requests.get(url2, proxies=archiving_proxies, verify=False, headers=headers)
     assert response.status_code == 200
     assert response.headers['warcprox-test-header'] == 'k!'
@@ -916,6 +916,71 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
     finally:
         fh.close()
 
+def test_dedup_buckets_readonly(https_daemon, http_daemon, warcprox_, archiving_proxies, playback_proxies):
+    urls_before = warcprox_.proxy.running_stats.urls
+
+    url1 = 'http://localhost:{}/k/l'.format(http_daemon.server_port)
+
+    # archive url1
+    headers = {"Warcprox-Meta": json.dumps({"warc-prefix":"test_dedup_buckets_readonly",
+                                            "dedup-buckets":{"bucket_1":"rw", "bucket_2":"ro"}})
+              }
+    response = requests.get(url1, proxies=archiving_proxies, verify=False, headers=headers)
+    assert response.status_code == 200
+    assert response.headers['warcprox-test-header'] == 'k!'
+    assert response.content == b'I am the warcprox test payload! llllllllll!\n'
+
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
+
+    # check url1 in dedup db bucket_1 (rw)
+    # logging.info('looking up sha1:bc3fac8847c9412f49d955e626fb58a76befbf81 in bucket_1')
+    dedup_lookup = warcprox_.dedup_db.lookup(
+            b'sha1:bc3fac8847c9412f49d955e626fb58a76befbf81', bucket="bucket_1")
+    assert dedup_lookup
+    assert dedup_lookup['url'] == url1.encode('ascii')
+    assert re.match(br'^<urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}>$', dedup_lookup['id'])
+    assert re.match(br'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$', dedup_lookup['date'])
+    record_id = dedup_lookup['id']
+    dedup_date = dedup_lookup['date']
+
+    # check url1 not in dedup db bucket_2 (ro)
+    dedup_lookup = warcprox_.dedup_db.lookup(
+            b'sha1:bc3fac8847c9412f49d955e626fb58a76befbf81', bucket="bucket_2")
+    assert dedup_lookup is None
+
+    # close the warc
+    assert warcprox_.warc_writer_processor.writer_pool.warc_writers["test_dedup_buckets_readonly"]
+    writer = warcprox_.warc_writer_processor.writer_pool.warc_writers["test_dedup_buckets_readonly"]
+    warc_path = os.path.join(writer.directory, writer.finalname)
+    assert not os.path.exists(warc_path)
+    warcprox_.warc_writer_processor.writer_pool.warc_writers["test_dedup_buckets_readonly"].close()
+    assert os.path.exists(warc_path)
+
+    # read the warc
+    fh = warctools.ArchiveRecord.open_archive(warc_path)
+    record_iter = fh.read_records(limit=None, offsets=True)
+    try:
+        (offset, record, errors) = next(record_iter)
+        assert record.type == b'warcinfo'
+
+        # url1 bucket_1
+        (offset, record, errors) = next(record_iter)
+        assert record.type == b'response'
+        assert record.url == url1.encode('ascii')
+        # check for duplicate warc record headers
+        assert Counter(h[0] for h in record.headers).most_common(1)[0][1] == 1
+        assert record.content[1] == b'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nwarcprox-test-header: k!\r\nContent-Length: 44\r\n\r\nI am the warcprox test payload! llllllllll!\n'
+        (offset, record, errors) = next(record_iter)
+        assert record.type == b'request'
+
+        # that's all folks
+        assert next(record_iter)[1] == None
+        assert next(record_iter, None) == None
+
+    finally:
+        fh.close()
+
 def test_dedup_bucket_concurrency(https_daemon, http_daemon, warcprox_, archiving_proxies):
     urls_before = warcprox_.proxy.running_stats.urls
     revisits_before = warcprox_.proxy.stats_db.value(
@@ -928,7 +993,7 @@ def test_dedup_bucket_concurrency(https_daemon, http_daemon, warcprox_, archivin
                     http_daemon.server_port, i)
             headers = {"Warcprox-Meta": json.dumps({
                 "warc-prefix":"test_dedup_buckets",
-                "dedup-bucket":"bucket_%s" % i})}
+                "dedup-buckets":{"bucket_%s" % i:"rw"}})}
             pool.submit(
                     requests.get, url, proxies=archiving_proxies, verify=False,
                     headers=headers)
@@ -944,7 +1009,7 @@ def test_dedup_bucket_concurrency(https_daemon, http_daemon, warcprox_, archivin
                     http_daemon.server_port, -i - 1)
             headers = {"Warcprox-Meta": json.dumps({
                 "warc-prefix":"test_dedup_buckets",
-                "dedup-bucket":"bucket_%s" % i})}
+                "dedup-buckets":{"bucket_%s" % i:"rw"}})}
             pool.submit(
                     requests.get, url, proxies=archiving_proxies, verify=False,
                     headers=headers)
@@ -959,7 +1024,7 @@ def test_dedup_bucket_concurrency(https_daemon, http_daemon, warcprox_, archivin
                     http_daemon.server_port, i)
             headers = {"Warcprox-Meta": json.dumps({
                 "warc-prefix":"test_dedup_buckets",
-                "dedup-bucket":"bucket_%s" % i})}
+                "dedup-buckets":{"bucket_%s" % i:"rw"}})}
             pool.submit(
                     requests.get, url, proxies=archiving_proxies, verify=False,
                     headers=headers)
@@ -1500,7 +1565,7 @@ def test_dedup_ok_flag(
     assert dedup_lookup is None
 
     # archive with dedup_ok:False
-    request_meta = {'dedup-bucket':'test_dedup_ok_flag','dedup-ok':False}
+    request_meta = {'dedup-buckets':{'test_dedup_ok_flag':''},'dedup-ok':False}
     headers = {'Warcprox-Meta': json.dumps(request_meta)}
     response = requests.get(
             url, proxies=archiving_proxies, headers=headers, verify=False)
@@ -1518,7 +1583,7 @@ def test_dedup_ok_flag(
     assert dedup_lookup is None
 
     # archive without dedup_ok:False
-    request_meta = {'dedup-bucket':'test_dedup_ok_flag'}
+    request_meta = {'dedup-buckets':{'test_dedup_ok_flag':''}}
     headers = {'Warcprox-Meta': json.dumps(request_meta)}
     response = requests.get(
             url, proxies=archiving_proxies, headers=headers, verify=False)

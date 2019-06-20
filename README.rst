@@ -89,12 +89,13 @@ for deduplication works similarly to deduplication by `Heritrix
 4. If not found,
 
    a. Write ``response`` record with full payload
-   b. Store new entry in deduplication database
+   b. Store new entry in deduplication database (can be disabled, see
+      `Warcprox-Meta HTTP request header <api.rst#warcprox-meta-http-request-header>`_)
 
 The deduplication database is partitioned into different "buckets". URLs are
 deduplicated only against other captures in the same bucket. If specified, the
-``dedup-bucket`` field of the `Warcprox-Meta HTTP request header
-<api.rst#warcprox-meta-http-request-header>`_ determines the bucket. Otherwise,
+``dedup-buckets`` field of the `Warcprox-Meta HTTP request header
+<api.rst#warcprox-meta-http-request-header>`_ determines the bucket(s). Otherwise,
 the default bucket is used.
 
 Deduplication can be disabled entirely by starting warcprox with the argument
