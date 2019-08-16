@@ -276,6 +276,8 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             host=self.hostname, port=int(self.port), scheme='http',
             pool_kwargs={'maxsize': 12, 'timeout': self._socket_timeout})
 
+        remote_ip = None
+
         self._remote_server_conn = self._conn_pool._get_conn()
         if is_connection_dropped(self._remote_server_conn):
             if self.onion_tor_socks_proxy_host and self.hostname.endswith('.onion'):
@@ -291,6 +293,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 self._remote_server_conn.sock.connect((self.hostname, int(self.port)))
             else:
                 self._remote_server_conn.connect()
+                remote_ip = self._remote_server_conn.sock.getpeername()[0]
 
             # Wrap socket if SSL is required
             if self.is_connect:
@@ -311,6 +314,11 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                                 "python ssl library does not support SNI, "
                                 "consider upgrading to python 2.7.9+ or 3.4+",
                                 self.hostname)
+                    raise
+                except ssl.SSLError as e:
+                    self.logger.error(
+                            'error connecting to %s (%s) port %s: %s',
+                            self.hostname, remote_ip, self.port, e)
                     raise
         return self._remote_server_conn.sock
 
