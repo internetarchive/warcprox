@@ -759,7 +759,7 @@ class PooledMitmProxy(PooledMixIn, MitmProxy):
         Abort active connections to remote servers to achieve prompt shutdown.
         '''
         self.shutting_down = True
-        for sock in self.remote_server_socks:
+        for sock in list(self.remote_server_socks):
             self.shutdown_request(sock)
 
 class SingleThreadedMitmProxy(http_server.HTTPServer):
