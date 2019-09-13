@@ -115,10 +115,8 @@ class WarcWriter:
         '''
         Ensures `self.f` is ready to write the next warc record.
 
-        Closes current warc if size limit has been reached. Then, if warc is
-        not open, opens one, and writes the warcinfo record.
+        If warc is not open, opens one, and writes the warcinfo record.
         '''
-        self.maybe_size_rollover()
         if not self.f:
             serial = self.serial
             self.serial += 1
@@ -136,11 +134,14 @@ class WarcWriter:
         records = self.record_builder.build_warc_records(recorded_url)
 
         self.ensure_open()
+        total_warc_file_size = None
         for record in records:
             offset = self.f.tell()
             record.write_to(self.f, gzip=self.gzip)
             record.offset = offset
-            record.length = self.f.tell() - offset
+            offset2 = self.f.tell()
+            record.length = offset2 - offset
+            total_warc_file_size = offset2
             record.warc_filename = self.finalname
             self.logger.trace(
                     'wrote warc record: warc_type=%s content_length=%s '
@@ -150,7 +151,8 @@ class WarcWriter:
                     self.path, record.get_header(warctools.WarcRecord.URL))
         self.f.flush()
         self.last_activity = time.time()
-
+        # Closes current warc if size limit has been reached.
+        self.maybe_size_rollover(total_warc_file_size)
         return records
 
     def close(self):
@@ -185,11 +187,11 @@ class WarcWriter:
                     self.finalname, time.time() - self.last_activity)
             self.close()
 
-    def maybe_size_rollover(self):
-        if self.path and os.path.getsize(self.path) > self.rollover_size:
+    def maybe_size_rollover(self, total_warc_file_size):
+        if total_warc_file_size and total_warc_file_size > self.rollover_size:
             self.logger.info(
                     'rolling over %s because it has reached %s bytes in size',
-                    self.finalname, os.path.getsize(self.path))
+                    self.finalname, total_warc_file_size)
             self.close()
 
 class WarcWriterPool:

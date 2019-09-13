@@ -276,6 +276,8 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             host=self.hostname, port=int(self.port), scheme='http',
             pool_kwargs={'maxsize': 12, 'timeout': self._socket_timeout})
 
+        remote_ip = None
+
         self._remote_server_conn = self._conn_pool._get_conn()
         if is_connection_dropped(self._remote_server_conn):
             if self.onion_tor_socks_proxy_host and self.hostname.endswith('.onion'):
@@ -291,6 +293,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 self._remote_server_conn.sock.connect((self.hostname, int(self.port)))
             else:
                 self._remote_server_conn.connect()
+                remote_ip = self._remote_server_conn.sock.getpeername()[0]
 
             # Wrap socket if SSL is required
             if self.is_connect:
@@ -311,6 +314,11 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                                 "python ssl library does not support SNI, "
                                 "consider upgrading to python 2.7.9+ or 3.4+",
                                 self.hostname)
+                    raise
+                except ssl.SSLError as e:
+                    self.logger.error(
+                            'error connecting to %s (%s) port %s: %s',
+                            self.hostname, remote_ip, self.port, e)
                     raise
         return self._remote_server_conn.sock
 
@@ -553,15 +561,18 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                             'bytes exceeded for URL %s',
                             self._max_resource_size, self.url)
                     break
-                elif (not 'content-length' in self.headers
-                        and time.time() - start > 3 * 60 * 60):
-                    prox_rec_res.truncated = b'time'
-                    self._remote_server_conn.sock.shutdown(socket.SHUT_RDWR)
-                    self._remote_server_conn.sock.close()
-                    self.logger.info(
-                            'reached hard timeout of 3 hours fetching url '
-                            'without content-length: %s', self.url)
-                    break
+                elif time.time() - start > 3 * 60 * 60:
+                    if not 'content-length' in self.headers:
+                        prox_rec_res.truncated = b'time'
+                        self._remote_server_conn.sock.shutdown(socket.SHUT_RDWR)
+                        self._remote_server_conn.sock.close()
+                        self.logger.info(
+                                'reached hard timeout of 3 hours fetching url '
+                                'without content-length: %s', self.url)
+                        break
+                    else:
+                        self.logger.info(
+                                'long-running fetch for URL %s', self.url)
 
             self.log_request(prox_rec_res.status, prox_rec_res.recorder.len)
             # Let's close off the remote end. If remote connection is fine,
@@ -572,17 +583,27 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             # A common error is to connect to the remote server successfully
             # but raise a `RemoteDisconnected` exception when trying to begin
             # downloading. Its caused by prox_rec_res.begin(...) which calls
-            # http_client._read_status(). In that case, the host is also bad
-            # and we must add it to `bad_hostnames_ports` cache.
-            if isinstance(e, http_client.RemoteDisconnected):
+            # http_client._read_status(). The connection fails there.
+            # https://github.com/python/cpython/blob/3.7/Lib/http/client.py#L275
+            # Another case is when the connection is fine but the response
+            # status is problematic, raising `BadStatusLine`.
+            # https://github.com/python/cpython/blob/3.7/Lib/http/client.py#L296
+            # In both cases, the host is bad and we must add it to
+            # `bad_hostnames_ports` cache.
+            if isinstance(e, (http_client.RemoteDisconnected,
+                              http_client.BadStatusLine)):
                 host_port = self._hostname_port_cache_key()
                 with self.server.bad_hostnames_ports_lock:
                     self.server.bad_hostnames_ports[host_port] = 502
                 self.logger.info('bad_hostnames_ports cache size: %d',
                                  len(self.server.bad_hostnames_ports))
 
-            self._remote_server_conn.sock.shutdown(socket.SHUT_RDWR)
-            self._remote_server_conn.sock.close()
+            # Close the connection only if its still open. If its already
+            # closed, an `OSError` "([Errno 107] Transport endpoint is not
+            # connected)" would be raised.
+            if not is_connection_dropped(self._remote_server_conn):
+                self._remote_server_conn.sock.shutdown(socket.SHUT_RDWR)
+                self._remote_server_conn.sock.close()
             raise
         finally:
             if prox_rec_res:
