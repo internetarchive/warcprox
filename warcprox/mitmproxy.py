@@ -777,7 +777,7 @@ class SingleThreadedMitmProxy(http_server.HTTPServer):
         self.bad_hostnames_ports_lock = RLock()
 
         self.remote_connection_pool = PoolManager(
-            num_pools=max((options.max_threads or 0) // 6, 400))
+            num_pools=max((options.max_threads or 0) // 6, 400), maxsize=10)
 
         if options.onion_tor_socks_proxy:
             try:
