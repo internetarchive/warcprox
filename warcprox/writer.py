@@ -167,7 +167,7 @@ class WarcWriter:
             if self.open_suffix == '':
                 try:
                     fcntl.lockf(self.f, fcntl.LOCK_UN)
-                except IOError as exc:
+                except (IOError, ValueError) as exc:
                     self.logger.error(
                             'could not unlock file %s (%s)', self.path, exc)
             self.f.close()
