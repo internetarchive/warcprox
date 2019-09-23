@@ -52,6 +52,7 @@ import mock
 import email.message
 import socketserver
 from concurrent import futures
+import urllib.parse
 
 try:
     import http.server as http_server
@@ -175,8 +176,10 @@ class _TestHttpRequestHandler(http_server.BaseHTTPRequestHandler):
     def build_response(self):
         m = re.match(r'^/([^/]+)/([^/]+)$', self.path)
         if m is not None:
-            special_header = 'warcprox-test-header: {}!'.format(m.group(1)).encode('utf-8')
-            payload = 'I am the warcprox test payload! {}!\n'.format(10*m.group(2)).encode('utf-8')
+            seg1 = urllib.parse.unquote(m.group(1))
+            seg2 = urllib.parse.unquote(m.group(2))
+            special_header = 'warcprox-test-header: {}!'.format(seg1).encode('utf-8')
+            payload = 'I am the warcprox test payload! {}!\n'.format(10*seg2).encode('utf-8')
             headers = (b'HTTP/1.1 200 OK\r\n'
                     +  b'Content-Type: text/plain\r\n'
                     +  special_header + b'\r\n'
@@ -1351,7 +1354,7 @@ def test_domain_data_soft_limit(
     warcprox_.proxy.remote_connection_pool.clear()
 
     # novel, pushes stats over the limit
-    url = 'https://muh.XN--Zz-2Ka.locALHOst:{}/z/~'.format(https_daemon.server_port)
+    url = 'https://muh.XN--Zz-2Ka.locALHOst:{}/z/%7E'.format(https_daemon.server_port)
     response = requests.get(
             url, proxies=archiving_proxies, headers=headers, stream=True,
             verify=False)
