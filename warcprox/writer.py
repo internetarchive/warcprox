@@ -170,11 +170,14 @@ class WarcWriter:
                 except Exception as exc:
                     self.logger.error(
                             'could not unlock file %s (%s)', self.path, exc)
-            self.f.close()
-            finalpath = os.path.sep.join(
-                    [self.directory, self.finalname])
-            os.rename(self.path, finalpath)
-
+            try:
+                self.f.close()
+                finalpath = os.path.sep.join(
+                        [self.directory, self.finalname])
+                os.rename(self.path, finalpath)
+            except Exception as exc:
+                self.logger.error(
+                    'could not close and rename file %s (%s)', self.path, exc)
             self.path = None
             self.f = None
 
