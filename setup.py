@@ -35,6 +35,7 @@ deps = [
     'idna>=2.5',
     'PyYAML>=5.1',
     'cachetools',
+    'trough>=0.1.2',
 ]
 try:
     import concurrent.futures
