@@ -762,7 +762,7 @@ class PooledMitmProxy(PooledMixIn, MitmProxy):
         Abort active connections to remote servers to achieve prompt shutdown.
         '''
         self.shutting_down = True
-        for sock in self.remote_server_socks:
+        for sock in list(self.remote_server_socks):
             self.shutdown_request(sock)
 
 class SingleThreadedMitmProxy(http_server.HTTPServer):
@@ -780,7 +780,7 @@ class SingleThreadedMitmProxy(http_server.HTTPServer):
         self.bad_hostnames_ports_lock = RLock()
 
         self.remote_connection_pool = PoolManager(
-            num_pools=max((options.max_threads or 0) // 6, 400))
+            num_pools=max((options.max_threads or 0) // 6, 400), maxsize=6)
 
         if options.onion_tor_socks_proxy:
             try:

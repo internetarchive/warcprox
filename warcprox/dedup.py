@@ -266,6 +266,9 @@ class CdxServerDedup(DedupDb):
         performance optimisation to handle that. limit < 0 is very inefficient
         in general. Maybe it could be configurable in the future.
 
+        Skip dedup for URLs with session params. These URLs are certainly
+        unique and highly volatile, we cannot dedup them.
+
         :param digest_key: b'sha1:<KEY-VALUE>' (prefix is optional).
             Example: b'sha1:B2LTWWPUOYAH7UIPQ7ZUPQ4VMBSVC36A'
         :param url: Target URL string
@@ -274,6 +277,8 @@ class CdxServerDedup(DedupDb):
         """
         u = url.decode("utf-8") if isinstance(url, bytes) else url
         try:
+            if any(s in u for s in ('JSESSIONID=', 'session=', 'sess=')):
+                return None
             result = self.http_pool.request('GET', self.cdx_url, fields=dict(
                 url=u, fl="timestamp,digest", filter="!mimetype:warc/revisit",
                 limit=-1))
