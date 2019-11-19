@@ -26,7 +26,7 @@ import os
 import json
 from hanzo import warctools
 import warcprox
-import warcprox.trough
+import trough.client
 import sqlite3
 import doublethink
 import datetime
@@ -509,7 +509,7 @@ class TroughDedupDb(DedupDb, DedupableMixin):
     def __init__(self, options=warcprox.Options()):
         DedupableMixin.__init__(self, options)
         self.options = options
-        self._trough_cli = warcprox.trough.TroughClient(
+        self._trough_cli = trough.client.TroughClient(
                 options.rethinkdb_trough_db_url, promotion_interval=60*60)
 
     def loader(self, *args, **kwargs):
@@ -531,9 +531,13 @@ class TroughDedupDb(DedupDb, DedupableMixin):
         record_id = response_record.get_header(warctools.WarcRecord.ID)
         url = response_record.get_header(warctools.WarcRecord.URL)
         warc_date = response_record.get_header(warctools.WarcRecord.DATE)
-        self._trough_cli.write(
-               bucket, self.WRITE_SQL_TMPL,
-               (digest_key, url, warc_date, record_id), self.SCHEMA_ID)
+        try:
+            self._trough_cli.write(
+                   bucket, self.WRITE_SQL_TMPL,
+                   (digest_key, url, warc_date, record_id), self.SCHEMA_ID)
+        except:
+            self.logger.warning(
+                    'problem posting dedup data to trough', exc_info=True)
 
     def batch_save(self, batch, bucket='__unspecified__'):
         sql_tmpl = ('insert or ignore into dedup\n'
@@ -548,12 +552,22 @@ class TroughDedupDb(DedupDb, DedupableMixin):
                 recorded_url.url,
                 recorded_url.warc_records[0].date,
                 recorded_url.warc_records[0].id,])
-        self._trough_cli.write(bucket, sql_tmpl, values, self.SCHEMA_ID)
+        try:
+            self._trough_cli.write(bucket, sql_tmpl, values, self.SCHEMA_ID)
+        except:
+            self.logger.warning(
+                    'problem posting dedup data to trough', exc_info=True)
 
     def lookup(self, digest_key, bucket='__unspecified__', url=None):
-        results = self._trough_cli.read(
-                bucket, 'select * from dedup where digest_key=%s;',
-                (digest_key,))
+        try:
+            results = self._trough_cli.read(
+                    bucket, 'select * from dedup where digest_key=%s;',
+                    (digest_key,))
+        except:
+            self.logger.warning(
+                    'problem reading dedup data from trough', exc_info=True)
+            return None
+
         if results:
             assert len(results) == 1 # sanity check (digest_key is primary key)
             result = results[0]
@@ -570,7 +584,14 @@ class TroughDedupDb(DedupDb, DedupableMixin):
         '''Returns [{'digest_key': ..., 'url': ..., 'date': ...}, ...]'''
         sql_tmpl = 'select * from dedup where digest_key in (%s)' % (
                 ','.join('%s' for i in range(len(digest_keys))))
-        results = self._trough_cli.read(bucket, sql_tmpl, digest_keys)
+
+        try:
+            results = self._trough_cli.read(bucket, sql_tmpl, digest_keys)
+        except:
+            self.logger.warning(
+                    'problem reading dedup data from trough', exc_info=True)
+            results = None
+
         if results is None:
             return []
         self.logger.debug(
