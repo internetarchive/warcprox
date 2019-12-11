@@ -343,13 +343,68 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         except:
             self.logger.error("uncaught exception in do_WARCPROX_WRITE_RECORD", exc_info=True)
             raise
+    def send_error(self, code, message=None, explain=None):
+        super().send_error(code, message, explain)
+
+        # Build request
+        req_str = '{} {} {}\r\n'.format(
+                self.command, self.path, self.request_version)
+
+        # Swallow headers that don't make sense to forward on, i.e. most
+        # hop-by-hop headers. http://tools.ietf.org/html/rfc2616#section-13.5.
+        # self.headers is an email.message.Message, which is case-insensitive
+        # and doesn't throw KeyError in __delitem__
+        for key in (
+                'Connection', 'Proxy-Connection', 'Keep-Alive',
+                'Proxy-Authenticate', 'Proxy-Authorization', 'Upgrade'):
+            del self.headers[key]
+
+        self.headers['Via'] = via_header_value(
+                self.headers.get('Via'),
+                self.request_version.replace('HTTP/', ''))
+
+        # Add headers to the request
+        # XXX in at least python3.3 str(self.headers) uses \n not \r\n :(
+        req_str += '\r\n'.join(
+                '{}: {}'.format(k,v) for (k,v) in self.headers.items())
+
+        warcprox_meta = None
+        raw_warcprox_meta = self.headers.get('Warcprox-Meta')
+        if raw_warcprox_meta:
+            warcprox_meta = json.loads(raw_warcprox_meta)
+
+        req = req_str.encode('latin1') + b'\r\n\r\n'
+        recorded_url = RecordedUrl(
+                url=self.url,
+                remote_ip=b'',
+                warcprox_meta=warcprox_meta,
+                status=code,
+                client_ip=self.client_address[0],
+                method=self.command,
+                content_type="unknown",
+                response_recorder=None,
+                request_data=req,
+                duration=None ,size=0,
+                timestamp=None, host=self.hostname,
+                do_not_archive=True,
+                referer=self.headers.get('referer'))
+
+        self.server.recorded_url_q.put(recorded_url)
+
 
     def log_message(self, fmt, *args):
         # logging better handled elsewhere?
         pass
 
 RE_MIMETYPE = re.compile(r'[;\s]')
-
+def via_header_value(orig, request_version):
+    via = orig
+    if via:
+        via += ', '
+    else:
+        via = ''
+    via = via + '%s %s' % (request_version, 'warcprox')
+    return via
 class RecordedUrl:
     logger = logging.getLogger("warcprox.warcproxy.RecordedUrl")
 
