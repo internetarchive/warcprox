@@ -343,8 +343,8 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         except:
             self.logger.error("uncaught exception in do_WARCPROX_WRITE_RECORD", exc_info=True)
             raise
-    def send_error(self, code, message=None, explain=None):
-        super().send_error(code, message, explain)
+    def send_error(self, code, message=None, explain=None, exception=None):
+        super().send_error(code, message=message, explain=explain, exception=exception)
 
         # Build request
         req_str = '{} {} {}\r\n'.format(
@@ -359,10 +359,6 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 'Proxy-Authenticate', 'Proxy-Authorization', 'Upgrade'):
             del self.headers[key]
 
-        self.headers['Via'] = via_header_value(
-                self.headers.get('Via'),
-                self.request_version.replace('HTTP/', ''))
-
         # Add headers to the request
         # XXX in at least python3.3 str(self.headers) uses \n not \r\n :(
         req_str += '\r\n'.join(
@@ -374,22 +370,21 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
             warcprox_meta = json.loads(raw_warcprox_meta)
 
         req = req_str.encode('latin1') + b'\r\n\r\n'
-        recorded_url = RecordedUrl(
+        failed_url = FailedUrl(
                 url=self.url,
-                remote_ip=b'',
+                request_data=req,
                 warcprox_meta=warcprox_meta,
                 status=code,
                 client_ip=self.client_address[0],
                 method=self.command,
-                content_type="unknown",
-                response_recorder=None,
-                request_data=req,
-                duration=None ,size=0,
-                timestamp=None, host=self.hostname,
+                timestamp=None,
+                host=self.hostname,
+                duration=None,
+                referer=self.headers.get('referer'),
                 do_not_archive=True,
-                referer=self.headers.get('referer'))
+                exception=exception)
 
-        self.server.recorded_url_q.put(recorded_url)
+        self.server.recorded_url_q.put(failed_url)
 
 
     def log_message(self, fmt, *args):
@@ -397,23 +392,12 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         pass
 
 RE_MIMETYPE = re.compile(r'[;\s]')
-def via_header_value(orig, request_version):
-    via = orig
-    if via:
-        via += ', '
-    else:
-        via = ''
-    via = via + '%s %s' % (request_version, 'warcprox')
-    return via
-class RecordedUrl:
-    logger = logging.getLogger("warcprox.warcproxy.RecordedUrl")
 
-    def __init__(self, url, request_data, response_recorder, remote_ip,
-            warcprox_meta=None, content_type=None, custom_type=None,
-            status=None, size=None, client_ip=None, method=None,
-            timestamp=None, host=None, duration=None, referer=None,
-            payload_digest=None, truncated=None, warc_records=None,
-            do_not_archive=False):
+class RequestedUrl:
+    logger = logging.getLogger("warcprox.warcproxy.RequestedUrl")
+    def __init__(self, url, request_data, warcprox_meta=None, status=None,
+            client_ip=None, method=None, timestamp=None, host=None, duration=None,
+            referer=None, do_not_archive=True):
         # XXX should test what happens with non-ascii url (when does
         # url-encoding happen?)
         if type(url) is not bytes:
@@ -421,13 +405,7 @@ class RecordedUrl:
         else:
             self.url = url
 
-        if type(remote_ip) is not bytes:
-            self.remote_ip = remote_ip.encode('ascii')
-        else:
-            self.remote_ip = remote_ip
-
         self.request_data = request_data
-        self.response_recorder = response_recorder
 
         if warcprox_meta:
             if 'captures-bucket' in warcprox_meta:
@@ -444,6 +422,47 @@ class RecordedUrl:
         else:
             self.warcprox_meta = {}
 
+        self.status = status
+        self.client_ip = client_ip
+        self.method = method
+        self.timestamp = timestamp
+        self.host = host
+        self.duration = duration
+        self.referer = referer
+        self.do_not_archive = do_not_archive
+
+class FailedUrl(RequestedUrl):
+    logger = logging.getLogger("warcprox.warcproxy.FailedUrl")
+
+    def __init__(self, url, request_data, warcprox_meta=None, status=None,
+            client_ip=None, method=None, timestamp=None, host=None, duration=None,
+            referer=None, do_not_archive=True, exception=None):
+
+        super().__init__(url, request_data, warcprox_meta=warcprox_meta, status=status,
+        client_ip=client_ip, method=method, timestamp=timestamp, host=host, duration=duration,
+        referer=referer, do_not_archive=do_not_archive)
+
+        self.exception = exception
+
+class RecordedUrl(RequestedUrl):
+    logger = logging.getLogger("warcprox.warcproxy.RecordedUrl")
+
+    def __init__(self, url, request_data, response_recorder, remote_ip,
+            warcprox_meta=None, content_type=None, custom_type=None,
+            status=None, size=None, client_ip=None, method=None,
+            timestamp=None, host=None, duration=None, referer=None,
+            payload_digest=None, truncated=None, warc_records=None,
+            do_not_archive=False):
+
+        super().__init__(url, request_data, warcprox_meta=warcprox_meta, status=status,
+        client_ip=client_ip, method=method, timestamp=timestamp, host=host, duration=duration,
+        referer=referer, do_not_archive=do_not_archive)
+
+        if type(remote_ip) is not bytes:
+            self.remote_ip = remote_ip.encode('ascii')
+        else:
+            self.remote_ip = remote_ip
+
         self.content_type = content_type
 
         self.mimetype = content_type
@@ -452,18 +471,12 @@ class RecordedUrl:
             self.mimetype = RE_MIMETYPE.split(self.mimetype, 2)[0]
 
         self.custom_type = custom_type
-        self.status = status
         self.size = size
-        self.client_ip = client_ip
-        self.method = method
-        self.timestamp = timestamp
-        self.host = host
-        self.duration = duration
-        self.referer = referer
+        self.response_recorder = response_recorder
+        self.custom_type = custom_type
         self.payload_digest = payload_digest
         self.truncated = truncated
         self.warc_records = warc_records
-        self.do_not_archive = do_not_archive
 
     def is_text(self):
         """Ref: https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types/Complete_list_of_MIME_types

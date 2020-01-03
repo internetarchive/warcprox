@@ -223,7 +223,7 @@ class ListenerPostfetchProcessor(BaseStandardPostfetchProcessor):
         self.name = listener.__class__.__name__
 
     def _process_url(self, recorded_url):
-        return self.listener.notify(recorded_url, recorded_url.warc_records)
+        return self.listener.notify(recorded_url, recorded_url.warc_records if hasattr(recorded_url, "warc_records") else None)
 
     def start(self):
         if hasattr(self.listener, 'start'):

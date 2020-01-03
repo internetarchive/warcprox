@@ -359,7 +359,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 self.logger.error(
                         "problem handling %r: %r", self.requestline, e)
                 if type(e) is socket.timeout:
-                    self.send_error(-2, str(e))
+                    self.send_error(504, str(e), exception=e)
                 else:
                     self.send_error(500, str(e))
             except Exception as f:
@@ -425,7 +425,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             response_code = 500
             cache = False
             if isinstance(e, (socket.timeout, TimeoutError,)):
-                response_code = -2
+                response_code = 504
                 cache = True
             elif isinstance(e, HTTPError):
                 response_code = 502
@@ -440,7 +440,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             self.logger.error(
                     "problem processing request %r: %r",
                     self.requestline, e, exc_info=True)
-            self.send_error(response_code)
+            self.send_error(response_code, exception=e)
             return
 
         try:
@@ -458,13 +458,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 self.send_error(502)
             return
 
-    def send_error(self, code, message=None, explain=None):
-
-        if code == -2:
-            return_code = 504
-        else:
-            return_code = code
-
+    def send_error(self, code, message=None, explain=None, exception=None):
         # BaseHTTPRequestHandler.send_response_only() in http/server.py
         # does this:
         #     if not hasattr(self, '_headers_buffer'):
@@ -476,7 +470,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             self._headers_buffer = []
         try:
             return http_server.BaseHTTPRequestHandler.send_error(
-                    self, return_code, message, explain)
+                    self, code, message, explain)
         except Exception as e:
             level = logging.ERROR
             if isinstance(e, OSError) and e.errno == 9:

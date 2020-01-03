@@ -25,6 +25,7 @@ import json
 import os
 import warcprox
 import socket
+from urllib3.exceptions import TimeoutError, HTTPError
 
 class CrawlLogger(object):
     def __init__(self, dir_, options=warcprox.Options()):
@@ -40,13 +41,14 @@ class CrawlLogger(object):
     def notify(self, recorded_url, records):
         # 2017-08-03T21:45:24.496Z   200       2189 https://autismcouncil.wisconsin.gov/robots.txt P https://autismcouncil.wisconsin.gov/ text/plain #001 20170803214523617+365 sha1:PBS2CEF7B4OSEXZZF3QE2XN2VHYCPNPX https://autismcouncil.wisconsin.gov/ duplicate:digest {"warcFileOffset":942,"contentSize":2495,"warcFilename":"ARCHIVEIT-2159-TEST-JOB319150-20170803214522386-00000.warc.gz"}
         now = datetime.datetime.utcnow()
-        extra_info = {'contentSize': recorded_url.size,} if recorded_url.size > 0 else {}
+        status = self.get_artificial_status(recorded_url)
+        extra_info = {'contentSize': recorded_url.size,} if hasattr(recorded_url, "size") and recorded_url.size > 0 else {}
         if records:
             extra_info['warcFilename'] = records[0].warc_filename
             extra_info['warcFileOffset'] = records[0].offset
         if recorded_url.method != 'GET':
             extra_info['method'] = recorded_url.method
-        if recorded_url.response_recorder:
+        if hasattr(recorded_url, "response_recorder") and recorded_url.response_recorder:
             content_length = recorded_url.response_recorder.len - recorded_url.response_recorder.payload_offset
             payload_digest = warcprox.digest_str(
                 recorded_url.payload_digest,
@@ -60,12 +62,12 @@ class CrawlLogger(object):
             payload_digest = '-'
         fields = [
             '{:%Y-%m-%dT%H:%M:%S}.{:03d}Z'.format(now, now.microsecond//1000),
-            '% 5s' % recorded_url.status,
+            '% 5s' % status,
             '% 10s' % content_length,
             recorded_url.url,
             '-', # hop path
             recorded_url.referer or '-',
-            recorded_url.mimetype or '-',
+            recorded_url.mimetype if hasattr(recorded_url, "mimetype") and recorded_url.mimetype is not None else '-',
             '-',
             '{:%Y%m%d%H%M%S}{:03d}+{:03d}'.format(
                 recorded_url.timestamp,
@@ -91,4 +93,10 @@ class CrawlLogger(object):
 
         with open(crawl_log_path, 'ab') as f:
             f.write(line)
+
+    def get_artificial_status(self, recorded_url):
+        if hasattr(recorded_url, 'exception') and isinstance(recorded_url.exception, (socket.timeout, TimeoutError, )):
+            return '-2'
+        else:
+            return recorded_url.status
 
