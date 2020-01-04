@@ -162,7 +162,7 @@ class StatsProcessor(warcprox.BaseBatchPostfetchProcessor):
     def _tally_batch(self, batch):
         batch_buckets = {}
         for recorded_url in batch:
-            if not hasattr(recorded_url, 'response_recorder'):
+            if isinstance(recorded_url, warcprox.warcproxy.FailedUrl):
                 continue
             for bucket in self.buckets(recorded_url):
                 bucket_stats = batch_buckets.get(bucket)
@@ -299,7 +299,7 @@ class RunningStats:
                     (self.first_snap_time - 120 + i * 10, 0, 0))
 
     def notify(self, recorded_url, records):
-        if not hasattr(recorded_url, 'response_recorder'):
+        if isinstance(recorded_url, warcprox.warcproxy.FailedUrl):
             return
         with self._lock:
             self.urls += 1

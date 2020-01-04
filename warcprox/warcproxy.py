@@ -395,9 +395,12 @@ RE_MIMETYPE = re.compile(r'[;\s]')
 
 class RequestedUrl:
     logger = logging.getLogger("warcprox.warcproxy.RequestedUrl")
-    def __init__(self, url, request_data, warcprox_meta=None, status=None,
-            client_ip=None, method=None, timestamp=None, host=None, duration=None,
-            referer=None, do_not_archive=True):
+    def __init__(self, url, request_data, response_recorder=None, remote_ip=None,
+            warcprox_meta=None, content_type=None, custom_type=None,
+            status=None, size=None, client_ip=None, method=None,
+            timestamp=None, host=None, duration=None, referer=None,
+            payload_digest=None, truncated=None, warc_records=None,
+            do_not_archive=False):
         # XXX should test what happens with non-ascii url (when does
         # url-encoding happen?)
         if type(url) is not bytes:
@@ -406,6 +409,7 @@ class RequestedUrl:
             self.url = url
 
         self.request_data = request_data
+        self.response_recorder = response_recorder
 
         if warcprox_meta:
             if 'captures-bucket' in warcprox_meta:
@@ -422,13 +426,25 @@ class RequestedUrl:
         else:
             self.warcprox_meta = {}
 
+        self.content_type = content_type
+
+        self.mimetype = content_type
+        if self.mimetype:
+            # chop off subtype, and ensure there's no whitespace
+            self.mimetype = RE_MIMETYPE.split(self.mimetype, 2)[0]
+
+        self.custom_type = custom_type
         self.status = status
+        self.size = size
         self.client_ip = client_ip
         self.method = method
         self.timestamp = timestamp
         self.host = host
         self.duration = duration
         self.referer = referer
+        self.payload_digest = payload_digest
+        self.truncated = truncated
+        self.warc_records = warc_records
         self.do_not_archive = do_not_archive
 
 class FailedUrl(RequestedUrl):
@@ -438,9 +454,9 @@ class FailedUrl(RequestedUrl):
             client_ip=None, method=None, timestamp=None, host=None, duration=None,
             referer=None, do_not_archive=True, exception=None):
 
-        super().__init__(url, request_data, warcprox_meta=warcprox_meta, status=status,
+        super().__init__(url, request_data, response_recorder=None, warcprox_meta=warcprox_meta, content_type=None, custom_type=None, status=status, size=None,
         client_ip=client_ip, method=method, timestamp=timestamp, host=host, duration=duration,
-        referer=referer, do_not_archive=do_not_archive)
+        referer=referer, payload_digest=None, truncated=None, warc_records=None, do_not_archive=do_not_archive)
 
         self.exception = exception
 
@@ -454,29 +470,17 @@ class RecordedUrl(RequestedUrl):
             payload_digest=None, truncated=None, warc_records=None,
             do_not_archive=False):
 
-        super().__init__(url, request_data, warcprox_meta=warcprox_meta, status=status,
-        client_ip=client_ip, method=method, timestamp=timestamp, host=host, duration=duration,
-        referer=referer, do_not_archive=do_not_archive)
+        super().__init__(url, request_data, response_recorder=response_recorder,
+        warcprox_meta=warcprox_meta, content_type=content_type,
+        custom_type=custom_type, status=status, size=size, client_ip=client_ip,
+        method=method, timestamp=timestamp, host=host, duration=duration,
+        referer=referer, payload_digest=payload_digest, truncated=truncated,
+        warc_records=warc_records, do_not_archive=do_not_archive)
 
         if type(remote_ip) is not bytes:
             self.remote_ip = remote_ip.encode('ascii')
         else:
             self.remote_ip = remote_ip
-
-        self.content_type = content_type
-
-        self.mimetype = content_type
-        if self.mimetype:
-            # chop off subtype, and ensure there's no whitespace
-            self.mimetype = RE_MIMETYPE.split(self.mimetype, 2)[0]
-
-        self.custom_type = custom_type
-        self.size = size
-        self.response_recorder = response_recorder
-        self.custom_type = custom_type
-        self.payload_digest = payload_digest
-        self.truncated = truncated
-        self.warc_records = warc_records
 
     def is_text(self):
         """Ref: https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types/Complete_list_of_MIME_types
