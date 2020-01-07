@@ -26,7 +26,6 @@ import os
 import json
 from hanzo import warctools
 import warcprox
-import trough.client
 import sqlite3
 import doublethink
 import datetime
@@ -500,13 +499,14 @@ class TroughDedupDb(DedupDb, DedupableMixin):
     SCHEMA_SQL = ('create table dedup (\n'
                   '    digest_key varchar(100) primary key,\n'
                   '    url varchar(2100) not null,\n'
-                  '    date datetime not null,\n'
+                  '    date varchar(100) not null,\n'
                   '    id varchar(100));\n') # warc record id
     WRITE_SQL_TMPL = ('insert or ignore into dedup\n'
                       '(digest_key, url, date, id)\n'
                       'values (%s, %s, %s, %s);')
 
     def __init__(self, options=warcprox.Options()):
+        import trough.client
         DedupableMixin.__init__(self, options)
         self.options = options
         self._trough_cli = trough.client.TroughClient(

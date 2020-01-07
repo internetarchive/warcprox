@@ -302,6 +302,7 @@ def main(argv=None):
     else:
         loglevel = logging.INFO
 
+    logging.root.handlers = []
     logging.basicConfig(
             stream=sys.stdout, level=loglevel, format=(
                 '%(asctime)s %(process)d %(levelname)s %(threadName)s '

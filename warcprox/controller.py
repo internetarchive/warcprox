@@ -111,7 +111,7 @@ class Factory:
             assert hasattr(plugin, 'notify') ^ hasattr(plugin, '_startup')
             return plugin
         except Exception as e:
-            logging.fatal('problem with plugin class %r: %s', qualname, e)
+            logging.fatal('problem with plugin class %r', qualname, exc_info=1)
             sys.exit(1)
 
     @staticmethod
