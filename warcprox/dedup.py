@@ -26,7 +26,6 @@ import os
 import json
 from hanzo import warctools
 import warcprox
-import trough.client
 import sqlite3
 import doublethink
 import datetime
@@ -507,6 +506,7 @@ class TroughDedupDb(DedupDb, DedupableMixin):
                       'values (%s, %s, %s, %s);')
 
     def __init__(self, options=warcprox.Options()):
+        import trough.client
         DedupableMixin.__init__(self, options)
         self.options = options
         self._trough_cli = trough.client.TroughClient(
