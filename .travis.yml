@@ -5,17 +5,12 @@ python:
 - 3.7
 - 3.6
 - 3.5
-- 3.4
-- 2.7
-- pypy
 - pypy3.5
 - nightly
 
 matrix:
   allow_failures:
   - python: nightly
-  - python: 2.7
-  - python: pypy
 
 addons:
   apt:
