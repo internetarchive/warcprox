@@ -35,7 +35,7 @@ before_install:
 - ping -c2 trough
 
 install:
-- pip install . pytest requests warcio mock
+- pip install .[trough] pytest requests warcio mock
 
 before_script:
 - docker exec trough bash -c 'while ! test -e /tmp/trough-read.out ; do sleep 0.5 ; done' || true
