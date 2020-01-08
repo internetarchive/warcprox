@@ -35,7 +35,7 @@ deps = [
     'idna>=2.5',
     'PyYAML>=5.1',
     'cachetools',
-    'trough>=0.1.2',
+    'trough>=0.1.4',
 ]
 try:
     import concurrent.futures
@@ -44,7 +44,7 @@ except:
 
 setuptools.setup(
         name='warcprox',
-        version='2.4.24',
+        version='2.4.25',
         description='WARC writing MITM HTTP/S proxy',
         url='https://github.com/internetarchive/warcprox',
         author='Noah Levitt',
