@@ -506,7 +506,14 @@ class TroughDedupDb(DedupDb, DedupableMixin):
                       'values (%s, %s, %s, %s);')
 
     def __init__(self, options=warcprox.Options()):
-        import trough.client
+        try:
+            import trough.client
+        except ImportError as e:
+            logging.critical(
+                    '%s: %s\n\nYou might need to run "pip install '
+                    'warcprox[trough]".', type(e).__name__, e)
+            sys.exit(1)
+
         DedupableMixin.__init__(self, options)
         self.options = options
         self._trough_cli = trough.client.TroughClient(
