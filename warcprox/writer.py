@@ -51,6 +51,7 @@ class WarcWriter:
         self.finalname = None
         self.gzip = options.gzip or False
         self.prefix = options.prefix or 'warcprox'
+        self.port = options.port or 8000
         self.open_suffix = '' if options.no_warc_open_suffix else '.open'
         self.rollover_size = options.rollover_size or 1000000000
         self.rollover_idle_time = options.rollover_idle_time or None
@@ -67,7 +68,7 @@ class WarcWriter:
         """WARC filename is configurable with CLI parameter --warc-filename.
         Default: '{prefix}-{timestamp17}-{randomtoken}-{serialno}'
         Available variables are: prefix, timestamp14, timestamp17, serialno,
-        randomtoken, hostname, shorthostname.
+        randomtoken, hostname, shorthostname, port.
         Extension ``.warc`` or ``.warc.gz`` is appended automatically.
         """
         hostname = socket.getfqdn()
@@ -77,7 +78,7 @@ class WarcWriter:
                 timestamp17=warcprox.timestamp17(),
                 serialno='{:05d}'.format(serial),
                 randomtoken=self.randomtoken, hostname=hostname,
-                shorthostname=shorthostname)
+                shorthostname=shorthostname, port=self.port)
         if self.gzip:
             fname = fname + '.warc.gz'
         else:
