@@ -514,6 +514,8 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
 
         req = req_str.encode('latin1') + b'\r\n\r\n'
 
+        return req
+
     def _inner_proxy_request(self, extra_response_headers={}):
         '''
         Sends the request to the remote server, then uses a ProxyingRecorder to
