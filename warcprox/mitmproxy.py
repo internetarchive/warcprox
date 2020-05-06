@@ -363,7 +363,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 else:
                     self.send_error(500, str(e))
             except Exception as f:
-                self.logger.warning("failed to send error response ({}) to proxy client: {}".format(e, f), exc_info=True)
+                self.logger.warning("failed to send error response ({}) to proxy client: {}".format(e, f))
             return
 
         # Reload!
