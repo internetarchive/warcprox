@@ -443,9 +443,10 @@ class FailedUrl(RequestedUrl):
             client_ip=None, method=None, timestamp=None, host=None, duration=None,
             referer=None, do_not_archive=True, exception=None):
 
-        super().__init__(url, request_data, response_recorder=None, warcprox_meta=warcprox_meta, content_type=None, custom_type=None, status=status, size=None,
-        client_ip=client_ip, method=method, timestamp=timestamp, host=host, duration=duration,
-        referer=referer, payload_digest=None, truncated=None, warc_records=None, do_not_archive=do_not_archive)
+        super().__init__(url, request_data, warcprox_meta=warcprox_meta,
+                status=status, client_ip=client_ip, method=method,
+                timestamp=timestamp, host=host, duration=duration,
+                referer=referer, do_not_archive=do_not_archive)
 
         self.exception = exception
 
