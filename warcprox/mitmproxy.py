@@ -363,7 +363,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 else:
                     self.send_error(500, str(e))
             except Exception as f:
-                self.logger.warning("failed to send error response ({}) to proxy client: {}".format(e, f))
+                self.logger.warning("failed to send error response ({}) to proxy client: {}".format(e, f), exc_info=True)
             return
 
         # Reload!
@@ -489,6 +489,31 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             self.server.unregister_remote_server_sock(
                     self._remote_server_conn.sock)
 
+    def _swallow_hop_by_hop_headers(self):
+        '''
+        Swallow headers that don't make sense to forward on, i.e.
+        most hop-by-hop headers.
+
+        http://tools.ietf.org/html/rfc2616#section-13.5.
+        '''
+        # self.headers is an email.message.Message, which is case-insensitive
+        # and doesn't throw KeyError in __delitem__
+        for key in (
+                'Warcprox-Meta', 'Connection', 'Proxy-Connection', 'Keep-Alive',
+                'Proxy-Authenticate', 'Proxy-Authorization', 'Upgrade'):
+            del self.headers[key]
+
+    def _build_request(self):
+        req_str = '{} {} {}\r\n'.format(
+            self.command, self.path, self.request_version)
+
+        # Add headers to the request
+        # XXX in at least python3.3 str(self.headers) uses \n not \r\n :(
+        req_str += '\r\n'.join(
+            '{}: {}'.format(k,v) for (k,v) in self.headers.items())
+
+        req = req_str.encode('latin1') + b'\r\n\r\n'
+
     def _inner_proxy_request(self, extra_response_headers={}):
         '''
         Sends the request to the remote server, then uses a ProxyingRecorder to
@@ -500,29 +525,11 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         It may contain extra HTTP headers such as ``Warcprox-Meta`` which
         are written in the WARC record for this request.
         '''
-        # Build request
-        req_str = '{} {} {}\r\n'.format(
-                self.command, self.path, self.request_version)
-
-        # Swallow headers that don't make sense to forward on, i.e. most
-        # hop-by-hop headers. http://tools.ietf.org/html/rfc2616#section-13.5.
-        # self.headers is an email.message.Message, which is case-insensitive
-        # and doesn't throw KeyError in __delitem__
-        for key in (
-                'Connection', 'Proxy-Connection', 'Keep-Alive',
-                'Proxy-Authenticate', 'Proxy-Authorization', 'Upgrade'):
-            del self.headers[key]
-
+        self._swallow_hop_by_hop_headers()
         self.headers['Via'] = via_header_value(
                 self.headers.get('Via'),
                 self.request_version.replace('HTTP/', ''))
-
-        # Add headers to the request
-        # XXX in at least python3.3 str(self.headers) uses \n not \r\n :(
-        req_str += '\r\n'.join(
-                '{}: {}'.format(k,v) for (k,v) in self.headers.items())
-
-        req = req_str.encode('latin1') + b'\r\n\r\n'
+        req = self._build_request()
 
         # Append message body if present to the request
         if 'Content-Length' in self.headers:
@@ -548,7 +555,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 try:
                     buf = prox_rec_res.read(65536)
                 except http_client.IncompleteRead as e:
-                    self.logger.warn('%s from %s', e, self.url)
+                    self.logger.warning('%s from %s', e, self.url)
                     buf = e.partial
 
                 if (self._max_resource_size and

@@ -188,16 +188,21 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         self._enforce_limits_and_blocks()
         return warcprox.mitmproxy.MitmProxyHandler._connect_to_remote_server(self)
 
-    def _proxy_request(self):
-        warcprox_meta = None
+    def _parse_warcprox_meta(self):
+        '''
+        :return: Warcprox-Meta request header value as a dictionary, or None
+        '''
         raw_warcprox_meta = self.headers.get('Warcprox-Meta')
         self.logger.trace(
-                'request for %s Warcprox-Meta header: %s', self.url,
-                raw_warcprox_meta)
+            'request for %s Warcprox-Meta header: %s', self.url,
+            raw_warcprox_meta)
         if raw_warcprox_meta:
-            warcprox_meta = json.loads(raw_warcprox_meta)
-            del self.headers['Warcprox-Meta']
+            return json.loads(raw_warcprox_meta)
+        else:
+            return None
 
+    def _proxy_request(self):
+        warcprox_meta = self._parse_warcprox_meta()
         remote_ip = self._remote_server_conn.sock.getpeername()[0]
         timestamp = doublethink.utcnow()
         extra_response_headers = {}
@@ -343,36 +348,21 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         except:
             self.logger.error("uncaught exception in do_WARCPROX_WRITE_RECORD", exc_info=True)
             raise
+
     def send_error(self, code, message=None, explain=None, exception=None):
         super().send_error(code, message=message, explain=explain, exception=exception)
 
-        # Build request
-        req_str = '{} {} {}\r\n'.format(
-                self.command, self.path, self.request_version)
+        # If error happens during CONNECT handling and before the inner request, self.url
+        # is unset, and self.path is something like 'example.com:443'
+        urlish = self.url or self.path
 
-        # Swallow headers that don't make sense to forward on, i.e. most
-        # hop-by-hop headers. http://tools.ietf.org/html/rfc2616#section-13.5.
-        # self.headers is an email.message.Message, which is case-insensitive
-        # and doesn't throw KeyError in __delitem__
-        for key in (
-                'Connection', 'Proxy-Connection', 'Keep-Alive',
-                'Proxy-Authenticate', 'Proxy-Authorization', 'Upgrade'):
-            del self.headers[key]
+        warcprox_meta = self._parse_warcprox_meta()
+        self._swallow_hop_by_hop_headers()
+        request_data = self._build_request()
 
-        # Add headers to the request
-        # XXX in at least python3.3 str(self.headers) uses \n not \r\n :(
-        req_str += '\r\n'.join(
-                '{}: {}'.format(k,v) for (k,v) in self.headers.items())
-
-        warcprox_meta = None
-        raw_warcprox_meta = self.headers.get('Warcprox-Meta')
-        if raw_warcprox_meta:
-            warcprox_meta = json.loads(raw_warcprox_meta)
-
-        req = req_str.encode('latin1') + b'\r\n\r\n'
         failed_url = FailedUrl(
-                url=self.url,
-                request_data=req,
+                url=urlish,
+                request_data=request_data,
                 warcprox_meta=warcprox_meta,
                 status=code,
                 client_ip=self.client_address[0],
@@ -385,7 +375,6 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 exception=exception)
 
         self.server.recorded_url_q.put(failed_url)
-
 
     def log_message(self, fmt, *args):
         # logging better handled elsewhere?
