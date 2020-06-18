@@ -188,16 +188,21 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         self._enforce_limits_and_blocks()
         return warcprox.mitmproxy.MitmProxyHandler._connect_to_remote_server(self)
 
-    def _proxy_request(self):
-        warcprox_meta = None
+    def _parse_warcprox_meta(self):
+        '''
+        :return: Warcprox-Meta request header value as a dictionary, or None
+        '''
         raw_warcprox_meta = self.headers.get('Warcprox-Meta')
         self.logger.trace(
-                'request for %s Warcprox-Meta header: %s', self.url,
-                raw_warcprox_meta)
+            'request for %s Warcprox-Meta header: %s', self.url,
+            raw_warcprox_meta)
         if raw_warcprox_meta:
-            warcprox_meta = json.loads(raw_warcprox_meta)
-            del self.headers['Warcprox-Meta']
+            return json.loads(raw_warcprox_meta)
+        else:
+            return None
 
+    def _proxy_request(self):
+        warcprox_meta = self._parse_warcprox_meta()
         remote_ip = self._remote_server_conn.sock.getpeername()[0]
         timestamp = doublethink.utcnow()
         extra_response_headers = {}
@@ -344,16 +349,42 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
             self.logger.error("uncaught exception in do_WARCPROX_WRITE_RECORD", exc_info=True)
             raise
 
+    def send_error(self, code, message=None, explain=None, exception=None):
+        super().send_error(code, message=message, explain=explain, exception=exception)
+
+        # If error happens during CONNECT handling and before the inner request, self.url
+        # is unset, and self.path is something like 'example.com:443'
+        urlish = self.url or self.path
+
+        warcprox_meta = self._parse_warcprox_meta()
+        self._swallow_hop_by_hop_headers()
+        request_data = self._build_request()
+
+        failed_url = FailedUrl(
+                url=urlish,
+                request_data=request_data,
+                warcprox_meta=warcprox_meta,
+                status=code,
+                client_ip=self.client_address[0],
+                method=self.command,
+                timestamp=None,
+                host=self.hostname,
+                duration=None,
+                referer=self.headers.get('referer'),
+                do_not_archive=True,
+                exception=exception)
+
+        self.server.recorded_url_q.put(failed_url)
+
     def log_message(self, fmt, *args):
         # logging better handled elsewhere?
         pass
 
 RE_MIMETYPE = re.compile(r'[;\s]')
 
-class RecordedUrl:
-    logger = logging.getLogger("warcprox.warcproxy.RecordedUrl")
-
-    def __init__(self, url, request_data, response_recorder, remote_ip,
+class RequestedUrl:
+    logger = logging.getLogger("warcprox.warcproxy.RequestedUrl")
+    def __init__(self, url, request_data, response_recorder=None, remote_ip=None,
             warcprox_meta=None, content_type=None, custom_type=None,
             status=None, size=None, client_ip=None, method=None,
             timestamp=None, host=None, duration=None, referer=None,
@@ -365,11 +396,6 @@ class RecordedUrl:
             self.url = url.encode('ascii')
         else:
             self.url = url
-
-        if type(remote_ip) is not bytes:
-            self.remote_ip = remote_ip.encode('ascii')
-        else:
-            self.remote_ip = remote_ip
 
         self.request_data = request_data
         self.response_recorder = response_recorder
@@ -409,6 +435,42 @@ class RecordedUrl:
         self.truncated = truncated
         self.warc_records = warc_records
         self.do_not_archive = do_not_archive
+
+class FailedUrl(RequestedUrl):
+    logger = logging.getLogger("warcprox.warcproxy.FailedUrl")
+
+    def __init__(self, url, request_data, warcprox_meta=None, status=None,
+            client_ip=None, method=None, timestamp=None, host=None, duration=None,
+            referer=None, do_not_archive=True, exception=None):
+
+        super().__init__(url, request_data, warcprox_meta=warcprox_meta,
+                status=status, client_ip=client_ip, method=method,
+                timestamp=timestamp, host=host, duration=duration,
+                referer=referer, do_not_archive=do_not_archive)
+
+        self.exception = exception
+
+class RecordedUrl(RequestedUrl):
+    logger = logging.getLogger("warcprox.warcproxy.RecordedUrl")
+
+    def __init__(self, url, request_data, response_recorder, remote_ip,
+            warcprox_meta=None, content_type=None, custom_type=None,
+            status=None, size=None, client_ip=None, method=None,
+            timestamp=None, host=None, duration=None, referer=None,
+            payload_digest=None, truncated=None, warc_records=None,
+            do_not_archive=False):
+
+        super().__init__(url, request_data, response_recorder=response_recorder,
+        warcprox_meta=warcprox_meta, content_type=content_type,
+        custom_type=custom_type, status=status, size=size, client_ip=client_ip,
+        method=method, timestamp=timestamp, host=host, duration=duration,
+        referer=referer, payload_digest=payload_digest, truncated=truncated,
+        warc_records=warc_records, do_not_archive=do_not_archive)
+
+        if type(remote_ip) is not bytes:
+            self.remote_ip = remote_ip.encode('ascii')
+        else:
+            self.remote_ip = remote_ip
 
     def is_text(self):
         """Ref: https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types/Complete_list_of_MIME_types

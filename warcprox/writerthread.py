@@ -72,6 +72,8 @@ class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
         self.close_prefix_reqs.put(prefix)
 
     def _process_url(self, recorded_url):
+        if isinstance(recorded_url, warcprox.warcproxy.FailedUrl):
+            return
         try:
             records = []
             if self._should_archive(recorded_url):
