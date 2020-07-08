@@ -637,13 +637,17 @@ class PooledMixIn(socketserver.ThreadingMixIn):
 
     def process_request(self, request, client_address):
         self.active_requests[request] = doublethink.utcnow()
-        future = self.pool.submit(
-                self.process_request_thread, request, client_address)
-        future.add_done_callback(
-                lambda f: self.active_requests.pop(request, None))
-        if future.done():
-            # avoid theoretical timing issue, in case process_request_thread
-            # managed to finish before future.add_done_callback() ran
+        try:
+            future = self.pool.submit(
+                    self.process_request_thread, request, client_address)
+            future.add_done_callback(
+                    lambda f: self.active_requests.pop(request, None))
+            if future.done():
+                # avoid theoretical timing issue, in case process_request_thread
+                # managed to finish before future.add_done_callback() ran
+                self.active_requests.pop(request, None)
+        except RuntimeError as exc:
+            self.logger.error("Error processing request %s", str(exc))
             self.active_requests.pop(request, None)
 
     def get_request(self):
