@@ -25,7 +25,7 @@ import json
 import os
 import warcprox
 import socket
-from urllib3.exceptions import TimeoutError, HTTPError
+from urllib3.exceptions import TimeoutError, HTTPError, NewConnectionError, MaxRetryError
 
 class CrawlLogger(object):
     def __init__(self, dir_, options=warcprox.Options()):
@@ -43,6 +43,10 @@ class CrawlLogger(object):
         now = datetime.datetime.utcnow()
         status = self.get_artificial_status(recorded_url)
         extra_info = {'contentSize': recorded_url.size,} if recorded_url.size is not None and recorded_url.size > 0 else {}
+        if hasattr(recorded_url, 'exception') and recorded_url.exception is not None:
+            extra_info['exception'] = str(recorded_url.exception)
+            if(hasattr(recorded_url, 'message') and recorded_url.message is not None):
+                extra_info['exceptionMessage'] = str(recorded_url.message)
         if records:
             extra_info['warcFilename'] = records[0].warc_filename
             extra_info['warcFileOffset'] = records[0].offset
@@ -95,8 +99,28 @@ class CrawlLogger(object):
             f.write(line)
 
     def get_artificial_status(self, recorded_url):
-        if hasattr(recorded_url, 'exception') and isinstance(recorded_url.exception, (socket.timeout, TimeoutError, )):
-            return '-2'
+        # urllib3 Does not specify DNS errors. We must parse them from the exception string.
+        # Unfortunately, the errors are reported differently on different systems.
+        # https://stackoverflow.com/questions/40145631
+
+        if hasattr(recorded_url, 'exception') and isinstance(recorded_url.exception, (MaxRetryError, )):
+            return '-8'
+        elif hasattr(recorded_url, 'exception') and isinstance(recorded_url.exception, (NewConnectionError, )):
+            exception_string=str(recorded_url.exception)
+            if ("[Errno 11001] getaddrinfo failed" in exception_string or                   # Windows
+                "[Errno -2] Name or service not known" in exception_string or               # Linux
+                "[Errno -3] Temporary failure in name resolution" in exception_string or    # Linux
+                "[Errno 8] nodename nor servname " in exception_string):                    # OS X
+                return '-6' # DNS Failure
+            else:
+                return '-2' # Other Connection Failure
+        elif hasattr(recorded_url, 'exception') and isinstance(recorded_url.exception, (socket.timeout, TimeoutError, )):
+            return '-2' # Connection Timeout
+        elif isinstance(recorded_url, warcprox.warcproxy.FailedUrl):
+            # synthetic status, used when some other status (such as connection-lost)
+            # is considered by policy the same as a document-not-found
+            # Cached failures result in FailedUrl with no Exception
+            return '-404'
         else:
             return recorded_url.status
 
