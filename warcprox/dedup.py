@@ -48,8 +48,12 @@ class DedupableMixin(object):
         size compared with min text/binary dedup size options.
         When we use option --dedup-only-with-bucket, `dedup-buckets` is required
         in Warcprox-Meta to perform dedup.
+        If recorded_url.do_not_archive is True, we skip dedup. This record will
+        not be written to WARC anyway.
         Return Boolean.
         """
+        if recorded_url.do_not_archive:
+            return False
         if self.dedup_only_with_bucket and "dedup-buckets" not in recorded_url.warcprox_meta:
             return False
         if recorded_url.is_text():
