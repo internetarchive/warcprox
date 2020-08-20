@@ -78,7 +78,7 @@ import collections
 import cProfile
 from urllib3 import PoolManager
 from urllib3.util import is_connection_dropped
-from urllib3.exceptions import TimeoutError, HTTPError
+from urllib3.exceptions import TimeoutError, HTTPError, NewConnectionError
 import doublethink
 from cachetools import TTLCache
 from threading import RLock
@@ -407,7 +407,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 cached = self.server.bad_hostnames_ports.get(hostname_port)
             if cached:
                 self.logger.info('Cannot connect to %s (cache)', hostname_port)
-                self.send_error(cached)
+                self.send_error(cached, exception=Exception('Cached Failed Connection'))
                 return
             # Connect to destination
             self._connect_to_remote_server()

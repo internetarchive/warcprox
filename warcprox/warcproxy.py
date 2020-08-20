@@ -372,6 +372,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 duration=None,
                 referer=self.headers.get('referer'),
                 do_not_archive=True,
+                message=message,
                 exception=exception)
 
         self.server.recorded_url_q.put(failed_url)
@@ -441,13 +442,14 @@ class FailedUrl(RequestedUrl):
 
     def __init__(self, url, request_data, warcprox_meta=None, status=None,
             client_ip=None, method=None, timestamp=None, host=None, duration=None,
-            referer=None, do_not_archive=True, exception=None):
+            referer=None, do_not_archive=True, message=None, exception=None):
 
         super().__init__(url, request_data, warcprox_meta=warcprox_meta,
                 status=status, client_ip=client_ip, method=method,
                 timestamp=timestamp, host=host, duration=duration,
                 referer=referer, do_not_archive=do_not_archive)
 
+        self.message = message
         self.exception = exception
 
 class RecordedUrl(RequestedUrl):
