@@ -68,6 +68,8 @@ class DedupLoader(warcprox.BaseStandardPostfetchProcessor, DedupableMixin):
         self.dedup_db = dedup_db
 
     def _process_url(self, recorded_url):
+        if isinstance(recorded_url, warcprox.warcproxy.FailedUrl):
+            return
         if (recorded_url.response_recorder
                 and recorded_url.payload_digest
                 and self.should_dedup(recorded_url)):

@@ -78,7 +78,7 @@ import collections
 import cProfile
 from urllib3 import PoolManager
 from urllib3.util import is_connection_dropped
-from urllib3.exceptions import TimeoutError, HTTPError
+from urllib3.exceptions import TimeoutError, HTTPError, NewConnectionError
 import doublethink
 from cachetools import TTLCache
 from threading import RLock
@@ -359,7 +359,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 self.logger.error(
                         "problem handling %r: %r", self.requestline, e)
                 if type(e) is socket.timeout:
-                    self.send_error(504, str(e))
+                    self.send_error(504, str(e), exception=e)
                 else:
                     self.send_error(500, str(e))
             except Exception as f:
@@ -407,7 +407,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 cached = self.server.bad_hostnames_ports.get(hostname_port)
             if cached:
                 self.logger.info('Cannot connect to %s (cache)', hostname_port)
-                self.send_error(cached)
+                self.send_error(cached, exception=Exception('Cached Failed Connection'))
                 return
             # Connect to destination
             self._connect_to_remote_server()
@@ -440,7 +440,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             self.logger.error(
                     "problem processing request %r: %r",
                     self.requestline, e, exc_info=True)
-            self.send_error(response_code)
+            self.send_error(response_code, exception=e)
             return
 
         try:
@@ -458,7 +458,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 self.send_error(502)
             return
 
-    def send_error(self, code, message=None, explain=None):
+    def send_error(self, code, message=None, explain=None, exception=None):
         # BaseHTTPRequestHandler.send_response_only() in http/server.py
         # does this:
         #     if not hasattr(self, '_headers_buffer'):
@@ -489,6 +489,33 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             self.server.unregister_remote_server_sock(
                     self._remote_server_conn.sock)
 
+    def _swallow_hop_by_hop_headers(self):
+        '''
+        Swallow headers that don't make sense to forward on, i.e.
+        most hop-by-hop headers.
+
+        http://tools.ietf.org/html/rfc2616#section-13.5.
+        '''
+        # self.headers is an email.message.Message, which is case-insensitive
+        # and doesn't throw KeyError in __delitem__
+        for key in (
+                'Warcprox-Meta', 'Connection', 'Proxy-Connection', 'Keep-Alive',
+                'Proxy-Authenticate', 'Proxy-Authorization', 'Upgrade'):
+            del self.headers[key]
+
+    def _build_request(self):
+        req_str = '{} {} {}\r\n'.format(
+            self.command, self.path, self.request_version)
+
+        # Add headers to the request
+        # XXX in at least python3.3 str(self.headers) uses \n not \r\n :(
+        req_str += '\r\n'.join(
+            '{}: {}'.format(k,v) for (k,v) in self.headers.items())
+
+        req = req_str.encode('latin1') + b'\r\n\r\n'
+
+        return req
+
     def _inner_proxy_request(self, extra_response_headers={}):
         '''
         Sends the request to the remote server, then uses a ProxyingRecorder to
@@ -500,29 +527,11 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         It may contain extra HTTP headers such as ``Warcprox-Meta`` which
         are written in the WARC record for this request.
         '''
-        # Build request
-        req_str = '{} {} {}\r\n'.format(
-                self.command, self.path, self.request_version)
-
-        # Swallow headers that don't make sense to forward on, i.e. most
-        # hop-by-hop headers. http://tools.ietf.org/html/rfc2616#section-13.5.
-        # self.headers is an email.message.Message, which is case-insensitive
-        # and doesn't throw KeyError in __delitem__
-        for key in (
-                'Connection', 'Proxy-Connection', 'Keep-Alive',
-                'Proxy-Authenticate', 'Proxy-Authorization', 'Upgrade'):
-            del self.headers[key]
-
+        self._swallow_hop_by_hop_headers()
         self.headers['Via'] = via_header_value(
                 self.headers.get('Via'),
                 self.request_version.replace('HTTP/', ''))
-
-        # Add headers to the request
-        # XXX in at least python3.3 str(self.headers) uses \n not \r\n :(
-        req_str += '\r\n'.join(
-                '{}: {}'.format(k,v) for (k,v) in self.headers.items())
-
-        req = req_str.encode('latin1') + b'\r\n\r\n'
+        req = self._build_request()
 
         # Append message body if present to the request
         if 'Content-Length' in self.headers:
@@ -548,7 +557,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 try:
                     buf = prox_rec_res.read(65536)
                 except http_client.IncompleteRead as e:
-                    self.logger.warn('%s from %s', e, self.url)
+                    self.logger.warning('%s from %s', e, self.url)
                     buf = e.partial
 
                 if (self._max_resource_size and

@@ -25,6 +25,7 @@ import json
 import os
 import warcprox
 import socket
+from urllib3.exceptions import TimeoutError, HTTPError, NewConnectionError, MaxRetryError
 
 class CrawlLogger(object):
     def __init__(self, dir_, options=warcprox.Options()):
@@ -40,7 +41,12 @@ class CrawlLogger(object):
     def notify(self, recorded_url, records):
         # 2017-08-03T21:45:24.496Z   200       2189 https://autismcouncil.wisconsin.gov/robots.txt P https://autismcouncil.wisconsin.gov/ text/plain #001 20170803214523617+365 sha1:PBS2CEF7B4OSEXZZF3QE2XN2VHYCPNPX https://autismcouncil.wisconsin.gov/ duplicate:digest {"warcFileOffset":942,"contentSize":2495,"warcFilename":"ARCHIVEIT-2159-TEST-JOB319150-20170803214522386-00000.warc.gz"}
         now = datetime.datetime.utcnow()
-        extra_info = {'contentSize': recorded_url.size,}
+        status = self.get_artificial_status(recorded_url)
+        extra_info = {'contentSize': recorded_url.size,} if recorded_url.size is not None and recorded_url.size > 0 else {}
+        if hasattr(recorded_url, 'exception') and recorded_url.exception is not None:
+            extra_info['exception'] = str(recorded_url.exception)
+            if(hasattr(recorded_url, 'message') and recorded_url.message is not None):
+                extra_info['exceptionMessage'] = str(recorded_url.message)
         if records:
             extra_info['warcFilename'] = records[0].warc_filename
             extra_info['warcFileOffset'] = records[0].offset
@@ -51,23 +57,26 @@ class CrawlLogger(object):
             payload_digest = warcprox.digest_str(
                 recorded_url.payload_digest,
                 self.options.base32)
-        else:
+        elif records is not None and len(records) > 0:
             # WARCPROX_WRITE_RECORD request
             content_length = int(records[0].get_header(b'Content-Length'))
             payload_digest = records[0].get_header(b'WARC-Payload-Digest')
+        else:
+            content_length = 0
+            payload_digest = '-'
         fields = [
             '{:%Y-%m-%dT%H:%M:%S}.{:03d}Z'.format(now, now.microsecond//1000),
-            '% 5s' % recorded_url.status,
+            '% 5s' % status,
             '% 10s' % content_length,
             recorded_url.url,
             '-', # hop path
             recorded_url.referer or '-',
-            recorded_url.mimetype or '-',
+            recorded_url.mimetype if recorded_url.mimetype is not None else '-',
             '-',
             '{:%Y%m%d%H%M%S}{:03d}+{:03d}'.format(
                 recorded_url.timestamp,
                 recorded_url.timestamp.microsecond//1000,
-                recorded_url.duration.microseconds//1000),
+                recorded_url.duration.microseconds//1000) if (recorded_url.timestamp is not None and recorded_url.duration is not None) else '-',
             payload_digest,
             recorded_url.warcprox_meta.get('metadata', {}).get('seed', '-'),
             'duplicate:digest' if records and records[0].type == b'revisit' else '-',
@@ -88,4 +97,30 @@ class CrawlLogger(object):
 
         with open(crawl_log_path, 'ab') as f:
             f.write(line)
+
+    def get_artificial_status(self, recorded_url):
+        # urllib3 Does not specify DNS errors. We must parse them from the exception string.
+        # Unfortunately, the errors are reported differently on different systems.
+        # https://stackoverflow.com/questions/40145631
+
+        if hasattr(recorded_url, 'exception') and isinstance(recorded_url.exception, (MaxRetryError, )):
+            return '-8'
+        elif hasattr(recorded_url, 'exception') and isinstance(recorded_url.exception, (NewConnectionError, )):
+            exception_string=str(recorded_url.exception)
+            if ("[Errno 11001] getaddrinfo failed" in exception_string or                   # Windows
+                "[Errno -2] Name or service not known" in exception_string or               # Linux
+                "[Errno -3] Temporary failure in name resolution" in exception_string or    # Linux
+                "[Errno 8] nodename nor servname " in exception_string):                    # OS X
+                return '-6' # DNS Failure
+            else:
+                return '-2' # Other Connection Failure
+        elif hasattr(recorded_url, 'exception') and isinstance(recorded_url.exception, (socket.timeout, TimeoutError, )):
+            return '-2' # Connection Timeout
+        elif isinstance(recorded_url, warcprox.warcproxy.FailedUrl):
+            # synthetic status, used when some other status (such as connection-lost)
+            # is considered by policy the same as a document-not-found
+            # Cached failures result in FailedUrl with no Exception
+            return '-404'
+        else:
+            return recorded_url.status
 
