@@ -93,7 +93,7 @@ def _build_arg_parser(prog='warcprox', show_hidden=False):
             default='./warcs', help='where to write warcs')
     arg_parser.add_argument('--warc-filename', dest='warc_filename',
             default='{prefix}-{timestamp17}-{serialno}-{randomtoken}',
-            help='define custom WARC filename with variables {prefix}, {timestamp14}, {timestamp17}, {serialno}, {randomtoken}, {hostname}, {shorthostname}')
+            help='define custom WARC filename with variables {prefix}, {timestamp14}, {timestamp17}, {serialno}, {randomtoken}, {hostname}, {shorthostname}, {port}')
     arg_parser.add_argument('-z', '--gzip', dest='gzip', action='store_true',
             help='write gzip-compressed warc records')
     hidden.add_argument(
@@ -302,6 +302,7 @@ def main(argv=None):
     else:
         loglevel = logging.INFO
 
+    logging.root.handlers = []
     logging.basicConfig(
             stream=sys.stdout, level=loglevel, format=(
                 '%(asctime)s %(process)d %(levelname)s %(threadName)s '

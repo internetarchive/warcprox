@@ -2,7 +2,7 @@
 '''
 setup.py - setuptools installation configuration for warcprox
 
-Copyright (C) 2013-2019 Internet Archive
+Copyright (C) 2013-2020 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -28,7 +28,7 @@ deps = [
     'warctools>=4.10.0',
     'urlcanon>=0.3.0',
     'doublethink>=0.2.0.dev87',
-    'urllib3>=1.14',
+    'urllib3>=1.23',
     'requests>=2.0.1',
     'PySocks>=1.6.8',
     'cryptography>=2.3',
@@ -43,7 +43,7 @@ except:
 
 setuptools.setup(
         name='warcprox',
-        version='2.4.21',
+        version='2.4.27',
         description='WARC writing MITM HTTP/S proxy',
         url='https://github.com/internetarchive/warcprox',
         author='Noah Levitt',
@@ -52,6 +52,7 @@ setuptools.setup(
         license='GPL',
         packages=['warcprox'],
         install_requires=deps,
+        extras_require={'trough': ['trough>=0.1.4',],},
         setup_requires=['pytest-runner'],
         tests_require=['mock', 'pytest', 'warcio'],
         entry_points={
@@ -66,10 +67,10 @@ setuptools.setup(
             'Development Status :: 5 - Production/Stable',
             'Environment :: Console',
             'License :: OSI Approved :: GNU General Public License (GPL)',
-            'Programming Language :: Python :: 3.4',
             'Programming Language :: Python :: 3.5',
             'Programming Language :: Python :: 3.6',
             'Programming Language :: Python :: 3.7',
+            'Programming Language :: Python :: 3.8',
             'Topic :: Internet :: Proxy Servers',
             'Topic :: Internet :: WWW/HTTP',
             'Topic :: Software Development :: Libraries :: Python Modules',

@@ -1,20 +1,17 @@
+os: linux
 dist: xenial
 language: python
 python:
+- 3.8
 - 3.7
 - 3.6
 - 3.5
-- 3.4
-- 2.7
-- pypy
 - pypy3.5
 - nightly
 
-matrix:
+jobs:
   allow_failures:
   - python: nightly
-  - python: 2.7
-  - python: pypy
 
 addons:
   apt:
@@ -39,7 +36,7 @@ before_install:
 - ping -c2 trough
 
 install:
-- pip install . pytest requests warcio mock
+- pip install .[trough] pytest requests warcio mock
 
 before_script:
 - docker exec trough bash -c 'while ! test -e /tmp/trough-read.out ; do sleep 0.5 ; done' || true
