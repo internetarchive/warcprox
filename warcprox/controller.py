@@ -166,7 +166,7 @@ class WarcproxController(object):
             with processor.inq.mutex:
                 l = list(processor.inq.queue)
             for recorded_url in l:
-                if earliest is None or recorded_url.timestamp < earliest:
+                if not earliest or (earliest and (recorded_url.timestamp < earliest)):
                     earliest = recorded_url.timestamp
         return earliest
 
