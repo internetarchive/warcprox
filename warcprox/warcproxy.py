@@ -367,7 +367,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 status=code,
                 client_ip=self.client_address[0],
                 method=self.command,
-                timestamp=None,
+                timestamp=doublethink.utcnow(),
                 host=self.hostname,
                 duration=None,
                 referer=self.headers.get('referer'),
