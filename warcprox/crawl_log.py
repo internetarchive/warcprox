@@ -44,9 +44,9 @@ class CrawlLogger(object):
         status = self.get_artificial_status(recorded_url)
         extra_info = {'contentSize': recorded_url.size,} if recorded_url.size is not None and recorded_url.size > 0 else {}
         if hasattr(recorded_url, 'exception') and recorded_url.exception is not None:
-            extra_info['exception'] = str(recorded_url.exception)
+            extra_info['exception'] = str(recorded_url.exception).replace(" ", "_")
             if(hasattr(recorded_url, 'message') and recorded_url.message is not None):
-                extra_info['exceptionMessage'] = str(recorded_url.message)
+                extra_info['exceptionMessage'] = str(recorded_url.message).replace(" ", "_")
         if records:
             extra_info['warcFilename'] = records[0].warc_filename
             extra_info['warcFileOffset'] = records[0].offset
@@ -71,7 +71,7 @@ class CrawlLogger(object):
             recorded_url.url,
             '-', # hop path
             recorded_url.referer or '-',
-            recorded_url.mimetype if recorded_url.mimetype is not None else '-',
+            recorded_url.mimetype if recorded_url.mimetype is not None and recorded_url.mimetype.strip() else '-',
             '-',
             '{:%Y%m%d%H%M%S}{:03d}+{:03d}'.format(
                 recorded_url.timestamp,

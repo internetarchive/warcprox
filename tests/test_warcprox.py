@@ -293,6 +293,12 @@ class _TestHttpRequestHandler(http_server.BaseHTTPRequestHandler):
             payload = chunkify(
                     b'Server closes connection when client expects next chunk')
             payload = payload[:-7]
+        elif self.path == '/space_in_content_type':
+            payload = b'test'
+            headers = (b'HTTP/1.1 200 OK\r\n'
+                    +  b'Content-Type:  \r\n'
+                    +  b'Content-Length: ' + str(len(payload)).encode('ascii') + b'\r\n'
+                    +  b'\r\n')
         else:
             payload = b'404 Not Found\n'
             headers = (b'HTTP/1.1 404 Not Found\r\n'
@@ -1481,7 +1487,7 @@ def test_missing_content_length(archiving_proxies, http_daemon, https_daemon, wa
     assert not 'content-length' in response.headers
 
     # wait for postfetch chain
-    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 2)
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 2, timeout=20)
 
 def test_limit_large_resource(archiving_proxies, http_daemon, warcprox_):
     """We try to load a 300k response but we use --max-resource-size=200000 in
@@ -1992,6 +1998,114 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
             'contentSize', 'warcFilename', 'warcFileOffset', 'method'}
     assert extra_info['contentSize'] == 38
     assert extra_info['method'] == 'WARCPROX_WRITE_RECORD'
+
+    #Empty spae for Content Type
+    url = 'http://localhost:%s/space_in_content_type' % http_daemon.server_port
+    headers = {'Warcprox-Meta': json.dumps({'warc-prefix': 'test_crawl_log_5'})}
+    response = requests.get(url, proxies=archiving_proxies, headers=headers)
+
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 6)
+
+    file = os.path.join(
+            warcprox_.options.crawl_log_dir,
+            'test_crawl_log_5-%s-%s.log' % (hostname, port))
+
+    assert os.path.exists(file)
+    crawl_log_5 = open(file, 'rb').read()
+    assert re.match(br'\A2[^\n]+\n\Z', crawl_log_5)
+    assert crawl_log_5[24:31] == b'   200 '
+    assert crawl_log_5[31:42] == b'         4 '
+    fields = crawl_log_5.split()
+    assert len(fields) == 13
+    assert fields[3].endswith(b'/space_in_content_type')
+    assert fields[4] == b'-'
+    assert fields[5] == b'-'
+    assert fields[6] == b'-'
+    assert fields[7] == b'-'
+    assert re.match(br'^\d{17}[+]\d{3}', fields[8])
+    assert fields[9] == b'sha1:a94a8fe5ccb19ba61c4c0873d391e987982fbbd3'
+    assert fields[10] == b'-'
+    assert fields[11] == b'-'
+    extra_info = json.loads(fields[12].decode('utf-8'))
+    assert set(extra_info.keys()) == {
+            'contentSize', 'warcFilename', 'warcFileOffset'}
+    assert extra_info['contentSize'] == 59
+
+
+    #Fetch Exception
+    url = 'http://localhost-doesnt-exist:%s/connection-error' % http_daemon.server_port
+    headers = {'Warcprox-Meta': json.dumps({'warc-prefix': 'test_crawl_log_6'})}
+    response = requests.get(url, proxies=archiving_proxies, headers=headers)
+
+    #Verify the connection is cleaned up properly after the exception
+    url = 'http://localhost:%s/b/aa' % http_daemon.server_port
+    response = requests.get(url, proxies=archiving_proxies)
+    assert response.status_code == 200
+
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 7)
+
+    file = os.path.join(
+            warcprox_.options.crawl_log_dir,
+            'test_crawl_log_6-%s-%s.log' % (hostname, port))
+
+    assert os.path.exists(file)
+    crawl_log_6 = open(file, 'rb').read()
+    assert re.match(br'\A2[^\n]+\n\Z', crawl_log_6)
+
+    #seems to vary depending on the environment
+    assert crawl_log_6[24:31] == b'    -6 ' or crawl_log_6[24:31] == b'    -2 ' 
+    assert crawl_log_6[31:42] == b'         0 '
+    fields = crawl_log_6.split()
+    assert len(fields) == 13
+    assert fields[3].endswith(b'/connection-error')
+    assert fields[4] == b'-'
+    assert fields[5] == b'-'
+    assert fields[6] == b'-'
+    assert fields[7] == b'-'
+    assert fields[8] == b'-'
+    assert fields[9] == b'-'
+    assert fields[10] == b'-'
+    assert fields[11] == b'-'
+    extra_info = json.loads(fields[12].decode('utf-8'))
+    assert set(extra_info.keys()) == {'exception'}
+
+    #Test the same bad server to check for -404
+    url = 'http://localhost-doesnt-exist:%s/connection-error' % http_daemon.server_port
+    headers = {'Warcprox-Meta': json.dumps({'warc-prefix': 'test_crawl_log_7'})}
+    response = requests.get(url, proxies=archiving_proxies, headers=headers)
+
+    #Verify the connection is cleaned up properly after the exception
+    url = 'http://localhost:%s/b/aa' % http_daemon.server_port
+    response = requests.get(url, proxies=archiving_proxies)
+    assert response.status_code == 200
+
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 8)
+
+    file = os.path.join(
+        warcprox_.options.crawl_log_dir,
+        'test_crawl_log_7-%s-%s.log' % (hostname, port))
+
+    assert os.path.exists(file)
+    crawl_log_7 = open(file, 'rb').read()
+    assert re.match(br'\A2[^\n]+\n\Z', crawl_log_7)
+    assert crawl_log_7[24:31] == b'  -404 '
+    assert crawl_log_7[31:42] == b'         0 '
+    fields = crawl_log_7.split()
+    assert len(fields) == 13
+    assert fields[3].endswith(b'/connection-error')
+    assert fields[4] == b'-'
+    assert fields[5] == b'-'
+    assert fields[6] == b'-'
+    assert fields[7] == b'-'
+    assert fields[8] == b'-'
+    assert fields[9] == b'-'
+    assert fields[10] == b'-'
+    assert fields[11] == b'-'
+    extra_info = json.loads(fields[12].decode('utf-8'))
+    assert set(extra_info.keys()) == {'exception'}
 
 def test_long_warcprox_meta(
         warcprox_, http_daemon, archiving_proxies, playback_proxies):
