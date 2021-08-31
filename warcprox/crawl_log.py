@@ -64,12 +64,17 @@ class CrawlLogger(object):
         else:
             content_length = 0
             payload_digest = '-'
+        logging.info('metadata %s', recorded_url.warcprox_meta)
+        hop_path = recorded_url.warcprox_meta["hop_path"] if "hop_path" in recorded_url.warcprox_meta and recorded_url.warcprox_meta["hop_path"] and len(recorded_url.warcprox_meta["hop_path"].strip()) > 0 else '-'
+        hop_path_parent = recorded_url.warcprox_meta["hop_path_parent"] if "hop_path_parent" in recorded_url.warcprox_meta else None
+        if hop_path_parent and hop_path_parent != recorded_url.url:
+            hop_path = str(hop_path if hop_path and hop_path != "-" else "") + "B"
         fields = [
             '{:%Y-%m-%dT%H:%M:%S}.{:03d}Z'.format(now, now.microsecond//1000),
             '% 5s' % status,
             '% 10s' % content_length,
             recorded_url.url,
-            '-', # hop path
+            hop_path,
             recorded_url.referer or '-',
             recorded_url.mimetype if recorded_url.mimetype is not None and recorded_url.mimetype.strip() else '-',
             '-',
