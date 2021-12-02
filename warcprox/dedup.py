@@ -1,7 +1,7 @@
 '''
 warcprox/dedup.py - identical payload digest deduplication using sqlite db
 
-Copyright (C) 2013-2018 Internet Archive
+Copyright (C) 2013-2021 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -412,10 +412,14 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
         '''
         buckets = collections.defaultdict(list)
         discards = []
+        # for duplicate checks, see https://webarchive.jira.com/browse/WT-31
+        hash_plus_urls = set()
         for recorded_url in batch:
             if (recorded_url.response_recorder
                     and recorded_url.payload_digest
-                    and self.trough_dedup_db.should_dedup(recorded_url)):
+                    and self.trough_dedup_db.should_dedup(recorded_url)
+                    and f'{recorded_url.payload_digest}{recorded_url.url}' not in hash_plus_urls):
+                hash_plus_urls.add(f'{recorded_url.payload_digest}{recorded_url.url}')
                 if (recorded_url.warcprox_meta
                         and 'dedup-buckets' in recorded_url.warcprox_meta):
                     for bucket, bucket_mode in recorded_url.warcprox_meta["dedup-buckets"].items():
@@ -423,6 +427,9 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
                 else:
                     buckets['__unspecified__'].append(recorded_url)
             else:
+                if f'{recorded_url.payload_digest}{recorded_url.url}' in hash_plus_urls:
+                    self.logger.debug(
+                        f'discarding duplicate {recorded_url.payload_digest} {recorded_url.url}')
                 discards.append(
                         warcprox.digest_str(
                             recorded_url.payload_digest, self.options.base32)
