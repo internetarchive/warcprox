@@ -384,6 +384,9 @@ class BatchTroughStorer(warcprox.BaseBatchPostfetchProcessor):
                         self.trough_dedup_db.batch_save,
                         buckets[bucket], bucket)
                 fs[future] = bucket
+            logging.debug(
+                    'storing dedup info for %s urls '
+                    'in bucket %s', len(buckets[bucket]), bucket)
 
             # wait for results
             try:
@@ -434,6 +437,8 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
                         warcprox.digest_str(
                             recorded_url.payload_digest, self.options.base32)
                         if recorded_url.payload_digest else 'n/a')
+        self.logger.debug(
+                'hash_plus_urls: {}'.format(hash_plus_urls))
         self.logger.debug(
                 'len(batch)=%s len(discards)=%s buckets=%s',
                 len(batch), len(discards),

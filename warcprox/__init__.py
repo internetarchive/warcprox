@@ -1,7 +1,7 @@
 """
 warcprox/__init__.py - warcprox package main file, contains some utility code
 
-Copyright (C) 2013-2019 Internet Archive
+Copyright (C) 2013-2021 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -175,8 +175,8 @@ class BaseStandardPostfetchProcessor(BasePostfetchProcessor):
 
 class BaseBatchPostfetchProcessor(BasePostfetchProcessor):
     MAX_BATCH_SIZE = 500
-    MAX_BATCH_SEC = 10
-    MIN_BATCH_SEC = 2.0
+    MAX_BATCH_SEC = 30
+    MIN_BATCH_SEC = 10
 
     def _get_process_put(self):
         batch = []
