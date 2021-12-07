@@ -418,11 +418,14 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
         # for duplicate checks, see https://webarchive.jira.com/browse/WT-31
         hash_plus_urls = set()
         for recorded_url in batch:
+            if recorded_url.payload_digest:
+                hash_plus_url = ''.join((warcprox.digest_str(
+                            recorded_url.payload_digest, self.options.base32), recorded_url.url.decode()))
             if (recorded_url.response_recorder
                     and recorded_url.payload_digest
                     and self.trough_dedup_db.should_dedup(recorded_url)
                     and '{}{}'.format(recorded_url.payload_digest, recorded_url.url) not in hash_plus_urls):
-                hash_plus_urls.add('{}{}'.format(recorded_url.payload_digest, recorded_url.url))
+                hash_plus_urls.add(hash_plus_url)
                 if (recorded_url.warcprox_meta
                         and 'dedup-buckets' in recorded_url.warcprox_meta):
                     for bucket, bucket_mode in recorded_url.warcprox_meta["dedup-buckets"].items():
@@ -430,9 +433,9 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
                 else:
                     buckets['__unspecified__'].append(recorded_url)
             else:
-                if recorded_url.payload_digest and '{}{}'.format(recorded_url.payload_digest, recorded_url.url) in hash_plus_urls:
+                if hash_plus_url in hash_plus_urls:
                     self.logger.debug(
-                        'discarding duplicate {} {}'.format(recorded_url.payload_digest, recorded_url.url))
+                        'discarding duplicate {}'.format(hash_plus_url)
                 discards.append(
                         warcprox.digest_str(
                             recorded_url.payload_digest, self.options.base32)
