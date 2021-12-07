@@ -419,8 +419,8 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
         hash_plus_urls = set()
         for recorded_url in batch:
             if recorded_url.payload_digest:
-                hash_plus_url = ''.join((warcprox.digest_str(
-                            recorded_url.payload_digest, self.options.base32), recorded_url.url.decode()))
+                hash_plus_url = b''.join((warcprox.digest_str(
+                            recorded_url.payload_digest, self.options.base32), recorded_url.url))
             if (recorded_url.response_recorder
                     and recorded_url.payload_digest
                     and self.trough_dedup_db.should_dedup(recorded_url)
@@ -441,7 +441,7 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
                             recorded_url.payload_digest, self.options.base32)
                         if recorded_url.payload_digest else 'n/a')
         self.logger.debug(
-                'hash_plus_urls: {}...'.format(hash_plus_urls[0]))
+                'hash_plus_urls: {}'.format(len(hash_plus_urls)))
         self.logger.debug(
                 'len(batch)=%s len(discards)=%s buckets=%s',
                 len(batch), len(discards),
