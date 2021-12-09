@@ -435,14 +435,14 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
             else:
                 if hash_plus_url in hash_plus_urls:
                     self.logger.debug(
-                        'discarding duplicate {}, setting do_not_archive'.format(hash_plus_url))
+                        'discarding duplicate and setting do_not_archive for %, hash %'.format(
+                            recorded_url.url, warcprox.digest_str(
+                            recorded_url.payload_digest, self.options.base32)))
                     recorded_url.do_not_archive = True
                 discards.append(
                         warcprox.digest_str(
                             recorded_url.payload_digest, self.options.base32)
                         if recorded_url.payload_digest else 'n/a')
-        self.logger.debug(
-                'hash_plus_urls: {}'.format(len(hash_plus_urls)))
         self.logger.debug(
                 'len(batch)=%s len(discards)=%s buckets=%s',
                 len(batch), len(discards),
