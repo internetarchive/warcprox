@@ -418,13 +418,15 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
         # for duplicate checks, see https://webarchive.jira.com/browse/WT-31
         hash_plus_urls = set()
         for recorded_url in batch:
-            if recorded_url.payload_digest:
-                hash_plus_url = b''.join((warcprox.digest_str(
-                            recorded_url.payload_digest, self.options.base32), recorded_url.url))
+            if not recorded_url.payload_digest:
+                discards.append('n/a')
+                continue
+            payload_hash = warcprox.digest_str(
+                        recorded_url.payload_digest, self.options.base32)
+            hash_plus_url = b''.join((payload_hash, recorded_url.url))
             if (recorded_url.response_recorder
-                    and recorded_url.payload_digest
-                    and self.trough_dedup_db.should_dedup(recorded_url)
-                    and hash_plus_url not in hash_plus_urls):
+                    and hash_plus_url not in hash_plus_urls
+                    and self.trough_dedup_db.should_dedup(recorded_url)):
                 hash_plus_urls.add(hash_plus_url)
                 if (recorded_url.warcprox_meta
                         and 'dedup-buckets' in recorded_url.warcprox_meta):
@@ -436,13 +438,9 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
                 if hash_plus_url in hash_plus_urls:
                     self.logger.debug(
                         'discarding duplicate and setting do_not_archive for %, hash %'.format(
-                            recorded_url.url, warcprox.digest_str(
-                            recorded_url.payload_digest, self.options.base32)))
+                            recorded_url.url, payload_hash))
                     recorded_url.do_not_archive = True
-                discards.append(
-                        warcprox.digest_str(
-                            recorded_url.payload_digest, self.options.base32)
-                        if recorded_url.payload_digest else 'n/a')
+                discards.append(payload_hash)
         self.logger.debug(
                 'len(batch)=%s len(discards)=%s buckets=%s',
                 len(batch), len(discards),
