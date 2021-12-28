@@ -32,7 +32,7 @@ deps = [
     'requests>=2.0.1',
     'PySocks>=1.6.8',
     'cryptography>=2.3',
-    'idna>=2.5',
+    'idna==2.10',
     'PyYAML>=5.1',
     'cachetools',
 ]
