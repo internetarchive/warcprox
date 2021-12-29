@@ -437,8 +437,8 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
             else:
                 if hash_plus_url in hash_plus_urls:
                     self.logger.debug(
-                        'discarding duplicate and setting do_not_archive for
-                         %s, hash %s', recorded_url.url, payload_hash)
+                        'discarding duplicate and setting do_not_archive for %s, hash %s',
+                         recorded_url.url, payload_hash)
                     recorded_url.do_not_archive = True
                 discards.append(payload_hash)
         self.logger.debug(
