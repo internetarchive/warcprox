@@ -64,18 +64,23 @@ class CrawlLogger(object):
         else:
             content_length = 0
             payload_digest = '-'
-        logging.info('metadata %s', recorded_url.warcprox_meta)
-        hop_path = recorded_url.warcprox_meta["hop_path"] if "hop_path" in recorded_url.warcprox_meta and recorded_url.warcprox_meta["hop_path"] and len(recorded_url.warcprox_meta["hop_path"].strip()) > 0 else '-'
-        hop_path_parent = recorded_url.warcprox_meta["hop_path_parent"] if "hop_path_parent" in recorded_url.warcprox_meta else None
-        if hop_path_parent and hop_path_parent != recorded_url.url:
-            hop_path = str(hop_path if hop_path and hop_path != "-" else "") + "B"
+        logging.info('warcprox_meta %s' , recorded_url.warcprox_meta)
+        hop_path = recorded_url.warcprox_meta.get('metadata', {}).get('hop_path', '-')
+        if hop_path is None:
+            hop_path = "-"
+        hop_path_referer = recorded_url.warcprox_meta.get('metadata', {}).get('hop_path_referer', recorded_url.referer)
+        if hop_path_referer != recorded_url.url.decode('ascii'):
+            if hop_path == "-":
+                hop_path = "B"
+            else:
+                hop_path = "".join([hop_path,"B"])
         fields = [
             '{:%Y-%m-%dT%H:%M:%S}.{:03d}Z'.format(now, now.microsecond//1000),
             '% 5s' % status,
             '% 10s' % content_length,
             recorded_url.url,
             hop_path,
-            recorded_url.referer or '-',
+            recorded_url.referer or hop_path_referer or '-',
             recorded_url.mimetype if recorded_url.mimetype is not None and recorded_url.mimetype.strip() else '-',
             '-',
             '{:%Y%m%d%H%M%S}{:03d}+{:03d}'.format(
@@ -94,7 +99,6 @@ class CrawlLogger(object):
             except:
                 pass
         line = b' '.join(fields) + b'\n'
-
         prefix = recorded_url.warcprox_meta.get('warc-prefix', 'crawl')
         filename = '%s-%s-%s.log' % (
                 prefix, self.hostname, self.options.server_port)
