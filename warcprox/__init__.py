@@ -175,8 +175,8 @@ class BaseStandardPostfetchProcessor(BasePostfetchProcessor):
 
 class BaseBatchPostfetchProcessor(BasePostfetchProcessor):
     MAX_BATCH_SIZE = 500
-    MAX_BATCH_SEC = 30
-    MIN_BATCH_SEC = 10
+    MAX_BATCH_SEC = 60
+    MIN_BATCH_SEC = 30
 
     def _get_process_put(self):
         batch = []
