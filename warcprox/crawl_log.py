@@ -64,13 +64,23 @@ class CrawlLogger(object):
         else:
             content_length = 0
             payload_digest = '-'
+        logging.info('warcprox_meta %s' , recorded_url.warcprox_meta)
+        hop_path = recorded_url.warcprox_meta.get('metadata', {}).get('hop_path', '-')
+        if hop_path is None:
+            hop_path = "-"
+        hop_path_referer = recorded_url.warcprox_meta.get('metadata', {}).get('hop_path_referer', "-")
+        if hop_path_referer != recorded_url.url.decode('ascii'):
+            if hop_path == "-":
+                hop_path = "B"
+            else:
+                hop_path = "".join([hop_path,"B"])
         fields = [
             '{:%Y-%m-%dT%H:%M:%S}.{:03d}Z'.format(now, now.microsecond//1000),
             '% 5s' % status,
             '% 10s' % content_length,
             recorded_url.url,
-            '-', # hop path
-            recorded_url.referer or '-',
+            hop_path,
+            recorded_url.referer or hop_path_referer if hop_path != "-" else "-",
             recorded_url.mimetype if recorded_url.mimetype is not None and recorded_url.mimetype.strip() else '-',
             '-',
             '{:%Y%m%d%H%M%S}{:03d}+{:03d}'.format(
@@ -89,7 +99,6 @@ class CrawlLogger(object):
             except:
                 pass
         line = b' '.join(fields) + b'\n'
-
         prefix = recorded_url.warcprox_meta.get('warc-prefix', 'crawl')
         filename = '%s-%s-%s.log' % (
                 prefix, self.hostname, self.options.server_port)
