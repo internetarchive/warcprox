@@ -68,7 +68,7 @@ class CrawlLogger(object):
         hop_path = recorded_url.warcprox_meta.get('metadata', {}).get('hop_path', '-')
         if hop_path is None:
             hop_path = "-"
-        hop_path_referer = recorded_url.warcprox_meta.get('metadata', {}).get('hop_path_referer', recorded_url.referer)
+        hop_path_referer = recorded_url.warcprox_meta.get('metadata', {}).get('hop_path_referer', "-")
         if hop_path_referer != recorded_url.url.decode('ascii'):
             if hop_path == "-":
                 hop_path = "B"
@@ -80,7 +80,7 @@ class CrawlLogger(object):
             '% 10s' % content_length,
             recorded_url.url,
             hop_path,
-            recorded_url.referer or hop_path_referer or '-',
+            recorded_url.referer or hop_path_referer if hop_path != "-" else "-",
             recorded_url.mimetype if recorded_url.mimetype is not None and recorded_url.mimetype.strip() else '-',
             '-',
             '{:%Y%m%d%H%M%S}{:03d}+{:03d}'.format(
