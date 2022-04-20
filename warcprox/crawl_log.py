@@ -25,6 +25,7 @@ import json
 import os
 import warcprox
 import socket
+import rfc3986
 from urllib3.exceptions import TimeoutError, HTTPError, NewConnectionError, MaxRetryError
 
 class CrawlLogger(object):
@@ -67,8 +68,9 @@ class CrawlLogger(object):
         logging.info('warcprox_meta %s' , recorded_url.warcprox_meta)
 
         hop_path = recorded_url.warcprox_meta.get('metadata', {}).get('hop_path')
-        brozzled_url = recorded_url.warcprox_meta.get('metadata', {}).get('brozzled_url')
-        hop_via_url = recorded_url.warcprox_meta.get('metadata', {}).get('hop_via_url')
+        #URLs are url encoded into plain ascii urls by HTTP spec. Since we're comparing against those, our urls sent over the json blob need to be encoded similarly
+        brozzled_url = self.canonicalize_url(recorded_url.warcprox_meta.get('metadata', {}).get('brozzled_url'))
+        hop_via_url = self.canonicalize_url(recorded_url.warcprox_meta.get('metadata', {}).get('hop_via_url'))
 
         if hop_path is None and brozzled_url is None and hop_via_url is None:
             #No hop info headers provided
@@ -81,13 +83,11 @@ class CrawlLogger(object):
                 hop_via_url = "-"
             #Prefer referer header. Otherwise use provided via_url
             via_url = recorded_url.referer or hop_via_url if hop_path != "-" else "-"
+            logging.info('brozzled_url:%s recorded_url:%s' , brozzled_url, recorded_url.url)
             if brozzled_url != recorded_url.url.decode('ascii') and "brozzled_url" in recorded_url.warcprox_meta.get('metadata', {}).keys():
                 #Requested page is not the Brozzled url, thus we are an embed or redirect.
                 via_url = brozzled_url
-                if hop_path == "-":
-                    hop_path = "B"
-                else:
-                    hop_path = "".join([hop_path,"B"])
+                hop_path = "B" if hop_path == "-" else "".join([hop_path,"B"])
 
         fields = [
             '{:%Y-%m-%dT%H:%M:%S}.{:03d}Z'.format(now, now.microsecond//1000),
@@ -147,4 +147,16 @@ class CrawlLogger(object):
             return '-404'
         else:
             return recorded_url.status
+
+    def canonicalize_url(self, url):
+        #URL needs to be split out to separately encode the hostname from the rest of the path.
+        #hostname will be idna encoded (punycode)
+        #The rest of the URL will be urlencoded, but browsers only encode "unsafe" and not "reserved" characters, so ignore the reserved chars.
+        try:
+            parsed_url=rfc3986.urlparse(url)
+            encoded_url=parsed_url.copy_with(host=parsed_url.host.encode('idna'))
+            return encoded_url.unsplit()
+        except (TypeError, ValueError) as e:
+            logging.warning("URL Canonicalization failure. Returning raw url: rfc3986 %s - %s", url, e)
+            return url
 

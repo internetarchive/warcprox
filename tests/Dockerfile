@@ -19,7 +19,7 @@
 # USA.
 #
 
-FROM phusion/baseimage
+FROM ubuntu:focal-20220404
 MAINTAINER Noah Levitt <nlevitt@archive.org>
 
 # see https://github.com/stuartpb/rethinkdb-dockerfiles/blob/master/trusty/2.1.3/Dockerfile
@@ -28,10 +28,11 @@ MAINTAINER Noah Levitt <nlevitt@archive.org>
 ENV LANG=C.UTF-8
 
 RUN apt-get update && apt-get --auto-remove -y dist-upgrade
+RUN apt-get install -y ca-certificates curl gnupg wget
 
 # Add the RethinkDB repository and public key
-RUN curl -s https://download.rethinkdb.com/apt/pubkey.gpg | apt-key add - \
-    && echo "deb http://download.rethinkdb.com/apt xenial main" > /etc/apt/sources.list.d/rethinkdb.list \
+RUN curl -Ss https://download.rethinkdb.com/repository/raw/pubkey.gpg | apt-key add - 
+RUN echo "deb https://download.rethinkdb.com/repository/ubuntu-focal focal main" > /etc/apt/sources.list.d/rethinkdb.list \
     && apt-get update && apt-get -y install rethinkdb
 
 RUN mkdir -vp /etc/service/rethinkdb \
@@ -57,25 +58,54 @@ RUN mkdir -vp /etc/service/tor \
     && chmod a+x /etc/service/tor/run
 
 # hadoop hdfs for trough
-RUN curl -s https://archive.cloudera.com/cdh5/ubuntu/xenial/amd64/cdh/archive.key | apt-key add - \
-    && . /etc/lsb-release \
-    && echo "deb [arch=amd64] http://archive.cloudera.com/cdh5/ubuntu/$DISTRIB_CODENAME/amd64/cdh $DISTRIB_CODENAME-cdh5 contrib" >> /etc/apt/sources.list.d/cloudera.list
 
-RUN apt-get update
-RUN apt-get install -y openjdk-8-jdk hadoop-conf-pseudo
+ARG DEBIAN_FRONTEND=noninteractive
+ENV TZ=Etc/UTC
+RUN apt-get install -y openjdk-8-jdk openssh-server 
 
-RUN su hdfs -c 'hdfs namenode -format'
+# set java home
+ENV JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
 
-RUN mv -v /etc/hadoop/conf/core-site.xml /etc/hadoop/conf/core-site.xml.orig \
-    && cat /etc/hadoop/conf/core-site.xml.orig | sed 's,localhost:8020,0.0.0.0:8020,' > /etc/hadoop/conf/core-site.xml
+# setup ssh with no passphrase
+RUN ssh-keygen -t rsa -f $HOME/.ssh/id_rsa -P "" \
+    && cat $HOME/.ssh/id_rsa.pub >> $HOME/.ssh/authorized_keys
 
-RUN mv -v /etc/hadoop/conf/hdfs-site.xml /etc/hadoop/conf/hdfs-site.xml.orig \
-    && cat /etc/hadoop/conf/hdfs-site.xml.orig | sed 's,^</configuration>$,  <property>\n    <name>dfs.permissions.enabled</name>\n    <value>false</value>\n  </property>\n</configuration>,' > /etc/hadoop/conf/hdfs-site.xml
+RUN wget -O /hadoop-2.7.3.tar.gz -q https://archive.apache.org/dist/hadoop/common/hadoop-2.7.3/hadoop-2.7.3.tar.gz \
+        && tar xfz hadoop-2.7.3.tar.gz \
+        && mv /hadoop-2.7.3 /usr/local/hadoop \
+        && rm /hadoop-2.7.3.tar.gz
+	
+# hadoop environment variables
+ENV HADOOP_HOME=/usr/local/hadoop
+ENV PATH=$PATH:$HADOOP_HOME/bin:$HADOOP_HOME/sbin
 
-RUN echo '#!/bin/bash\nservice hadoop-hdfs-namenode start\nservice hadoop-hdfs-datanode start' > /etc/my_init.d/50_start_hdfs.sh \
-    && chmod a+x /etc/my_init.d/50_start_hdfs.sh
+# hadoop-store
+RUN mkdir -p $HADOOP_HOME/hdfs/namenode \
+        && mkdir -p $HADOOP_HOME/hdfs/datanode
 
-RUN apt-get install -y libsqlite3-dev
+# Temporary files: http://refspecs.linuxfoundation.org/FHS_3.0/fhs/ch03s18.html
+COPY config/ /tmp/
+RUN mv /tmp/ssh_config $HOME/.ssh/config \
+    && mv /tmp/hadoop-env.sh $HADOOP_HOME/etc/hadoop/hadoop-env.sh \
+    && mv /tmp/core-site.xml $HADOOP_HOME/etc/hadoop/core-site.xml \
+    && mv /tmp/hdfs-site.xml $HADOOP_HOME/etc/hadoop/hdfs-site.xml \
+    && mv /tmp/mapred-site.xml $HADOOP_HOME/etc/hadoop/mapred-site.xml.template \
+    && cp $HADOOP_HOME/etc/hadoop/mapred-site.xml.template $HADOOP_HOME/etc/hadoop/mapred-site.xml \
+    && mv /tmp/yarn-site.xml $HADOOP_HOME/etc/hadoop/yarn-site.xml
+
+# Add startup script
+ADD config/hadoop-services.sh $HADOOP_HOME/hadoop-services.sh
+
+# set permissions
+RUN chmod 744 -R $HADOOP_HOME
+
+# format namenode
+RUN $HADOOP_HOME/bin/hdfs namenode -format
+
+# run hadoop services
+#ENTRYPOINT $HADOOP_HOME/hadoop-services.sh; bash
+
+RUN apt-get install -y libsqlite3-dev build-essential
 
 # trough itself
 RUN virtualenv -p python3 /opt/trough-ve3 \
@@ -107,3 +137,4 @@ RUN mkdir -vp /etc/service/trough-segment-manager-server \
     && echo '#!/bin/bash\nvenv=/opt/trough-ve3\nsource $venv/bin/activate\nsleep 5\npython -c $"import doublethink ; from trough.settings import settings ; rr = doublethink.Rethinker(settings[\"RETHINKDB_HOSTS\"]) ; rr.db(\"trough_configuration\").wait().run()"\nexec uwsgi --venv=$venv --http :6111 --master --processes=2 --harakiri=7200 --http-timeout=7200 --max-requests=50000 --vacuum --die-on-term --mount /=trough.wsgi.segment_manager:server >>/tmp/trough-segment-manager-server.out 2>&1' > /etc/service/trough-segment-manager-server/run \
     && chmod a+x /etc/service/trough-segment-manager-server/run
 
+RUN apt-get install -y daemontools daemontools-run
