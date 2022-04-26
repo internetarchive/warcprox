@@ -69,8 +69,8 @@ class CrawlLogger(object):
 
         hop_path = recorded_url.warcprox_meta.get('metadata', {}).get('hop_path')
         #URLs are url encoded into plain ascii urls by HTTP spec. Since we're comparing against those, our urls sent over the json blob need to be encoded similarly
-        brozzled_url = self.canonicalize_url(recorded_url.warcprox_meta.get('metadata', {}).get('brozzled_url'))
-        hop_via_url = self.canonicalize_url(recorded_url.warcprox_meta.get('metadata', {}).get('hop_via_url'))
+        brozzled_url = canonicalize_url(recorded_url.warcprox_meta.get('metadata', {}).get('brozzled_url'))
+        hop_via_url = canonicalize_url(recorded_url.warcprox_meta.get('metadata', {}).get('hop_via_url'))
 
         if hop_path is None and brozzled_url is None and hop_via_url is None:
             #No hop info headers provided
@@ -148,15 +148,17 @@ class CrawlLogger(object):
         else:
             return recorded_url.status
 
-    def canonicalize_url(self, url):
-        #URL needs to be split out to separately encode the hostname from the rest of the path.
-        #hostname will be idna encoded (punycode)
-        #The rest of the URL will be urlencoded, but browsers only encode "unsafe" and not "reserved" characters, so ignore the reserved chars.
-        try:
-            parsed_url=rfc3986.urlparse(url)
-            encoded_url=parsed_url.copy_with(host=parsed_url.host.encode('idna'))
-            return encoded_url.unsplit()
-        except (TypeError, ValueError) as e:
-            logging.warning("URL Canonicalization failure. Returning raw url: rfc3986 %s - %s", url, e)
-            return url
+def canonicalize_url(url):
+    #URL needs to be split out to separately encode the hostname from the rest of the path.
+    #hostname will be idna encoded (punycode)
+    #The rest of the URL will be urlencoded, but browsers only encode "unsafe" and not "reserved" characters, so ignore the reserved chars.
+    if url is None or url == '-' or url == '':
+        return url
+    try:
+        parsed_url=rfc3986.urlparse(url)
+        encoded_url=parsed_url.copy_with(host=parsed_url.host.encode('idna'))
+        return encoded_url.unsplit()
+    except (TypeError, ValueError, AttributeError) as e:
+        logging.warning("URL Canonicalization failure. Returning raw url: rfc3986 %s - %s", url, e)
+        return url
 
