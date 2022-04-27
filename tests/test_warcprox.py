@@ -68,6 +68,7 @@ import certauth.certauth
 
 import warcprox
 import warcprox.main
+import warcprox.crawl_log as crawl_log
 
 try:
     import http.client as http_client
@@ -2139,6 +2140,13 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     assert fields[10].endswith('/¶-non-ascii'.encode('utf-8'))
     assert fields[11] == b'-'
     extra_info = json.loads(fields[12].decode('utf-8'))
+
+def test_crawl_log_canonicalization():
+    assert crawl_log.canonicalize_url(None) is None
+    assert crawl_log.canonicalize_url("") is ''
+    assert crawl_log.canonicalize_url("-") == '-'
+    assert crawl_log.canonicalize_url("http://чунджа.kz/b/¶-non-ascii") == "http://xn--80ahg0a3ax.kz/b/%C2%B6-non-ascii"
+    assert crawl_log.canonicalize_url("Not a URL") == "Not a URL"
 
 def test_long_warcprox_meta(
         warcprox_, http_daemon, archiving_proxies, playback_proxies):
