@@ -217,7 +217,7 @@ class WarcWriterPool:
             # self.logger.info("recorded_url.warcprox_meta={} for {}".format(recorded_url.warcprox_meta, recorded_url.url))
             options = warcprox.Options(**vars(self.options))
             options.prefix = recorded_url.warcprox_meta["warc-prefix"]
-            if not options.prefix in self.warc_writers:
+            if options.prefix not in self.warc_writers:
                 self.warc_writers[options.prefix] = WarcWriter(options)
             w = self.warc_writers[options.prefix]
         return w

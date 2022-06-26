@@ -920,8 +920,8 @@ def test_dedup_buckets(https_daemon, http_daemon, warcprox_, archiving_proxies, 
         assert record.type == b'request'
 
         # that's all folks
-        assert next(record_iter)[1] == None
-        assert next(record_iter, None) == None
+        assert next(record_iter)[1] is None
+        assert next(record_iter, None) is None
 
     finally:
         fh.close()
@@ -985,8 +985,8 @@ def test_dedup_buckets_readonly(https_daemon, http_daemon, warcprox_, archiving_
         assert record.type == b'request'
 
         # that's all folks
-        assert next(record_iter)[1] == None
-        assert next(record_iter, None) == None
+        assert next(record_iter)[1] is None
+        assert next(record_iter, None) is None
 
     finally:
         fh.close()
@@ -1457,7 +1457,7 @@ def test_missing_content_length(archiving_proxies, http_daemon, https_daemon, wa
     response = requests.get(url, verify=False, timeout=10)
     assert response.content == (
             b'This response is missing a Content-Length http header.')
-    assert not 'content-length' in response.headers
+    assert 'content-length' not in response.headers
 
     # double-check that our test https server is responding as expected
     url = 'https://localhost:%s/missing-content-length' % (
@@ -1465,7 +1465,7 @@ def test_missing_content_length(archiving_proxies, http_daemon, https_daemon, wa
     response = requests.get(url, verify=False, timeout=10)
     assert response.content == (
             b'This response is missing a Content-Length http header.')
-    assert not 'content-length' in response.headers
+    assert 'content-length' not in response.headers
 
     # now check that the proxy doesn't hang (http)
     url = 'http://localhost:%s/missing-content-length' % (
@@ -1474,7 +1474,7 @@ def test_missing_content_length(archiving_proxies, http_daemon, https_daemon, wa
             url, proxies=archiving_proxies, verify=False, timeout=10)
     assert response.content == (
             b'This response is missing a Content-Length http header.')
-    assert not 'content-length' in response.headers
+    assert 'content-length' not in response.headers
 
     # now check that the proxy doesn't hang (https)
     url = 'https://localhost:%s/missing-content-length' % (
@@ -1485,7 +1485,7 @@ def test_missing_content_length(archiving_proxies, http_daemon, https_daemon, wa
             url, proxies=archiving_proxies, verify=False, timeout=10)
     assert response.content == (
             b'This response is missing a Content-Length http header.')
-    assert not 'content-length' in response.headers
+    assert 'content-length' not in response.headers
 
     # wait for postfetch chain
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 2, timeout=20)
@@ -1619,8 +1619,8 @@ def test_dedup_ok_flag(
                             'timestamp').run()
     results = list(results_iter)
     assert len(results) == 2
-    assert results[0].get('dedup_ok') == False
-    assert not 'dedup_ok' in results[1]
+    assert results[0].get('dedup_ok') is False
+    assert 'dedup_ok' not in results[1]
     assert results[0]['url'] == url
     assert results[1]['url'] == url
     assert results[0]['warc_type'] == 'response'
@@ -1784,7 +1784,7 @@ def test_via_response_header(warcprox_, http_daemon, archiving_proxies, playback
     playback_response = requests.get(
             url, proxies=playback_proxies, verify=False)
     assert response.status_code == 200
-    assert not 'via' in playback_response
+    assert 'via' not in playback_response
 
     warc = warcprox_.warc_writer_processor.writer_pool.default_warc_writer.path
     with open(warc, 'rb') as f:
@@ -2143,7 +2143,7 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
 
 def test_crawl_log_canonicalization():
     assert crawl_log.canonicalize_url(None) is None
-    assert crawl_log.canonicalize_url("") is ''
+    assert crawl_log.canonicalize_url("") == ''
     assert crawl_log.canonicalize_url("-") == '-'
     assert crawl_log.canonicalize_url("http://чунджа.kz/b/¶-non-ascii") == "http://xn--80ahg0a3ax.kz/b/%C2%B6-non-ascii"
     assert crawl_log.canonicalize_url("Not a URL") == "Not a URL"

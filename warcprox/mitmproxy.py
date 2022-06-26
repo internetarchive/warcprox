@@ -596,7 +596,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                             'bytes exceeded for URL %s',
                             self._max_resource_size, self.url)
                     break
-                elif (not 'content-length' in self.headers
+                elif ('content-length' not in self.headers
                         and time.time() - start > 3 * 60 * 60):
                     prox_rec_res.truncated = b'time'
                     self._remote_server_conn.sock.shutdown(socket.SHUT_RDWR)

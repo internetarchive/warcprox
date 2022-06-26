@@ -80,7 +80,7 @@ def unravel_buckets(url, warcprox_meta):
             and "buckets" in warcprox_meta["stats"]):
         for bucket in warcprox_meta["stats"]["buckets"]:
             if isinstance(bucket, dict):
-                if not 'bucket' in bucket:
+                if 'bucket' not in bucket:
                     self.logger.warning(
                             'ignoring invalid stats bucket in '
                             'warcprox-meta header %s', bucket)
@@ -221,12 +221,12 @@ class RethinkStatsProcessor(StatsProcessor):
 
     def _ensure_db_table(self):
         dbs = self.rr.db_list().run()
-        if not self.rr.dbname in dbs:
+        if self.rr.dbname not in dbs:
             self.logger.info(
                     "creating rethinkdb database %r", self.rr.dbname)
             self.rr.db_create(self.rr.dbname).run()
         tables = self.rr.table_list().run()
-        if not self.table in tables:
+        if self.table not in tables:
             self.logger.info(
                     "creating rethinkdb table %r in database %r shards=%r "
                     "replicas=%r", self.table, self.rr.dbname, 1,

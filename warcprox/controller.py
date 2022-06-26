@@ -280,7 +280,7 @@ class WarcproxController(object):
             for obj in all_objects:
                 size = sys.getsizeof(obj)
                 total_size += size
-                if not type(obj) in summary:
+                if type(obj) not in summary:
                     summary[type(obj)] = {"count":0,"size":0}
                 summary[type(obj)]["count"] += 1
                 summary[type(obj)]["size"] += size
