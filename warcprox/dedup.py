@@ -179,11 +179,11 @@ class RethinkDedupDb(DedupDb, DedupableMixin):
 
     def _ensure_db_table(self):
         dbs = self.rr.db_list().run()
-        if not self.rr.dbname in dbs:
+        if self.rr.dbname not in dbs:
             self.logger.info("creating rethinkdb database %r", self.rr.dbname)
             self.rr.db_create(self.rr.dbname).run()
         tables = self.rr.table_list().run()
-        if not self.table in tables:
+        if self.table not in tables:
             self.logger.info(
                     "creating rethinkdb table %r in database %r shards=%r "
                     "replicas=%r", self.table, self.rr.dbname,

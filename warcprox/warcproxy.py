@@ -109,7 +109,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
             bucket0 = "%s:%s" % (b, domain)
             limit_key = "%s/%s/%s" % (bucket0, bucket1, bucket2)
 
-        if not bucket0 in buckets:
+        if bucket0 not in buckets:
             return
 
         value = self.server.stats_db.value(bucket0, bucket1, bucket2)
