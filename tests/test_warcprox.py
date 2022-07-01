@@ -68,6 +68,7 @@ import certauth.certauth
 
 import warcprox
 import warcprox.main
+import warcprox.crawl_log as crawl_log
 
 try:
     import http.client as http_client
@@ -2106,6 +2107,47 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     assert fields[11] == b'-'
     extra_info = json.loads(fields[12].decode('utf-8'))
     assert set(extra_info.keys()) == {'exception'}
+
+    #Verify non-ascii urls are encoded properly
+    url = 'http://localhost:%s/b/¶-non-ascii' % http_daemon.server_port
+    headers = {
+        "Warcprox-Meta": json.dumps({"warc-prefix":"test_crawl_log_8",
+                                     "metadata":{'seed': 'http://example.com/¶-non-ascii', 'hop_path': 'L', 'brozzled_url': 'http://localhost:%s/b/¶-non-ascii' % http_daemon.server_port, 'hop_via_url': 'http://чунджа.kz/b/¶-non-ascii'}}),
+    }
+    response = requests.get(url, proxies=archiving_proxies, headers=headers)
+    assert response.status_code == 200
+
+    # wait for postfetch chain
+    wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 9)
+
+    file = os.path.join(
+        warcprox_.options.crawl_log_dir,
+        'test_crawl_log_8-%s-%s.log' % (hostname, port))
+
+    assert os.path.exists(file)
+    crawl_log_8 = open(file, 'rb').read()
+    assert re.match(br'\A2[^\n]+\n\Z', crawl_log_8)
+    assert crawl_log_8[24:31] == b'   200 '
+    assert crawl_log_8[31:42] == b'       154 '
+    fields = crawl_log_8.split()
+    assert len(fields) == 13
+    assert fields[3].endswith(b'/b/%C2%B6-non-ascii')
+    assert fields[4] == b'L'
+    assert fields[5].endswith(b'http://xn--80ahg0a3ax.kz/b/%C2%B6-non-ascii')
+    assert fields[6] == b'text/plain'
+    assert fields[7] == b'-'
+    assert re.match(br'^\d{17}[+]\d{3}', fields[8])
+    assert fields[9] == b'sha1:cdd841ea7c5e46fde3fba56b2e45e4df5aeec439'
+    assert fields[10].endswith('/¶-non-ascii'.encode('utf-8'))
+    assert fields[11] == b'-'
+    extra_info = json.loads(fields[12].decode('utf-8'))
+
+def test_crawl_log_canonicalization():
+    assert crawl_log.canonicalize_url(None) is None
+    assert crawl_log.canonicalize_url("") is ''
+    assert crawl_log.canonicalize_url("-") == '-'
+    assert crawl_log.canonicalize_url("http://чунджа.kz/b/¶-non-ascii") == "http://xn--80ahg0a3ax.kz/b/%C2%B6-non-ascii"
+    assert crawl_log.canonicalize_url("Not a URL") == "Not a URL"
 
 def test_long_warcprox_meta(
         warcprox_, http_daemon, archiving_proxies, playback_proxies):

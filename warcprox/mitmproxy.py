@@ -64,6 +64,7 @@ import ssl
 import warcprox
 import threading
 import datetime
+import random
 import socks
 import tempfile
 import hashlib
@@ -220,6 +221,28 @@ def via_header_value(orig, request_version):
     via = via + '%s %s' % (request_version, 'warcprox')
     return via
 
+
+# Ref and detailed description about cipher selection at
+# https://github.com/urllib3/urllib3/blob/f070ec2e6f6c545f40d9196e5246df10c72e48e1/src/urllib3/util/ssl_.py#L170 
+SSL_CIPHERS = [
+    "ECDHE+AESGCM",
+    "ECDHE+CHACHA20",
+    "DH+AESGCM",
+    "ECDH+AES",
+    "DH+AES",
+    "RSA+AESGCM",
+    "RSA+AES",
+    "!aNULL",
+    "!eNULL",
+    "!MD5",
+    "!DSS",
+    "!AESCCM",
+    "DHE+AESGCM",
+    "DHE+CHACHA20",
+    "ECDH+AESGCM",
+    ]
+
+
 class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
     '''
     An http proxy implementation of BaseHTTPRequestHandler, that acts as a
@@ -301,6 +324,9 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                     context = ssl.create_default_context()
                     context.check_hostname = False
                     context.verify_mode = ssl.CERT_NONE
+                    # randomize TLS fingerprint to evade anti-web-bot systems
+                    random.shuffle(SSL_CIPHERS)
+                    context.set_ciphers(":".join(SSL_CIPHERS))
                     self._remote_server_conn.sock = context.wrap_socket(
                             self._remote_server_conn.sock,
                             server_hostname=self.hostname)

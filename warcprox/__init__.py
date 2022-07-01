@@ -177,6 +177,8 @@ class BaseBatchPostfetchProcessor(BasePostfetchProcessor):
     MAX_BATCH_SIZE = 500
     MAX_BATCH_SEC = 60
     MIN_BATCH_SEC = 30
+    # these updated batch seconds values have resulted in fewer reported dedup
+    # errors and otherwise have worked well in qa
 
     def _get_process_put(self):
         batch = []
