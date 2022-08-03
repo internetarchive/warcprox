@@ -46,6 +46,7 @@ import tempfile
 import hashlib
 import doublethink
 import re
+import zlib
 
 class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
     '''
@@ -175,7 +176,9 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
             warcprox_meta = json.loads(self.headers['Warcprox-Meta'])
             self._security_check(warcprox_meta)
             self._enforce_limits(warcprox_meta)
-            self._enforce_blocks(warcprox_meta)
+            if 'blocks' in warcprox_meta:
+                warcprox_meta['blocks'] = zlib.decompress(warcprox_meta['blocks']).decode()
+                self._enforce_blocks(warcprox_meta)
 
     def _connect_to_remote_server(self):
         '''
