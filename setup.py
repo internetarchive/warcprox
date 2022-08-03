@@ -2,7 +2,7 @@
 '''
 setup.py - setuptools installation configuration for warcprox
 
-Copyright (C) 2013-2021 Internet Archive
+Copyright (C) 2013-2022 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
