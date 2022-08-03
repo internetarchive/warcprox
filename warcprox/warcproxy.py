@@ -177,7 +177,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
             self._security_check(warcprox_meta)
             self._enforce_limits(warcprox_meta)
             if 'compressed_blocks' in warcprox_meta:
-                warcprox_meta['blocks'] = zlib.decompress(warcprox_meta['compressed_blocks']).decode().split('~~')
+                warcprox_meta['blocks'] = json.loads(zlib.decompress(warcprox_meta['compressed_blocks']).decode())
                 del warcprox_meta['compressed_blocks']
             self._enforce_blocks(warcprox_meta)
 
