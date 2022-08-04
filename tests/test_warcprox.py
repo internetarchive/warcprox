@@ -1730,7 +1730,6 @@ def test_load_plugin():
     assert isinstance(
             controller._postfetch_chain[-4].listener,
             warcprox.stats.RunningStats)
-    # MyEarlyPlugin
     assert isinstance(
             controller._postfetch_chain[0],
             EarlyPlugin)

@@ -596,18 +596,15 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                             'bytes exceeded for URL %s',
                             self._max_resource_size, self.url)
                     break
-                elif time.time() - start > 3 * 60 * 60:
-                    if not 'content-length' in self.headers:
-                        prox_rec_res.truncated = b'time'
-                        self._remote_server_conn.sock.shutdown(socket.SHUT_RDWR)
-                        self._remote_server_conn.sock.close()
-                        self.logger.info(
-                                'reached hard timeout of 3 hours fetching url '
-                                'without content-length: %s', self.url)
-                        break
-                    else:
-                        self.logger.info(
-                                'long-running fetch for URL %s', self.url)
+                elif (not 'content-length' in self.headers
+                        and time.time() - start > 3 * 60 * 60):
+                    prox_rec_res.truncated = b'time'
+                    self._remote_server_conn.sock.shutdown(socket.SHUT_RDWR)
+                    self._remote_server_conn.sock.close()
+                    self.logger.info(
+                            'reached hard timeout of 3 hours fetching url '
+                            'without content-length: %s', self.url)
+                    break
 
             self.log_request(prox_rec_res.status, prox_rec_res.recorder.len)
             # Let's close off the remote end. If remote connection is fine,
@@ -675,17 +672,13 @@ class PooledMixIn(socketserver.ThreadingMixIn):
 
     def process_request(self, request, client_address):
         self.active_requests[request] = doublethink.utcnow()
-        try:
-            future = self.pool.submit(
-                    self.process_request_thread, request, client_address)
-            future.add_done_callback(
-                    lambda f: self.active_requests.pop(request, None))
-            if future.done():
-                # avoid theoretical timing issue, in case process_request_thread
-                # managed to finish before future.add_done_callback() ran
-                self.active_requests.pop(request, None)
-        except RuntimeError as exc:
-            self.logger.error("Error processing request %s", str(exc))
+        future = self.pool.submit(
+                self.process_request_thread, request, client_address)
+        future.add_done_callback(
+                lambda f: self.active_requests.pop(request, None))
+        if future.done():
+            # avoid theoretical timing issue, in case process_request_thread
+            # managed to finish before future.add_done_callback() ran
             self.active_requests.pop(request, None)
 
     def get_request(self):
