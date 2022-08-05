@@ -2,7 +2,7 @@
 warcprox/warcproxy.py - recording proxy, extends mitmproxy to record traffic,
 enqueue info on the recorded url queue
 
-Copyright (C) 2013-2018 Internet Archive
+Copyright (C) 2013-2022 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -46,6 +46,8 @@ import tempfile
 import hashlib
 import doublethink
 import re
+import zlib
+import base64
 
 class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
     '''
@@ -175,6 +177,13 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
             warcprox_meta = json.loads(self.headers['Warcprox-Meta'])
             self._security_check(warcprox_meta)
             self._enforce_limits(warcprox_meta)
+            if 'compressed_blocks' in warcprox_meta:
+                # b64decode and decompress
+                blocks_decompressed = zlib.decompress(base64.b64decode(warcprox_meta['compressed_blocks']))
+                # decode() and json.loads
+                warcprox_meta['blocks'] = json.loads(blocks_decompressed.decode())
+                # delete compressed_blocks (just in case?)
+                del warcprox_meta['compressed_blocks']
             self._enforce_blocks(warcprox_meta)
 
     def _connect_to_remote_server(self):
