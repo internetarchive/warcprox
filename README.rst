@@ -1,7 +1,5 @@
 Warcprox - WARC writing MITM HTTP/S proxy
 *****************************************
-.. image:: https://travis-ci.org/internetarchive/warcprox.svg?branch=master
-    :target: https://travis-ci.org/internetarchive/warcprox
 
 Warcprox is an HTTP proxy designed for web archiving applications. When used in
 parallel with `brozzler <https://github.com/internetarchive/brozzler>`_ it
