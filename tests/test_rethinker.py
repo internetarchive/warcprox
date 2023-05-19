@@ -1,7 +1,7 @@
 '''
 tests_rethinker.py - unit tests for doublethink connection manager
 
-Copyright (C) 2015-2018 Internet Archive
+Copyright (C) 2015-2023 Internet Archive
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,12 +22,14 @@ import sys
 import types
 import gc
 import pytest
-import rethinkdb as r
+import rethinkdb as rdb
 import datetime
 try:
     from unittest import mock
 except:
     import mock
+
+r = rdb.RethinkDB()
 
 logging.basicConfig(stream=sys.stderr, level=logging.INFO,
         format="%(asctime)s %(process)d %(levelname)s %(threadName)s %(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s")

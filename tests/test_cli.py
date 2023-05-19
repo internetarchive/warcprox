@@ -1,7 +1,7 @@
 '''
 test_cli.py - unit tests for doublethink CLI
 
-Copyright (C) 2015-2017 Internet Archive
+Copyright (C) 2015-2023 Internet Archive
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,8 +21,10 @@ import doublethink.cli
 import logging
 import sys
 import pytest
-import rethinkdb as r
+import rethinkdb as rdb
 import pkg_resources
+
+r = rdb.RethinkDB()
 
 logging.basicConfig(stream=sys.stderr, level=logging.INFO,
         format="%(asctime)s %(process)d %(levelname)s %(threadName)s %(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s")

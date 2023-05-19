@@ -20,8 +20,10 @@ import doublethink
 import logging
 import sys
 import pytest
-import rethinkdb as r
+import rethinkdb as rdb
 from doublethink import parse_rethinkdb_url
+
+r = rdb.RethinkDB()
 
 logging.basicConfig(
         stream=sys.stderr, level=logging.INFO, format=(

@@ -10,7 +10,7 @@ except:
 
 setuptools.setup(
     name='doublethink',
-    version='0.3.0',
+    version='0.4.0',
     packages=['doublethink'],
     classifiers=[
         'Programming Language :: Python :: 2.7',
@@ -19,7 +19,7 @@ setuptools.setup(
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
     ],
-    install_requires=['rethinkdb>=2.3,<2.4'],
+    install_requires=['rethinkdb>=2.4,<2.5'],
     extras_require={'test': test_deps},
     url='https://github.com/internetarchive/doublethink',
     author='Noah Levitt',

@@ -1,7 +1,7 @@
 '''
 doublethink/services.py - rethinkdb service registry
 
-Copyright (C) 2015-2017 Internet Archive
+Copyright (C) 2015-2023 Internet Archive
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,11 +16,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 '''
 
-import rethinkdb as r
+import rethinkdb as rdb
 import logging
 import socket
 import os
 import doublethink
+
+r = rdb.RethinkDB()
 
 class ServiceRegistry(object):
     '''
