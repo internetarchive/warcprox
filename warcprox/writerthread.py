@@ -32,6 +32,7 @@ import time
 import warcprox
 from concurrent import futures
 from datetime import datetime
+from collections import defaultdict
 import threading
 try:
     import queue
@@ -103,7 +104,30 @@ class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
         # special warc name prefix '-' means "don't archive"
         return (prefix != '-' and not recorded_url.do_not_archive
                 and self._filter_accepts(recorded_url)
+                and not self._skip_revisit(recorded_url)
                 and not self._in_blackout(recorded_url))
+
+    # maintain a set of revisit hashes seen, per ait crawl id
+    revisits = defaultdict(set)
+    def _skip_revisit(self, recorded_url):
+        if hasattr(recorded_url, "dedup_info") and recorded_url.dedup_info:
+            if (
+                recorded_url.warcprox_meta
+                and "metadata" in recorded_url.warcprox_meta
+                and "ait-job-id" in recorded_url.warcprox_meta["metadata"]
+            ):
+                crawl_id = recorded_url.warcprox_meta["metadata"]["ait-job-id"]
+                if recorded_url.payload_digest in revisits[crawl_id]:
+                    self.logger.info(
+                        "Found duplicate revisit, skipping: %s, hash: %s",
+                        recorded_url.url,
+                        recorded_url.payload_digest,
+                    )
+                    return True
+                else:
+                    revisits[crawl_id].add(recorded_url.payload_digest)
+        return False
+
 
     def _in_blackout(self, recorded_url):
         """If --blackout-period=N (sec) is set, check if duplicate record
