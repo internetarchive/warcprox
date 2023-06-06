@@ -117,7 +117,7 @@ class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
                 and "ait-job-id" in recorded_url.warcprox_meta["metadata"]
             ):
                 crawl_id = recorded_url.warcprox_meta["metadata"]["ait-job-id"]
-                if recorded_url.payload_digest in revisits[crawl_id]:
+                if recorded_url.payload_digest in self.revisits[crawl_id]:
                     self.logger.info(
                         "Found duplicate revisit, skipping: %s, hash: %s",
                         recorded_url.url,
@@ -125,7 +125,7 @@ class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
                     )
                     return True
                 else:
-                    revisits[crawl_id].add(recorded_url.payload_digest)
+                    self.revisits[crawl_id].add(recorded_url.payload_digest)
         return False
 
 
