@@ -2,7 +2,7 @@
 warcprox/writerthread.py - warc writer thread, reads from the recorded url
 queue, writes warc records, runs final tasks after warc records are written
 
-Copyright (C) 2013-2019 Internet Archive
+Copyright (C) 2013-2023 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -117,11 +117,13 @@ class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
                 and "ait-job-id" in recorded_url.warcprox_meta["metadata"]
             ):
                 crawl_id = recorded_url.warcprox_meta["metadata"]["ait-job-id"]
-                if recorded_url.payload_digest in self.revisits[crawl_id]:
+                hash = warcprox.digest_str( recorded_url.payload_digest, self.options.base32)
+                if hash in self.revisits[crawl_id]:
                     self._log(recorded_url, None, annotation="_skip_revisit")
                     return True
                 else:
-                    self.revisits[crawl_id].add(recorded_url.payload_digest)
+                    self._log(recorded_url, None, annotation="_keep_revisit")
+                    self.revisits[crawl_id].add(hash)
         return False
 
 
