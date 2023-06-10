@@ -1,0 +1,17 @@
+name: pytest
+on:
+  push:
+  #  branches: [master, qa]
+  pull_request:
+    branches: [master, qa]
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: 3.x
+      - run: pip install aiohttp mock pytest warcio
+      - run: pip install --editable .
+      - run: pytest
