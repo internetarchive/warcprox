@@ -29,6 +29,7 @@ import warcprox
 import sqlite3
 import doublethink
 import datetime
+import psycopg2
 import urllib3
 from urllib3.exceptions import HTTPError
 import collections
@@ -65,20 +66,17 @@ class LimitRevisitsPGMixin(object):
     """
     Limit revisits recorded to one per revisit_key
     """
-    def __init__(self, datasource, options=warcprox.Options()):
-        import psycopg2
-        from psycopg2 import extras # needed
-        self.datasource = datasource # "postgresql://user@db_host/db_name"
-        self.datatable  = 'crawled_urls'  # postgres table in db_name
+    def __init__(self, options=warcprox.Options()):
+        self.datasource = "postgresql://archiveit@db.qa-archive-it.org/archiveit" # "postgresql://user@db_host/db_name"
+        self.datatable  = "crawl_revisits"  # postgres table in db_name
 
     def limit_revisits(self, recorded_url, hash_plus_url=None, revisit_key=None):
         if not hash_plus_url:
-            hash_plus_url = b''.join(
+            hash_plus_url = b"".join(
                 (warcprox.digest_str(recorded_url.payload_digest,
                                      self.options.base32),
                  recorded_url.url)
-            )
-
+            ).decode()
         if not revisit_key:
             # use ait-job-id if available
             if (
@@ -90,7 +88,7 @@ class LimitRevisitsPGMixin(object):
             else:
                 revisit_key = 'all'
 
-        query = f"SELECT exists(SELECT 1 FROM {self.datatable} WHERE hash_plus_url = {hash_plus_url} LIMIT 1;"
+        query = "SELECT exists(SELECT 1 FROM crawl_revisits WHERE hash_plus_url = %s LIMIT 1);"
 
         try:
             conn = psycopg2.connect(self.datasource)
@@ -99,19 +97,21 @@ class LimitRevisitsPGMixin(object):
             return False
         cur = conn.cursor()
         try:
-            cur.execute(query)
+            cur.execute(query, (hash_plus_url,))
         except Exception as e:
             self.logger.warning("exception querying for %s in %s: %s", hash_plus_url, revisit_key, e)
             return False
         result = cur.fetchone()
-
         if result[0]:
+            logging.info("result[0]: %s", result[0])
+
+        if result[0] and result[0] == True:
             logging.info("skipping revisit for url %s and hash %s", recorded_url.url, hash)
             return True
         else:
-            query = "INSERT INTO {self.datable} VALUES(revisit_key, hash_plus_url);"
+            query = "INSERT INTO crawl_revisits (crawl_id, hash_plus_url) VALUES (%s, %s);"
             try:
-                cur.execute(query)
+                cur.execute(query, (revisit_key, hash_plus_url))
             except Exception as e:
                 self.logger.warning("exception inserting %s in %s: %s", hash_plus_url, revisit_key, e)
 
@@ -122,8 +122,6 @@ class LimitRecords(object):
     Limit records to one per revisit_key, e.g., crawl id
     """
     def __init__(self, datasource, options=warcprox.Options()):
-        import psycopg2
-        from psycopg2 import extras # needed
         self.datasource = datasource # "postgresql://user@db_host/db_name"
         # self.datatable = revisit_key  # set in limit_revisits method
         # verify partition table exists
@@ -518,8 +516,7 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor, LimitRevisitsPGMix
 
     def __init__(self, trough_dedup_db, options=warcprox.Options()):
         warcprox.BaseBatchPostfetchProcessor.__init__(self, options)
-        LimitRevisitsPGMixin.__init__(self, datasource="", options)
-        # TODO: get datasource
+        LimitRevisitsPGMixin.__init__(self, options)
         self.trough_dedup_db = trough_dedup_db
 
     def _startup(self):
@@ -607,8 +604,7 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor, LimitRevisitsPGMix
                             for recorded_url in key_index[entry['digest_key']]:
                                 recorded_url.dedup_info = entry
                                 if recorded_url.dedup_info:
-                                    recorded_url.do_not_archive = \
-                                        self.limit_revisits(recorded_url)
+                                    recorded_url.do_not_archive = self.limit_revisits(recorded_url)
                     except Exception as e:
                         # batch_lookup raised exception or something
                         logging.warning(
