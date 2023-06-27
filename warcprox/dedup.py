@@ -65,11 +65,11 @@ class LimitRevisitsPGMixin(object):
     """
     Limit revisits recorded to one per revisit_key
     """
-    def __init__(self, datasource, options=warcprox.Options()):
+    def __init__(self, options=warcprox.Options()):
         import psycopg2
-        from psycopg2 import extras # needed
-        self.datasource = datasource # "postgresql://user@db_host/db_name"
-        self.datatable  = 'crawled_urls'  # postgres table in db_name
+        from psycopg2 import extras # TODO: needed?
+        self.datasource = "postgresql://archiveit@db.qa-archive-it.org/archiveit" # "postgresql://user@db_host/db_name"
+        self.datatable  = "crawl_revisits"  # postgres table in db_name
 
     def limit_revisits(self, recorded_url, hash_plus_url=None, revisit_key=None):
         if not hash_plus_url:
@@ -78,7 +78,6 @@ class LimitRevisitsPGMixin(object):
                                      self.options.base32),
                  recorded_url.url)
             )
-
         if not revisit_key:
             # use ait-job-id if available
             if (
@@ -90,7 +89,7 @@ class LimitRevisitsPGMixin(object):
             else:
                 revisit_key = 'all'
 
-        query = f"SELECT exists(SELECT 1 FROM {self.datatable} WHERE hash_plus_url = {hash_plus_url} LIMIT 1;"
+        query = f"SELECT exists(SELECT 1 FROM {self.datatable} WHERE hash_plus_url = {hash_plus_url} LIMIT 1);"
 
         try:
             conn = psycopg2.connect(self.datasource)
@@ -104,12 +103,14 @@ class LimitRevisitsPGMixin(object):
             self.logger.warning("exception querying for %s in %s: %s", hash_plus_url, revisit_key, e)
             return False
         result = cur.fetchone()
-
         if result[0]:
+            logging.info("result[0]: %s", result[0])
+
+        if result[0] and result[0] == True:
             logging.info("skipping revisit for url %s and hash %s", recorded_url.url, hash)
             return True
         else:
-            query = "INSERT INTO {self.datable} VALUES(revisit_key, hash_plus_url);"
+            query = f"INSERT INTO {self.datatable} VALUES({revisit_key}, {hash_plus_url});"
             try:
                 cur.execute(query)
             except Exception as e:
@@ -518,8 +519,7 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor, LimitRevisitsPGMix
 
     def __init__(self, trough_dedup_db, options=warcprox.Options()):
         warcprox.BaseBatchPostfetchProcessor.__init__(self, options)
-        LimitRevisitsPGMixin.__init__(self, datasource="", options)
-        # TODO: get datasource
+        LimitRevisitsPGMixin.__init__(self, datasource, options)
         self.trough_dedup_db = trough_dedup_db
 
     def _startup(self):
