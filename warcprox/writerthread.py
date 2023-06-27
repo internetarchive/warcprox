@@ -104,27 +104,7 @@ class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
         # special warc name prefix '-' means "don't archive"
         return (prefix != '-' and not recorded_url.do_not_archive
                 and self._filter_accepts(recorded_url)
-                and not self._skip_revisit(recorded_url)
                 and not self._in_blackout(recorded_url))
-
-    # maintain a set of revisit hashes seen, per ait crawl id
-    revisits = defaultdict(set)
-    def _skip_revisit(self, recorded_url):
-        if hasattr(recorded_url, "dedup_info") and recorded_url.dedup_info:
-            if (
-                recorded_url.warcprox_meta
-                and "metadata" in recorded_url.warcprox_meta
-                and "ait-job-id" in recorded_url.warcprox_meta["metadata"]
-            ):
-                crawl_id = recorded_url.warcprox_meta["metadata"]["ait-job-id"]
-                hash = warcprox.digest_str( recorded_url.payload_digest, self.options.base32)
-                if hash in self.revisits[crawl_id]:
-                    self._log(recorded_url, None, annotation="_skip_revisit")
-                    return True
-                else:
-                    self._log(recorded_url, None, annotation="_keep_revisit")
-                    self.revisits[crawl_id].add(hash)
-        return False
 
     def _in_blackout(self, recorded_url):
         """If --blackout-period=N (sec) is set, check if duplicate record
