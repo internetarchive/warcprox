@@ -78,7 +78,6 @@ class LimitRevisitsPGMixin():
                                      self.options.base32)
             digest = digest[5:] if digest.startswith(b'sha1:') else digest
             hash_plus_url = b"".join([digest, recorded_url.url]).decode()
-
         if not revisit_key:
             # use ait-job-id if available
             if (
@@ -90,7 +89,7 @@ class LimitRevisitsPGMixin():
             else:
                 revisit_key = '__unspecified__'
 
-        query = "SELECT exists(SELECT 1 FROM crawl_revisits WHERE hash_plus_url = %s LIMIT 1);"
+        query = "SELECT exists(SELECT 1 FROM crawl_revisits WHERE hash_plus_url = %s and crawl_id = %s LIMIT 1);"
 
         try:
             conn = psycopg2.connect(self.datasource)
@@ -99,14 +98,14 @@ class LimitRevisitsPGMixin():
             return False
         cur = conn.cursor()
         try:
-            cur.execute(query, (hash_plus_url,))
+            cur.execute(query, (hash_plus_url, revisit_key))
         except Exception as e:
-            self.logger.warning("exception querying for %s in %s: %s", hash_plus_url, revisit_key, e)
+            self.logger.warning("exception querying for %s in %s: %s", digest, revisit_key, e)
             return False
         result = cur.fetchone()
 
         if result and result == (True, ):
-            logging.info("skipping revisit for url %s and hash %s", recorded_url.url, hash)
+            logging.info("skipping revisit for url %s and hash %s", recorded_url.url, digest)
             return True
 
         query = "INSERT INTO crawl_revisits (crawl_id, hash_plus_url) VALUES (%s, %s);"
@@ -114,7 +113,7 @@ class LimitRevisitsPGMixin():
             cur.execute(query, (revisit_key, hash_plus_url))
             conn.commit()
         except Exception as e:
-            self.logger.warning("exception inserting %s in %s: %s", hash_plus_url, revisit_key, e)
+            self.logger.warning("exception inserting %s in %s for %s: %s", digest, revisit_key, recorded_url.url, e)
 
         return False
 
