@@ -66,7 +66,6 @@ class LimitRevisitsPGMixin():
     """
     Limit revisits recorded to one per revisit_key
     """
-
     def __init__(self):
         self.datasource = "postgresql://archiveit@db.qa-archive-it.org/archiveit" # "postgresql://user@db_host/db_name"
         self.datatable  = "crawl_revisits"  # postgres table in db_name
@@ -85,7 +84,7 @@ class LimitRevisitsPGMixin():
                 and "metadata" in recorded_url.warcprox_meta
                 and "ait-job-id" in recorded_url.warcprox_meta["metadata"]
             ):
-                revisit_key = recorded_url.warcprox_meta["metadata"]["ait-job-id"]
+                revisit_key = str(recorded_url.warcprox_meta["metadata"]["ait-job-id"])
             else:
                 revisit_key = '__unspecified__'
 
