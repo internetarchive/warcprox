@@ -120,7 +120,7 @@ class LimitRevisitsPGMixin():
                 revisit_key = str(recorded_url.warcprox_meta["metadata"]["ait-job-id"])
             else:
                 revisit_key = '__unspecified__'
-        return skip_revisit(hash_plus_url, revisit_key, self.conn)
+        return skip_revisit(hash_plus_url, revisit_key, self._conn)
 
 
 class DedupLoader(warcprox.BaseStandardPostfetchProcessor, DedupableMixin):
@@ -554,7 +554,7 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor, LimitRevisitsPGMix
                                 recorded_url.dedup_info = entry
                                 if recorded_url.dedup_info:
                                     recorded_url.do_not_archive = self.limit_revisits(recorded_url)
-                                    logging.info('%s', self.limit_revisits.cache_info())
+                                    logging.info('%s', skip_revisit.cache_info())
                     except Exception as e:
                         # batch_lookup raised exception or something
                         logging.warning(
