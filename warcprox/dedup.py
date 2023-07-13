@@ -96,7 +96,7 @@ class LimitRevisitsPGMixin():
         # datasource like "postgresql://user@db_host/db_name"
         # table name revisits
         try:
-            self._conn = psycopg.connect(datasource)
+            self._conn = psycopg.connect(datasource, prepare_threshold=None)
         except Exception as e:
             self.logger.warning("db connection failure: %s", e)
 
