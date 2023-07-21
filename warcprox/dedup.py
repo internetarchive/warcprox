@@ -88,7 +88,7 @@ def skip_revisit(hash_plus_url, revisit_key, conn):
         logging.warning("exception inserting %s and %s: %s", hash_plus_url, revisit_key, e)
     return False
 
-class LimitRevisitsPGMixin():
+class LimitRevisitsPGMixin:
     """
     Limit revisits recorded to one per revisit_key
     """
@@ -105,6 +105,8 @@ class LimitRevisitsPGMixin():
         """
         tracks revisits, returns True when we've seen revisit before, else False
         """
+        self.logger.info('%s', skip_revisit.cache_info())
+
         if not hash_plus_url:
             digest = warcprox.digest_str(recorded_url.payload_digest,
                                      self.options.base32)
@@ -490,8 +492,10 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor, LimitRevisitsPGMix
             hash_plus_url = b''.join((payload_hash, recorded_url.url))
             if (recorded_url.response_recorder
                     and hash_plus_url not in hash_plus_urls
+                    and not self.limit_revisits(recorded_url, hash_plus_url)
                     and self.trough_dedup_db.should_dedup(recorded_url)):
                 hash_plus_urls.add(hash_plus_url)
+
                 if (recorded_url.warcprox_meta
                         and 'dedup-buckets' in recorded_url.warcprox_meta):
                     for bucket, bucket_mode in recorded_url.warcprox_meta["dedup-buckets"].items():
@@ -552,9 +556,6 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor, LimitRevisitsPGMix
                         for entry in future.result():
                             for recorded_url in key_index[entry['digest_key']]:
                                 recorded_url.dedup_info = entry
-                                if recorded_url.dedup_info:
-                                    recorded_url.do_not_archive = self.limit_revisits(recorded_url)
-                                    logging.info('%s', skip_revisit.cache_info())
                     except Exception as e:
                         # batch_lookup raised exception or something
                         logging.warning(
