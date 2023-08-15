@@ -492,7 +492,7 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor, LimitRevisitsPGMix
             hash_plus_url = b''.join((payload_hash, recorded_url.url))
             if (recorded_url.response_recorder
                     and hash_plus_url not in hash_plus_urls
-                    and not self.limit_revisits(recorded_url, hash_plus_url.decode())
+                    and not self.limit_revisits(recorded_url, hash_plus_url.decode('iso-8859-1'))
                     and self.trough_dedup_db.should_dedup(recorded_url)):
                 hash_plus_urls.add(hash_plus_url)
 
