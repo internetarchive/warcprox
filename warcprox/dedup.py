@@ -34,7 +34,7 @@ import urllib3
 from urllib3.exceptions import HTTPError
 import collections
 from concurrent import futures
-from functools import lru_cache
+from functools import lru_cache, wraps
 
 urllib3.disable_warnings()
 
@@ -62,6 +62,17 @@ class DedupableMixin(object):
         else:
             return recorded_url.response_recorder.payload_size() > self.min_binary_size
 
+def cache_true(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        result = func(*args, **kwargs)
+        if result:
+            return result
+        else:
+            return None
+    return wrapper
+
+@cache_true
 @lru_cache(maxsize=256)
 def skip_revisit(hash_plus_url, revisit_key, conn):
     """
