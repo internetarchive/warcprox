@@ -63,7 +63,7 @@ class DedupableMixin(object):
             return recorded_url.response_recorder.payload_size() > self.min_binary_size
 
 def cache_true(func):
-    @functools.wraps(func)
+    @wraps(func)
     def wrapper(*args, **kwargs):
         result = func(*args, **kwargs)
         if result:
@@ -116,7 +116,7 @@ class LimitRevisitsPGMixin:
         """
         tracks revisits, returns True when we've seen revisit before, else False
         """
-        self.logger.info('%s', skip_revisit.cache_info())
+        # self.logger.info('%s', skip_revisit.cache_info())
 
         if not hash_plus_url:
             digest = warcprox.digest_str(recorded_url.payload_digest,
