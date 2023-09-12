@@ -29,7 +29,7 @@ import doublethink
 import json
 import logging
 import os
-import rethinkdb as r
+from rethinkdb import RethinkDB; r = RethinkDB()
 import sqlite3
 import threading
 import time
