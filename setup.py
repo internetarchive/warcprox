@@ -27,7 +27,7 @@ deps = [
     'certauth==1.1.6',
     'warctools>=4.10.0',
     'urlcanon>=0.3.0',
-    'doublethink>=0.2.0.dev87',
+    'doublethink @ git+https://github.com/galgeek/doublethink.git@two_dot_four',
     'urllib3>=1.23',
     'requests>=2.0.1',
     'PySocks>=1.6.8',
@@ -53,7 +53,7 @@ setuptools.setup(
         license='GPL',
         packages=['warcprox'],
         install_requires=deps,
-        extras_require={'trough': ['0.20',],},
+        extras_require={'trough': ['trough @ git+https://github.com/internetarchive/trough.git@jammy_focal',],},
         setup_requires=['pytest-runner'],
         tests_require=['mock', 'pytest', 'warcio'],
         entry_points={
@@ -77,4 +77,3 @@ setuptools.setup(
             'Topic :: Software Development :: Libraries :: Python Modules',
             'Topic :: System :: Archiving',
         ])
-
