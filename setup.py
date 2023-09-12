@@ -53,7 +53,7 @@ setuptools.setup(
         license='GPL',
         packages=['warcprox'],
         install_requires=deps,
-        extras_require={'trough': ['git+https://github.com/internetarchive/trough.git@jammy_focal',],},
+        extras_require={'trough': ['0.20',],},
         setup_requires=['pytest-runner'],
         tests_require=['mock', 'pytest', 'warcio'],
         entry_points={
