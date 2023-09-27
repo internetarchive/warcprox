@@ -33,7 +33,7 @@ import hashlib
 import threading
 import datetime
 import doublethink
-import rethinkdb as r
+from rethinkdb import RethinkDB; r = RethinkDB()
 from warcprox.dedup import DedupableMixin
 
 class RethinkCaptures:
