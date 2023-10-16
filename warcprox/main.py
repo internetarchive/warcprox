@@ -4,7 +4,7 @@
 warcprox/main.py - entrypoint for warcprox executable, parses command line
 arguments, initializes components, starts controller, handles signals
 
-Copyright (C) 2013-2019 Internet Archive
+Copyright (C) 2013-2023 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -210,7 +210,7 @@ def _build_arg_parser(prog='warcprox', show_hidden=False):
     arg_parser.add_argument(
             '--socks-proxy', dest='socks_proxy',
             default=None, help=
-                'host:port of socks proxy, used for all traffic if activated'))
+                'host:port of socks proxy, used for all traffic if activated')
     arg_parser.add_argument(
             '--socks-proxy-username', dest='socks_proxy_username',
             default=None, help='optional socks proxy username')
