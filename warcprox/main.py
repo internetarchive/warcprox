@@ -207,6 +207,16 @@ def _build_arg_parser(prog='warcprox', show_hidden=False):
             default=None, help=(
                 'host:port of tor socks proxy, used only to connect to '
                 '.onion sites'))
+    arg_parser.add_argument(
+            '--socks-proxy', dest='socks_proxy',
+            default=None, help=
+                'host:port of socks proxy, used for all traffic if activated'))
+    arg_parser.add_argument(
+            '--socks-proxy-username', dest='socks_proxy_username',
+            default=None, help='optional socks proxy username')
+    arg_parser.add_argument(
+            '--socks-proxy-password', dest='socks_proxy_password',
+            default=None, help='optional socks proxy password')
     hidden.add_argument(
             '--socket-timeout', dest='socket_timeout', type=float, default=60,
             help=suppress(
