@@ -209,8 +209,7 @@ def _build_arg_parser(prog='warcprox', show_hidden=False):
                 '.onion sites'))
     arg_parser.add_argument(
             '--socks-proxy', dest='socks_proxy',
-            default=None, help=
-                'host:port of socks proxy, used for all traffic if activated'))
+            default=None, help='host:port of socks proxy, used for all traffic if activated')
     arg_parser.add_argument(
             '--socks-proxy-username', dest='socks_proxy_username',
             default=None, help='optional socks proxy username')
