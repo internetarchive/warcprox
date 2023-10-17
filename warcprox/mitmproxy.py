@@ -256,6 +256,10 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
     _tmp_file_max_memory_size = 512 * 1024
     onion_tor_socks_proxy_host = None
     onion_tor_socks_proxy_port = None
+    socks_proxy_host = None
+    socks_proxy_port = None
+    socks_proxy_username = None
+    socks_proxy_password = None
 
     def __init__(self, request, client_address, server):
         threading.current_thread().name = 'MitmProxyHandler(tid={},started={},client={}:{})'.format(warcprox.gettid(), datetime.datetime.utcnow().isoformat(), client_address[0], client_address[1])
@@ -312,6 +316,18 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 self._remote_server_conn.sock.set_proxy(
                         socks.SOCKS5, addr=self.onion_tor_socks_proxy_host,
                         port=self.onion_tor_socks_proxy_port, rdns=True)
+                self._remote_server_conn.sock.settimeout(self._socket_timeout)
+                self._remote_server_conn.sock.connect((self.hostname, int(self.port)))
+            elif self.socks_proxy_host and self.socks_proxy_port:
+                self.logger.info(
+                        "using socks proxy at %s:%s to connect to %s",
+                        self.socks_proxy_host, self.socks_proxy_port, self.hostname)
+                self._remote_server_conn.sock = socks.socksocket()
+                self._remote_server_conn.sock.set_proxy(
+                        socks.SOCKS5, addr=self.socks_proxy_host,
+                        port=self.socks_proxy_port, rdns=True,
+                        username=self.socks_proxy_username,
+                        password=self.socks_proxy_password)
                 self._remote_server_conn.sock.settimeout(self._socket_timeout)
                 self._remote_server_conn.sock.connect((self.hostname, int(self.port)))
             else:
@@ -822,6 +838,14 @@ class SingleThreadedMitmProxy(http_server.HTTPServer):
             except ValueError:
                 MitmProxyHandlerClass.onion_tor_socks_proxy_host = options.onion_tor_socks_proxy
                 MitmProxyHandlerClass.onion_tor_socks_proxy_port = None
+        if options.socks_proxy:
+            host, port = options.socks_proxy.split(':')
+            MitmProxyHandlerClass.socks_proxy_host = host
+            MitmProxyHandlerClass.socks_proxy_port = int(port)
+            if options.socks_proxy_username:
+                MitmProxyHandlerClass.socks_proxy_username = options.socks_proxy_username
+            if options.socks_proxy_password:
+                MitmProxyHandlerClass.socks_proxy_password = options.socks_proxy_password
 
         if options.socket_timeout:
             MitmProxyHandlerClass._socket_timeout = options.socket_timeout
