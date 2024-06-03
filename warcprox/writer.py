@@ -55,7 +55,10 @@ class WarcWriter:
         self.open_suffix = '' if options.no_warc_open_suffix else '.open'
         self.rollover_size = options.rollover_size or 1000000000
         self.rollover_idle_time = options.rollover_idle_time or None
-        self.directory = options.directory or './warcs'
+        if options.subdir_prefix and options.prefix:
+            self.directory = os.path.sep.join([options.directory, options.prefix]) or './warcs'
+        else:
+            self.directory = options.directory or './warcs'
         self.filename_template = options.warc_filename or \
                 '{prefix}-{timestamp17}-{randomtoken}-{serialno}'
         self.last_activity = time.time()
