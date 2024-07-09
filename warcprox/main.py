@@ -39,7 +39,6 @@ import socket
 import traceback
 import signal
 import threading
-import certauth.certauth
 import yaml
 import warcprox
 import doublethink
