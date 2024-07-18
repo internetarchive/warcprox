@@ -83,7 +83,8 @@ from urllib3.exceptions import TimeoutError, HTTPError, NewConnectionError
 import doublethink
 from cachetools import TTLCache
 from threading import RLock
-from certauth.certauth import CertificateAuthority
+
+from .certauth import CertificateAuthority
 
 class ProxyingRecorder(object):
     """
