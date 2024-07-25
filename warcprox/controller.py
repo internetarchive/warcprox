@@ -31,7 +31,6 @@ import sys
 import gc
 import datetime
 import warcprox
-import certauth
 import functools
 import doublethink
 import importlib

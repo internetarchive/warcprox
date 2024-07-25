@@ -24,12 +24,12 @@ import sys
 import setuptools
 
 deps = [
-    'certauth==1.1.6',
     'warctools>=4.10.0',
     'urlcanon>=0.3.0',
     'doublethink @ git+https://github.com/internetarchive/doublethink.git@Py311',
     'urllib3>=1.23',
     'requests>=2.0.1',
+    'pyopenssl',
     'PySocks>=1.6.8',
     'cryptography>=2.3,<40',
     'idna',
