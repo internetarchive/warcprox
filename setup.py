@@ -29,7 +29,6 @@ deps = [
     'doublethink @ git+https://github.com/internetarchive/doublethink.git@Py311',
     'urllib3>=1.23',
     'requests>=2.0.1',
-    'pyopenssl',
     'PySocks>=1.6.8',
     'cryptography>=2.3,<40',
     'idna',
