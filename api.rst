@@ -213,8 +213,7 @@ There are two expected keys in a MIME type filter block:
 
 * ``regex``: A regex expression to be applied to the Content-Type header value.
 * ``type``: The type of filtering logic to apply. Two values are supported.
-  * ``REJECT``: Any Content-Type header value matching the regex will be
-    rejected.
+  * ``REJECT``: Any Content-Type header value matching the regex will be rejected.
   * ``LIMIT``: Only Content-Type values matching the regex will be allowed.
 
 ``stats`` (dictionary)
