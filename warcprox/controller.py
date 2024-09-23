@@ -203,6 +203,9 @@ class WarcproxController:
     def build_postfetch_chain(self, inq):
         self._postfetch_chain = []
 
+        self.mime_type_filter = warcprox.mime_type_filter.MimeTypeFilter(self.options)
+        self._postfetch_chain.append(self.mime_type_filter)
+
         self.dedup_db = Factory.dedup_db(self.options)
 
         if self.dedup_db:
