@@ -1,7 +1,7 @@
 '''
 warcprox/dedup.py - identical payload digest deduplication using sqlite db
 
-Copyright (C) 2013-2023 Internet Archive
+Copyright (C) 2013-2021 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -29,12 +29,11 @@ import warcprox
 import sqlite3
 import doublethink
 import datetime
-import psycopg
 import urllib3
 from urllib3.exceptions import HTTPError
 import collections
 from concurrent import futures
-from functools import lru_cache, wraps
+from functools import lru_cache
 
 urllib3.disable_warnings()
 
@@ -61,80 +60,6 @@ class DedupableMixin(object):
             return recorded_url.response_recorder.payload_size() > self.min_text_size
         else:
             return recorded_url.response_recorder.payload_size() > self.min_binary_size
-
-def cache_true(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        result = func(*args, **kwargs)
-        if result:
-            return result
-        else:
-            return None
-    return wrapper
-
-@cache_true
-@lru_cache(maxsize=256)
-def skip_revisit(hash_plus_url, revisit_key, conn):
-    """
-    check if hash_plus_url & revisit_key are present in conn table revisits,
-    returning true if they exist, else false
-    """
-    query = "SELECT exists(SELECT 1 FROM revisits WHERE hash_plus_url = %s and crawl_id = %s LIMIT 1);"
-    cur = conn.cursor()
-    try:
-        cur.execute(query, (hash_plus_url, revisit_key))
-    except Exception as e:
-        logging.warning("exception querying for %s in %s: %s", hash_plus_url, revisit_key, e)
-        return False
-    result = cur.fetchone()
-    if result and result == (True, ):
-        logging.info("skipping revisit for hash %s", hash_plus_url)
-        return True
-
-    query = "INSERT INTO revisits (crawl_id, hash_plus_url) VALUES (%s, %s);"
-    try:
-        cur.execute(query, (revisit_key, hash_plus_url))
-        conn.commit()
-    except Exception as e:
-        logging.warning("exception inserting %s and %s: %s", hash_plus_url, revisit_key, e)
-    return False
-
-class LimitRevisitsPGMixin:
-    """
-    Limit revisits recorded to one per revisit_key
-    """
-    def __init__(self, datasource):
-        # datasource like "postgresql://user@db_host/db_name"
-        # table name revisits
-        try:
-            self._conn = psycopg.connect(datasource, prepare_threshold=None)
-        except Exception as e:
-            self.logger.warning("db connection failure: %s", e)
-
-
-    def limit_revisits(self, recorded_url, hash_plus_url=None, revisit_key=None):
-        """
-        tracks revisits, returns True when we've seen revisit before, else False
-        """
-        # self.logger.info('%s', skip_revisit.cache_info())
-
-        if not hash_plus_url:
-            digest = warcprox.digest_str(recorded_url.payload_digest,
-                                     self.options.base32)
-            digest = digest[5:] if digest.startswith(b'sha1:') else digest
-            hash_plus_url = b"".join([digest, recorded_url.url]).decode()
-        if not revisit_key:
-            # use ait-job-id if available
-            if (
-                recorded_url.warcprox_meta
-                and "metadata" in recorded_url.warcprox_meta
-                and "ait-job-id" in recorded_url.warcprox_meta["metadata"]
-            ):
-                revisit_key = str(recorded_url.warcprox_meta["metadata"]["ait-job-id"])
-            else:
-                revisit_key = '__unspecified__'
-        return skip_revisit(hash_plus_url, revisit_key, self._conn)
-
 
 class DedupLoader(warcprox.BaseStandardPostfetchProcessor, DedupableMixin):
     def __init__(self, dedup_db, options=warcprox.Options()):
@@ -473,12 +398,11 @@ class BatchTroughStorer(warcprox.BaseBatchPostfetchProcessor):
                 logging.warning(
                     'timed out saving dedup info to trough', exc_info=True)
 
-class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor, LimitRevisitsPGMixin):
+class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor):
     logger = logging.getLogger("warcprox.dedup.BatchTroughLoader")
 
     def __init__(self, trough_dedup_db, options=warcprox.Options()):
         warcprox.BaseBatchPostfetchProcessor.__init__(self, options)
-        LimitRevisitsPGMixin.__init__(self, "postgresql://brozzler@db.qa-archive-it.org/brozzler")
         self.trough_dedup_db = trough_dedup_db
 
     def _startup(self):
@@ -491,8 +415,7 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor, LimitRevisitsPGMix
         '''
         buckets = collections.defaultdict(list)
         discards = []
-        # current batch often contains new duplicates, so check for them here
-        # see https://webarchive.jira.com/browse/WT-31
+        # for duplicate checks, see https://webarchive.jira.com/browse/WT-31
         hash_plus_urls = set()
         for recorded_url in batch:
             if not recorded_url.payload_digest:
@@ -503,10 +426,8 @@ class BatchTroughLoader(warcprox.BaseBatchPostfetchProcessor, LimitRevisitsPGMix
             hash_plus_url = b''.join((payload_hash, recorded_url.url))
             if (recorded_url.response_recorder
                     and hash_plus_url not in hash_plus_urls
-                    and not self.limit_revisits(recorded_url)
                     and self.trough_dedup_db.should_dedup(recorded_url)):
                 hash_plus_urls.add(hash_plus_url)
-
                 if (recorded_url.warcprox_meta
                         and 'dedup-buckets' in recorded_url.warcprox_meta):
                     for bucket, bucket_mode in recorded_url.warcprox_meta["dedup-buckets"].items():
