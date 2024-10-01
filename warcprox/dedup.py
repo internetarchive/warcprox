@@ -24,6 +24,7 @@ from __future__ import absolute_import
 import logging
 import os
 import json
+import sys
 from hanzo import warctools
 import warcprox
 import sqlite3
