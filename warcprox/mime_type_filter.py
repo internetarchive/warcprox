@@ -25,7 +25,7 @@ import re
 from enum import Enum
 from typing import Dict, List
 
-from warcproxy import RequestedUrl
+from warcprox.warcproxy import RequestedUrl
 
 from warcprox import BasePostfetchProcessor
 
