@@ -26,7 +26,7 @@ import setuptools
 deps = [
     'warctools>=4.10.0',
     'urlcanon>=0.3.0',
-    'doublethink @ git+https://github.com/internetarchive/doublethink.git@Py311',
+    'doublethink==0.4.9',
     'urllib3>=1.23',
     'requests>=2.0.1',
     'PySocks>=1.6.8',
