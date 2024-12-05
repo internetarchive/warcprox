@@ -152,19 +152,12 @@ class CertificateAuthority(object):
 
         host = host.encode('utf-8')
 
-        # Generate key
-        key = rsa.generate_private_key(
-            public_exponent=65537,
-            key_size=2048,
-            backend=default_backend()
-        )
-
         # Generate CSR
         csr = x509.CertificateSigningRequestBuilder().subject_name(
             x509.Name([
                 x509.NameAttribute(NameOID.COMMON_NAME, host.decode('utf-8')),
             ])
-        ).sign(key, hash_func, default_backend())
+        ).sign(self.key, hash_func, default_backend())
 
         # Generate Cert
         cert_builder = x509.CertificateBuilder().subject_name(
@@ -193,8 +186,8 @@ class CertificateAuthority(object):
         cert = cert_builder.sign(root_key, hash_func, default_backend())
 
         # Write cert + key
-        self.write_pem(host_filename, cert, key)
-        return cert, key
+        self.write_pem(host_filename, cert, self.key)
+        return cert, self.key
 
     def write_pem(self, filename, cert, key):
         with open(filename, 'wb+') as f:
