@@ -186,6 +186,22 @@ to evaluate the block rules. In particular, this circumstance prevails when the
 browser controlled by brozzler is requesting images, javascript, css, and so
 on, embedded in a page.
 
+``compressed_blocks`` (string)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+If the ``blocks`` header is large, it may be useful or necessary to compress it.
+``compressed_blocks`` is a string containing a zlib and base64-encoded
+``blocks`` list. If both ``blocks`` and ``compressed_blocks`` are provided,
+warcprox will use the value of ``compressed_blocks``, however this behavior
+is not guaranteed.
+
+Example::
+
+    Warcprox-Meta: {"compressed_blocks": "eJwVykEKgCAQQNGryKwt90F0kGgxlZSgzuCMFIR3r7b//fkBkVoUBgMbJetvTBy9de5U5cFBs+aBnRKG/D8J44XF91XAGpC6ipaQj58u7iIdIfd88oSbBsrjF6gqtOUFJ5YjwQ=="}
+
+Is equivalent to::
+
+    {"blocks": [{"ssurt": "com,example,//http:/"}, {"domain": "malware.us", "substring": "wp-login.php?action=logout"}]}
+
 ``stats`` (dictionary)
 ~~~~~~~~~~~~~~~~~~~~~~
 ``stats`` is a dictionary with only one field understood by warcprox,
