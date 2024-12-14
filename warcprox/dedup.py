@@ -18,9 +18,6 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 USA.
 '''
-
-from __future__ import absolute_import
-
 import logging
 import os
 import json
@@ -37,7 +34,7 @@ from functools import lru_cache
 
 urllib3.disable_warnings()
 
-class DedupableMixin(object):
+class DedupableMixin:
     def __init__(self, options=warcprox.Options()):
         self.min_text_size = options.dedup_min_text_size or 0
         self.min_binary_size = options.dedup_min_binary_size or 0

@@ -1,4 +1,3 @@
-import logging
 import os
 import random
 from argparse import ArgumentParser
@@ -25,7 +24,7 @@ DEF_HASH_FUNC = hashes.SHA256()
 
 
 # =================================================================
-class CertificateAuthority(object):
+class CertificateAuthority:
     """
     Utility class for signing individual certificate
     with a root cert.
