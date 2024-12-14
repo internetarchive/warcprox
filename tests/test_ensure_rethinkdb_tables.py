@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# vim: set fileencoding=utf-8:
 '''
 tests/test_ensure_rethinkdb_tables.py - automated tests of
 ensure-rethinkdb-tables utility

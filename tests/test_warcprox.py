@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# vim: set fileencoding=utf-8:
 '''
 tests/test_warcprox.py - automated tests for warcprox
 
@@ -999,7 +998,7 @@ def test_dedup_bucket_concurrency(https_daemon, http_daemon, warcprox_, archivin
     # fire off 20 initial requests simultaneously-ish
     with futures.ThreadPoolExecutor(max_workers=20) as pool:
         for i in range(20):
-            url = 'http://localhost:%s/test_dedup_bucket_concurrency/%s' % (
+            url = 'http://localhost:{}/test_dedup_bucket_concurrency/{}'.format(
                     http_daemon.server_port, i)
             headers = {"Warcprox-Meta": json.dumps({
                 "warc-prefix":"test_dedup_buckets",
@@ -1015,7 +1014,7 @@ def test_dedup_bucket_concurrency(https_daemon, http_daemon, warcprox_, archivin
     # none should be deduped
     with futures.ThreadPoolExecutor(max_workers=20) as pool:
         for i in range(20):
-            url = 'http://localhost:%s/test_dedup_bucket_concurrency/%s' % (
+            url = 'http://localhost:{}/test_dedup_bucket_concurrency/{}'.format(
                     http_daemon.server_port, -i - 1)
             headers = {"Warcprox-Meta": json.dumps({
                 "warc-prefix":"test_dedup_buckets",
@@ -1030,7 +1029,7 @@ def test_dedup_bucket_concurrency(https_daemon, http_daemon, warcprox_, archivin
     # fire off 20 requests same as the initial requests, all should be deduped
     with futures.ThreadPoolExecutor(max_workers=20) as pool:
         for i in range(20):
-            url = 'http://localhost:%s/test_dedup_bucket_concurrency/%s' % (
+            url = 'http://localhost:{}/test_dedup_bucket_concurrency/{}'.format(
                     http_daemon.server_port, i)
             headers = {"Warcprox-Meta": json.dumps({
                 "warc-prefix":"test_dedup_buckets",
@@ -1663,7 +1662,7 @@ def test_svcreg_status(warcprox_):
                 'rates_15min', 'active_requests','start_time','urls_processed',
                 'warc_bytes_written', 'postfetch_chain',
                 'earliest_still_active_fetch_start',}
-        assert status['id'] == 'warcprox:%s:%s' % (
+        assert status['id'] == 'warcprox:{}:{}'.format(
                 socket.gethostname(), warcprox_.proxy.server_port)
         assert status['role'] == 'warcprox'
         assert status['version'] == warcprox.__version__
@@ -1709,7 +1708,7 @@ def test_load_plugin():
         'warcprox.stats.RunningStats',
         'warcprox.BaseStandardPostfetchProcessor',
         'warcprox.BaseBatchPostfetchProcessor',
-        '%s.%s' % (__name__, EarlyPlugin.__name__),])
+        '{}.{}'.format(__name__, EarlyPlugin.__name__),])
     controller = warcprox.controller.WarcproxController(options)
     assert isinstance(
             controller._postfetch_chain[-1],
@@ -1815,7 +1814,7 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     port = warcprox_.proxy.server_port
     default_crawl_log_path = os.path.join(
             warcprox_.options.crawl_log_dir,
-            'crawl-%s-%s.log' % (hostname, port))
+            'crawl-{}-{}.log'.format(hostname, port))
 
     try:
         os.unlink(default_crawl_log_path)
@@ -1841,7 +1840,7 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
 
     file = os.path.join(
             warcprox_.options.crawl_log_dir,
-            'test_crawl_log_1-%s-%s.log' % (hostname, port))
+            'test_crawl_log_1-{}-{}.log'.format(hostname, port))
     assert os.path.exists(file)
     assert os.stat(file).st_size > 0
     assert os.path.exists(default_crawl_log_path)
@@ -1900,7 +1899,7 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
 
     file = os.path.join(
             warcprox_.options.crawl_log_dir,
-            'test_crawl_log_2-%s-%s.log' % (hostname, port))
+            'test_crawl_log_2-{}-{}.log'.format(hostname, port))
     assert os.path.exists(file)
     assert os.stat(file).st_size > 0
 
@@ -1935,7 +1934,7 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
 
     file = os.path.join(
             warcprox_.options.crawl_log_dir,
-            'test_crawl_log_3-%s-%s.log' % (hostname, port))
+            'test_crawl_log_3-{}-{}.log'.format(hostname, port))
 
     assert os.path.exists(file)
     crawl_log_3 = open(file, 'rb').read()
@@ -1975,7 +1974,7 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
 
     file = os.path.join(
             warcprox_.options.crawl_log_dir,
-            'test_crawl_log_4-%s-%s.log' % (hostname, port))
+            'test_crawl_log_4-{}-{}.log'.format(hostname, port))
     assert os.path.exists(file)
     crawl_log_4 = open(file, 'rb').read()
 
@@ -2009,7 +2008,7 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
 
     file = os.path.join(
             warcprox_.options.crawl_log_dir,
-            'test_crawl_log_5-%s-%s.log' % (hostname, port))
+            'test_crawl_log_5-{}-{}.log'.format(hostname, port))
 
     assert os.path.exists(file)
     crawl_log_5 = open(file, 'rb').read()
@@ -2048,7 +2047,7 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
 
     file = os.path.join(
             warcprox_.options.crawl_log_dir,
-            'test_crawl_log_6-%s-%s.log' % (hostname, port))
+            'test_crawl_log_6-{}-{}.log'.format(hostname, port))
 
     assert os.path.exists(file)
     crawl_log_6 = open(file, 'rb').read()
@@ -2086,7 +2085,7 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
 
     file = os.path.join(
         warcprox_.options.crawl_log_dir,
-        'test_crawl_log_7-%s-%s.log' % (hostname, port))
+        'test_crawl_log_7-{}-{}.log'.format(hostname, port))
 
     assert os.path.exists(file)
     crawl_log_7 = open(file, 'rb').read()
@@ -2121,7 +2120,7 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
 
     file = os.path.join(
         warcprox_.options.crawl_log_dir,
-        'test_crawl_log_8-%s-%s.log' % (hostname, port))
+        'test_crawl_log_8-{}-{}.log'.format(hostname, port))
 
     assert os.path.exists(file)
     crawl_log_8 = open(file, 'rb').read()
@@ -2137,13 +2136,13 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     assert fields[7] == b'-'
     assert re.match(br'^\d{17}[+]\d{3}', fields[8])
     assert fields[9] == b'sha1:cdd841ea7c5e46fde3fba56b2e45e4df5aeec439'
-    assert fields[10].endswith('/¶-non-ascii'.encode('utf-8'))
+    assert fields[10].endswith('/¶-non-ascii'.encode())
     assert fields[11] == b'-'
     extra_info = json.loads(fields[12].decode('utf-8'))
 
 def test_crawl_log_canonicalization():
     assert crawl_log.canonicalize_url(None) is None
-    assert crawl_log.canonicalize_url("") is ''
+    assert crawl_log.canonicalize_url("") == ''
     assert crawl_log.canonicalize_url("-") == '-'
     assert crawl_log.canonicalize_url("http://чунджа.kz/b/¶-non-ascii") == "http://xn--80ahg0a3ax.kz/b/%C2%B6-non-ascii"
     assert crawl_log.canonicalize_url("Not a URL") == "Not a URL"

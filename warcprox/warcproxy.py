@@ -19,27 +19,13 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 USA.
 '''
-
-from __future__ import absolute_import
-
-try:
-    import http.server as http_server
-except ImportError:
-    import BaseHTTPServer as http_server
-try:
-    import socketserver
-except ImportError:
-    import SocketServer as socketserver
-try:
-    import queue
-except ImportError:
-    import Queue as queue
+import http.server as http_server
+import queue
 import logging
 import json
 import socket
 from hanzo import warctools
 import warcprox
-import datetime
 import urlcanon
 import os
 import tempfile
@@ -106,15 +92,15 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         if ":" in bucket0:
             b, raw_domain = bucket0.split(":", 1)
             domain = urlcanon.normalize_host(raw_domain).decode("ascii")
-            bucket0 = "%s:%s" % (b, domain)
-            limit_key = "%s/%s/%s" % (bucket0, bucket1, bucket2)
+            bucket0 = "{}:{}".format(b, domain)
+            limit_key = "{}/{}/{}".format(bucket0, bucket1, bucket2)
 
         if not bucket0 in buckets:
             return
 
         value = self.server.stats_db.value(bucket0, bucket1, bucket2)
         if value and limit_value and limit_value > 0 and value >= limit_value:
-            body = ("request rejected by warcprox: reached %s %s=%s\n" % (
+            body = ("request rejected by warcprox: reached {} {}={}\n".format(
                         "soft limit" if soft else "limit", limit_key,
                         limit_value)).encode("utf-8")
             if soft:
@@ -138,7 +124,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 self.wfile.write(body)
             self.connection.close()
             raise warcprox.RequestBlockedByRule(
-                    "%s %s %s %s -- reached %s %s=%s" % (
+                    "{} {} {} {} -- reached {} {}={}".format(
                         self.client_address[0], 430 if soft else 420,
                         self.command, self.url,
                         "soft limit" if soft else "limit",

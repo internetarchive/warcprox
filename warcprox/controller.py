@@ -21,9 +21,6 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301,
 USA.
 '''
-
-from __future__ import absolute_import
-
 import logging
 import threading
 import time
@@ -31,7 +28,6 @@ import sys
 import gc
 import datetime
 import warcprox
-import functools
 import doublethink
 import importlib
 import queue
@@ -123,7 +119,7 @@ class Factory:
         else:
             return None
 
-class WarcproxController(object):
+class WarcproxController:
     logger = logging.getLogger("warcprox.controller.WarcproxController")
 
     HEARTBEAT_INTERVAL = 20.0
@@ -320,7 +316,7 @@ class WarcproxController(object):
             status_info = self.status_info
         else:
             status_info = {
-                'id': 'warcprox:%s:%s' % (
+                'id': 'warcprox:{}:{}'.format(
                     socket.gethostname(), self.proxy.server_port),
                 'role': 'warcprox',
                 'version': warcprox.__version__,

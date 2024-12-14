@@ -18,9 +18,6 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 USA.
 '''
-
-from __future__ import absolute_import
-
 import logging
 from hanzo import warctools
 import fcntl
@@ -110,7 +107,7 @@ class WarcWriter:
         if self.open_suffix == '':
             try:
                 fcntl.lockf(self.f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except IOError as exc:
+            except OSError as exc:
                 self.logger.error(
                         'could not lock file %s (%s)', self.path, exc)
         return self.f

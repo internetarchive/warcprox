@@ -19,24 +19,10 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 USA.
 """
-
-from __future__ import absolute_import
-
-try:
-    import queue
-except ImportError:
-    import Queue as queue
-
 import logging
-import time
-import warcprox
-from concurrent import futures
 from datetime import datetime
-import threading
-try:
-    import queue
-except ImportError:
-    import Queue as queue
+import queue
+import warcprox
 
 class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
     logger = logging.getLogger("warcprox.writerthread.WarcWriterProcessor")
@@ -46,7 +32,7 @@ class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
     def __init__(self, options=warcprox.Options()):
         warcprox.BaseStandardPostfetchProcessor.__init__(self, options=options)
         self.writer_pool = warcprox.writer.WarcWriterPool(options)
-        self.method_filter = set(method.upper() for method in self.options.method_filter or [])
+        self.method_filter = {method.upper() for method in self.options.method_filter or []}
         self.blackout_period = options.blackout_period or 0
         self.close_prefix_reqs = queue.Queue()
 

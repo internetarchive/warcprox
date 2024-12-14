@@ -19,19 +19,8 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 USA.
 '''
-
-from __future__ import absolute_import
-
-try:
-    import http.server as http_server
-except ImportError:
-    import BaseHTTPServer as http_server
-
-try:
-    import socketserver
-except ImportError:
-    import SocketServer as socketserver
-
+import http.server as http_server
+import socketserver
 import logging
 import os
 from hanzo import warctools
@@ -132,7 +121,7 @@ class PlaybackProxyHandler(MitmProxyHandler):
                 pass
 
             if not record:
-                raise Exception('failed to read record at offset %s from %s' % (offset, warcfilename))
+                raise Exception('failed to read record at offset {} from {}'.format(offset, warcfilename))
 
             if errors:
                 raise Exception('warc errors at {}:{} -- {}'.format(location['f'], offset, errors))
@@ -159,7 +148,7 @@ class PlaybackProxyHandler(MitmProxyHandler):
                 pass
 
             if not record:
-                raise Exception('failed to read record at offset %s from %s' % (offset, warcfilename))
+                raise Exception('failed to read record at offset {} from {}'.format(offset, warcfilename))
 
             if errors:
                 raise Exception('warc errors at {}:{} -- {}'.format(warcfilename, offset, errors))
@@ -225,14 +214,14 @@ class PlaybackProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
 
     def server_activate(self):
         http_server.HTTPServer.server_activate(self)
-        self.logger.info('PlaybackProxy listening on {0}:{1}'.format(self.server_address[0], self.server_address[1]))
+        self.logger.info('PlaybackProxy listening on {}:{}'.format(self.server_address[0], self.server_address[1]))
 
     def server_close(self):
         self.logger.info('PlaybackProxy shutting down')
         http_server.HTTPServer.server_close(self)
 
 
-class PlaybackIndexDb(object):
+class PlaybackIndexDb:
     logger = logging.getLogger("warcprox.playback.PlaybackIndexDb")
 
     def __init__(self, file='./warcprox.sqlite', options=warcprox.Options()):

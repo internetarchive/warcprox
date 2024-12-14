@@ -1,4 +1,3 @@
-# vim: set fileencoding=utf-8:
 '''
 tests/conftest.py - command line options for warcprox tests
 
