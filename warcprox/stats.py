@@ -18,13 +18,8 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 USA.
 '''
-
-from __future__ import absolute_import
-
 from hanzo import warctools
 import collections
-import copy
-import datetime
 import doublethink
 import json
 import logging
@@ -92,7 +87,7 @@ def unravel_buckets(url, warcprox_meta):
                         domain = urlcanon.normalize_host(domain).decode('ascii')
                         if urlcanon.url_matches_domain(canon_url, domain):
                             buckets.append(
-                                    '%s:%s' % (bucket['bucket'], domain))
+                                    '{}:{}'.format(bucket['bucket'], domain))
             else:
                 buckets.append(bucket)
     else:
@@ -243,7 +238,7 @@ class RethinkStatsProcessor(StatsProcessor):
             if (not result['inserted'] and not result['replaced']
                     or sorted(result.values()) != [0,0,0,0,0,1]):
                 self.logger.error(
-                        'unexpected result %s updating stats %s' % (
+                        'unexpected result {} updating stats {}'.format(
                             result, batch_buckets[bucket]))
 
     def _bucket_batch_update_reql(self, bucket, new):

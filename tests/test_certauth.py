@@ -85,5 +85,5 @@ def test_create_root_subdir():
             cert.get_notAfter().decode('ascii'), '%Y%m%d%H%M%SZ')
 
     time.mktime(expected_not_before.utctimetuple())
-    assert abs((time.mktime(actual_not_before.utctimetuple()) - time.mktime(expected_not_before.utctimetuple()))) < 10
-    assert abs((time.mktime(actual_not_after.utctimetuple()) - time.mktime(expected_not_after.utctimetuple()))) < 10
+    assert abs(time.mktime(actual_not_before.utctimetuple()) - time.mktime(expected_not_before.utctimetuple())) < 10
+    assert abs(time.mktime(actual_not_after.utctimetuple()) - time.mktime(expected_not_after.utctimetuple())) < 10

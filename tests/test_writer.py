@@ -52,7 +52,7 @@ def lock_file(q, filename):
         fcntl.lockf(fi, fcntl.LOCK_EX | fcntl.LOCK_NB)
         fi.close()
         q.put('OBTAINED LOCK')
-    except IOError:
+    except OSError:
         q.put('FAILED TO OBTAIN LOCK')
 
 def test_warc_writer_locking(tmpdir):

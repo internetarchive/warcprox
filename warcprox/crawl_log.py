@@ -28,7 +28,7 @@ import socket
 import rfc3986
 from urllib3.exceptions import TimeoutError, HTTPError, NewConnectionError, MaxRetryError
 
-class CrawlLogger(object):
+class CrawlLogger:
     def __init__(self, dir_, options=warcprox.Options()):
         self.dir = dir_
         self.options = options
@@ -115,7 +115,7 @@ class CrawlLogger(object):
                 pass
         line = b' '.join(fields) + b'\n'
         prefix = recorded_url.warcprox_meta.get('warc-prefix', 'crawl')
-        filename = '%s-%s-%s.log' % (
+        filename = '{}-{}-{}.log'.format(
                 prefix, self.hostname, self.options.server_port)
         crawl_log_path = os.path.join(self.dir, filename)
 

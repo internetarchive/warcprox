@@ -23,18 +23,8 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 USA.
 '''
-
-from __future__ import absolute_import
-
-try:
-    import http.server as http_server
-except ImportError:
-    import BaseHTTPServer as http_server
-
-try:
-    import urllib.parse as urllib_parse
-except ImportError:
-    import urlparse as urllib_parse
+import http.server as http_server
+import urllib.parse as urllib_parse
 # In python2/3, urllib parse caches in memory URL parsing results to avoid
 # repeating the process for the same URL. The problem is that the default
 # in memory cache size is just 20.
@@ -42,22 +32,18 @@ except ImportError:
 # since we do a lot of URL parsing, it makes sense to increase cache size.
 urllib_parse.MAX_CACHE_SIZE = 2000
 
-try:
-    import http.client as http_client
-    # In python3 http.client.parse_headers() enforces http_client._MAXLINE
-    # as max length of an http header line, but we want to support very
-    # long warcprox-meta headers, so we tweak it here. Python2 doesn't seem
-    # to enforce any limit. Multiline headers could be an option but it
-    # turns out those are illegal as of RFC 7230. Plus, this is easier.
-    http_client._MAXLINE = 4194304  # 4 MiB
-except ImportError:
-    import httplib as http_client
+import http.client as http_client
+# In python3 http.client.parse_headers() enforces http_client._MAXLINE
+# as max length of an http header line, but we want to support very
+# long warcprox-meta headers, so we tweak it here. Python2 doesn't seem
+# to enforce any limit. Multiline headers could be an option but it
+# turns out those are illegal as of RFC 7230. Plus, this is easier.
+http_client._MAXLINE = 4194304  # 4 MiB
 # http_client has an arbitrary limit of 100 HTTP Headers which is too low and
 # it raises an HTTPException if the target URL has more.
 # https://github.com/python/cpython/blob/3.7/Lib/http/client.py#L113
 http_client._MAXHEADERS = 7000
 
-import json
 import socket
 import logging
 import ssl
@@ -68,10 +54,7 @@ import random
 import socks
 import tempfile
 import hashlib
-try:
-    import socketserver
-except ImportError:
-    import SocketServer as socketserver
+import socketserver
 import concurrent.futures
 import urlcanon
 import time
@@ -86,7 +69,7 @@ from threading import RLock
 
 from .certauth import CertificateAuthority
 
-class ProxyingRecorder(object):
+class ProxyingRecorder:
     """
     Wraps a socket._fileobject, recording the bytes as they are read,
     calculating the block digest, and sending them on to the proxy client.
@@ -219,7 +202,7 @@ def via_header_value(orig, request_version):
         via += ', '
     else:
         via = ''
-    via = via + '%s %s' % (request_version, 'warcprox')
+    via = via + '{} {}'.format(request_version, 'warcprox')
     return via
 
 
@@ -289,7 +272,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         self.hostname = urlcanon.normalize_host(host).decode('ascii')
 
     def _hostname_port_cache_key(self):
-        return '%s:%s' % (self.hostname, self.port)
+        return '{}:{}'.format(self.hostname, self.port)
 
     def _connect_to_remote_server(self):
         '''

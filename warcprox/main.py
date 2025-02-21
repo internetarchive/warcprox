@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# vim: set fileencoding=utf-8:
 '''
 warcprox/main.py - entrypoint for warcprox executable, parses command line
 arguments, initializes components, starts controller, handles signals
@@ -21,14 +20,6 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 USA.
 '''
-
-from __future__ import absolute_import
-
-try:
-    import queue
-except ImportError:
-    import Queue as queue
-
 import logging
 import logging.config
 import sys
@@ -83,10 +74,10 @@ def _build_arg_parser(prog='warcprox', show_hidden=False):
     arg_parser.add_argument('-b', '--address', dest='address',
             default='localhost', help='address to listen on')
     arg_parser.add_argument('-c', '--cacert', dest='cacert',
-            default='./{0}-warcprox-ca.pem'.format(socket.gethostname()),
+            default='./{}-warcprox-ca.pem'.format(socket.gethostname()),
             help='CA certificate file; if file does not exist, it will be created')
     arg_parser.add_argument('--certs-dir', dest='certs_dir',
-            default='./{0}-warcprox-ca'.format(socket.gethostname()),
+            default='./{}-warcprox-ca'.format(socket.gethostname()),
             help='where to store and load generated certificates')
     arg_parser.add_argument('-d', '--dir', dest='directory',
             default='./warcs', help='where to write warcs')
@@ -320,7 +311,7 @@ def main(argv=None):
                 '%(name)s.%(funcName)s(%(filename)s:%(lineno)d) %(message)s'))
 
     if args.logging_conf_file:
-        with open(args.logging_conf_file, 'r') as fd:
+        with open(args.logging_conf_file) as fd:
             conf = yaml.safe_load(fd)
             logging.config.dictConfig(conf)
 
