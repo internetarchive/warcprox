@@ -20,9 +20,6 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 USA.
 """
-
-from __future__ import absolute_import
-
 import warcprox
 import logging
 import sys
@@ -32,7 +29,7 @@ import queue
 import socket
 import os
 
-class FakeQueue(object):
+class FakeQueue:
     logger = logging.getLogger("FakeQueue")
     def __init__(self, maxsize=0): pass
     def join(self): pass
@@ -58,10 +55,10 @@ def parse_args():
     arg_parser.add_argument('-b', '--address', dest='address',
         default='localhost', help='address to listen on')
     arg_parser.add_argument('-c', '--cacert', dest='cacert',
-        default='./{0}-warcprox-ca.pem'.format(socket.gethostname()),
+        default='./{}-warcprox-ca.pem'.format(socket.gethostname()),
         help='CA certificate file; if file does not exist, it will be created')
     arg_parser.add_argument('--certs-dir', dest='certs_dir',
-        default='./{0}-warcprox-ca'.format(socket.gethostname()),
+        default='./{}-warcprox-ca'.format(socket.gethostname()),
         help='where to store and load generated certificates')
     arg_parser.add_argument('--onion-tor-socks-proxy', dest='onion_tor_socks_proxy',
         default=None, help='host:port of tor socks proxy, used only to connect to .onion sites')

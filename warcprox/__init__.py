@@ -27,10 +27,7 @@ import logging
 from argparse import Namespace as _Namespace
 from pkg_resources import get_distribution as _get_distribution
 import concurrent.futures
-try:
-    import queue
-except ImportError:
-    import Queue as queue
+import queue
 import json
 
 __version__ = _get_distribution('warcprox').version
@@ -44,7 +41,7 @@ def digest_str(hash_obj, base32=False):
 class Options(_Namespace):
     def __getattr__(self, name):
         try:
-            return super(Options, self).__getattr__(self, name)
+            return super().__getattr__(self, name)
         except AttributeError:
             return None
 
@@ -76,7 +73,7 @@ class RequestBlockedByRule(Exception):
     def __init__(self, msg):
         self.msg = msg
     def __str__(self):
-        return "%s: %s" % (self.__class__.__name__, self.msg)
+        return "{}: {}".format(self.__class__.__name__, self.msg)
 
 class BadRequest(Exception):
     '''
@@ -85,7 +82,7 @@ class BadRequest(Exception):
     def __init__(self, msg):
         self.msg = msg
     def __str__(self):
-        return "%s: %s" % (self.__class__.__name__, self.msg)
+        return "{}: {}".format(self.__class__.__name__, self.msg)
 
 class BasePostfetchProcessor(threading.Thread):
     logger = logging.getLogger("warcprox.BasePostfetchProcessor")
@@ -129,7 +126,7 @@ class BasePostfetchProcessor(threading.Thread):
         raise Exception('not implemented')
 
     def _run(self):
-        threading.current_thread().name = '%s(tid=%s)' % (
+        threading.current_thread().name = '{}(tid={})'.format(
                 threading.current_thread().name, gettid())
         self.logger.info('%s starting up', self)
         self._startup()
