@@ -324,8 +324,13 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
 
     def _transition_to_ssl(self):
         certfile = self.server.ca.get_wildcard_cert(self.hostname)
-        self.request = self.connection = ssl.wrap_socket(
-                self.connection, server_side=True, certfile=certfile)
+        context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+
+        # Load the certificate into the context
+        context.load_cert_chain(certfile)
+
+        self.request = self.connection = context.wrap_socket(
+                self.connection, server_side=True)
         # logging.info('self.hostname=%s certfile=%s', self.hostname, certfile)
 
     def do_CONNECT(self):
