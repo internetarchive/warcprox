@@ -50,7 +50,6 @@ import ssl
 import warcprox
 import threading
 import datetime
-import random
 import socks
 import tempfile
 import hashlib
@@ -68,6 +67,7 @@ from cachetools import TTLCache
 from threading import RLock
 
 from .certauth import CertificateAuthority
+from .ssl_util import create_chrome_ssl_context, create_firefox_ssl_context, create_urllib3_context
 
 class ProxyingRecorder:
     """
@@ -206,27 +206,6 @@ def via_header_value(orig, request_version):
     return via
 
 
-# Ref and detailed description about cipher selection at
-# https://github.com/urllib3/urllib3/blob/f070ec2e6f6c545f40d9196e5246df10c72e48e1/src/urllib3/util/ssl_.py#L170 
-SSL_CIPHERS = [
-    "ECDHE+AESGCM",
-    "ECDHE+CHACHA20",
-    "DH+AESGCM",
-    "ECDH+AES",
-    "DH+AES",
-    "RSA+AESGCM",
-    "RSA+AES",
-    "!aNULL",
-    "!eNULL",
-    "!MD5",
-    "!DSS",
-    "!AESCCM",
-    "DHE+AESGCM",
-    "DHE+CHACHA20",
-    "ECDH+AESGCM",
-    ]
-
-
 class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
     '''
     An http proxy implementation of BaseHTTPRequestHandler, that acts as a
@@ -321,12 +300,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
             # Wrap socket if SSL is required
             if self.is_connect:
                 try:
-                    context = ssl.create_default_context()
-                    context.check_hostname = False
-                    context.verify_mode = ssl.CERT_NONE
-                    # randomize TLS fingerprint to evade anti-web-bot systems
-                    random.shuffle(SSL_CIPHERS)
-                    context.set_ciphers(":".join(SSL_CIPHERS))
+                    context = self.server.remote_connection_pool.connection_pool_kw['ssl_context']
                     self._remote_server_conn.sock = context.wrap_socket(
                             self._remote_server_conn.sock,
                             server_hostname=self.hostname)
@@ -811,7 +785,17 @@ class SingleThreadedMitmProxy(http_server.HTTPServer):
         self.bad_hostnames_ports = TTLCache(maxsize=1024, ttl=60)
         self.bad_hostnames_ports_lock = RLock()
 
+        if options.ssl_context == 'chrome':
+            ssl_context = create_chrome_ssl_context()
+        elif options.ssl_context == 'firefox':
+            ssl_context = create_firefox_ssl_context()
+        else:
+            ssl_context = create_urllib3_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+
         self.remote_connection_pool = PoolManager(
+            ssl_context=ssl_context,
             num_pools=max((options.max_threads or 0) // 6, 400), maxsize=6)
 
         if options.onion_tor_socks_proxy:
