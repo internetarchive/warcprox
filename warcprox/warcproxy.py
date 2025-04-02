@@ -199,6 +199,10 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
     def _proxy_request(self):
         warcprox_meta = self._parse_warcprox_meta()
         remote_ip = self._remote_server_conn.sock.getpeername()[0]
+        if remote_ip == "127.0.0.1" or remote_ip == "::1":
+            raise warcprox.BadRequest(
+                "request rejected by warcprox: localhost access is not permitted"
+                )
         timestamp = doublethink.utcnow()
         extra_response_headers = {}
         if warcprox_meta and 'accept' in warcprox_meta and \
