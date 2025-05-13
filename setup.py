@@ -55,7 +55,7 @@ setuptools.setup(
         # preferred trough 'trough @ git+https://github.com/internetarchive/trough.git@jammy_focal'
         extras_require={'trough': 'trough'},
         setup_requires=['pytest-runner'],
-        tests_require=['mock', 'pytest', 'warcio'],
+        tests_require=['mock', 'pytest', 'warcio', 'pyOpenSSL'],
         entry_points={
             'console_scripts': [
                 'warcprox=warcprox.main:main',

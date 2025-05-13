@@ -25,12 +25,12 @@ import threading
 import time
 import logging
 from argparse import Namespace as _Namespace
-from pkg_resources import get_distribution as _get_distribution
+from importlib.metadata import version as _version
 import concurrent.futures
 import queue
 import json
 
-__version__ = _get_distribution('warcprox').version
+__version__ = _version('warcprox')
 
 def digest_str(hash_obj, base32=False):
     import base64
