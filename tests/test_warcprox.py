@@ -63,7 +63,6 @@ try:
 except ImportError:
     import Queue as queue
 
-import certauth.certauth
 
 import warcprox
 import warcprox.main

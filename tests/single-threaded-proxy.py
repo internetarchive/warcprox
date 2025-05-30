@@ -24,7 +24,7 @@ import warcprox
 import logging
 import sys
 import argparse
-import certauth
+import warcprox.certauth
 import queue
 import socket
 import os
@@ -83,7 +83,7 @@ def init_logging(verbose):
 
 def init_proxy(args):
     ca_name = 'Warcprox CA on {}'.format(socket.gethostname())[:64]
-    ca = certauth.certauth.CertificateAuthority(args.cacert, args.certs_dir,
+    ca = warcprox.certauth.CertificateAuthority(args.cacert, args.certs_dir,
         ca_name=ca_name)
     options = warcprox.Options(**vars(args))
     proxy = warcprox.warcproxy.SingleThreadedWarcProxy(ca,
