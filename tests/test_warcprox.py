@@ -369,6 +369,8 @@ class ThreadedHTTPServer(socketserver.ThreadingMixIn, http_server.HTTPServer):
     daemon_threads = True
     pass
 
+warcprox.warcproxy.WarcProxyHandler.allow_localhost = True
+
 @pytest.fixture(scope="module")
 def http_daemon(request):
     http_daemon = ThreadedHTTPServer(
