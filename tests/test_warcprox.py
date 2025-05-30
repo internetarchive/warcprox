@@ -1498,9 +1498,9 @@ def test_limit_large_resource(archiving_proxies, http_daemon, warcprox_):
 
     # this should be truncated
     url = 'http://localhost:%s/300k-content' % http_daemon.server_port
-    response = requests.get(
-        url, proxies=archiving_proxies, verify=False, timeout=10)
-    assert len(response.content) == 262144
+    with pytest.raises(requests.exceptions.ChunkedEncodingError, match=r"262144 bytes read"):
+        response = requests.get(
+            url, proxies=archiving_proxies, verify=False, timeout=10)
 
     # test that the connection is cleaned up properly after truncating a
     # response (no hang or timeout)
