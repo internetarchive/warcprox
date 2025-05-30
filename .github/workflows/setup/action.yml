@@ -1,0 +1,28 @@
+name: Test setup
+
+on:
+  workflow-call:
+    inputs:
+      python-version:
+        required: true
+        type: string
+
+runs:
+  using: composite
+  steps:
+    - name: Set up rethinkdb
+      run: |
+        wget -qO- https://download.rethinkdb.com/repository/raw/pubkey.gpg | sudo gpg --dearmor -o /usr/share/keyrings/rethinkdb-archive-keyrings.gpg
+        echo "deb [signed-by=/usr/share/keyrings/rethinkdb-archive-keyrings.gpg] https://download.rethinkdb.com/repository/ubuntu-$(lsb_release -cs) $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/rethinkdb.list
+        sudo apt-get update
+        sudo apt-get install rethinkdb
+        sudo cp /etc/rethinkdb/default.conf.sample /etc/rethinkdb/instances.d/instance1.conf
+        sudo /etc/init.d/rethinkdb restart
+      shell: bash
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+
+    - name: Install pip dependencies
+      run: uv sync --python ${{ inputs.python-version }}
+      shell: bash
