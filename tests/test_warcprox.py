@@ -366,6 +366,7 @@ def cert(request):
 # MitmProxyHandler._connect_to_remote_server(). (Unless we run warcprox
 # single-threaded for these tests, which maybe we should consider?)
 class ThreadedHTTPServer(socketserver.ThreadingMixIn, http_server.HTTPServer):
+    daemon_threads = True
     pass
 
 @pytest.fixture(scope="module")
