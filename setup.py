@@ -35,6 +35,9 @@ deps = [
     'PyYAML>=5.1',
     'cachetools',
     'rfc3986>=1.5.0',
+    # Needed because of rethinkdb 2.4.9;
+    # can be removed once doublethink upgrades to 2.4.10.post1
+    'setuptools>=75.8.0;python_version>="3.12"',
 ]
 try:
     import concurrent.futures

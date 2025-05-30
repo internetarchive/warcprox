@@ -2,7 +2,8 @@ version = 1
 revision = 2
 requires-python = ">=3.8"
 resolution-markers = [
-    "python_full_version >= '3.9'",
+    "python_full_version >= '3.12'",
+    "python_full_version >= '3.9' and python_full_version < '3.12'",
     "python_full_version < '3.9'",
 ]
 
@@ -26,7 +27,8 @@ name = "aiodns"
 version = "3.4.0"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version >= '3.9'",
+    "python_full_version >= '3.12'",
+    "python_full_version >= '3.9' and python_full_version < '3.12'",
 ]
 dependencies = [
     { name = "pycares", version = "4.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
@@ -441,7 +443,8 @@ name = "markupsafe"
 version = "3.0.2"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version >= '3.9'",
+    "python_full_version >= '3.12'",
+    "python_full_version >= '3.9' and python_full_version < '3.12'",
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/b2/97/5d42485e71dfc078108a86d6de8fa46db44a1a9295e89c5d6d4a06e23a62/markupsafe-3.0.2.tar.gz", hash = "sha256:ee55d3edf80167e48ea11a923c7386f4669df67d7994554387f84e7d8b0a2bf0", size = 20537, upload-time = "2024-10-18T15:21:54.129Z" }
 wheels = [
@@ -617,7 +620,8 @@ name = "multidict"
 version = "6.4.3"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version >= '3.9'",
+    "python_full_version >= '3.12'",
+    "python_full_version >= '3.9' and python_full_version < '3.12'",
 ]
 dependencies = [
     { name = "typing-extensions", marker = "python_full_version >= '3.9' and python_full_version < '3.11'" },
@@ -842,7 +846,8 @@ name = "propcache"
 version = "0.3.1"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version >= '3.9'",
+    "python_full_version >= '3.12'",
+    "python_full_version >= '3.9' and python_full_version < '3.12'",
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/07/c8/fdc6686a986feae3541ea23dcaa661bd93972d3940460646c6bb96e21c40/propcache-0.3.1.tar.gz", hash = "sha256:40d980c33765359098837527e18eddefc9a24cea5b45e078a7f3bb5b032c6ecf", size = 43651, upload-time = "2025-03-26T03:06:12.05Z" }
 wheels = [
@@ -1037,7 +1042,8 @@ name = "pycares"
 version = "4.8.0"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version >= '3.9'",
+    "python_full_version >= '3.12'",
+    "python_full_version >= '3.9' and python_full_version < '3.12'",
 ]
 dependencies = [
     { name = "cffi", marker = "python_full_version >= '3.9'" },
@@ -1232,6 +1238,15 @@ wheels = [
 ]
 
 [[package]]
+name = "setuptools"
+version = "80.9.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/18/5d/3bf57dcd21979b887f014ea83c24ae194cfcd12b9e0fda66b957c69d1fca/setuptools-80.9.0.tar.gz", hash = "sha256:f36b47402ecde768dbfafc46e8e4207b4360c654f1f3bb84475f0a28628fb19c", size = 1319958, upload-time = "2025-05-27T00:56:51.443Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a3/dc/17031897dae0efacfea57dfd3a82fdd2a2aeb58e0ff71b77b87e44edc772/setuptools-80.9.0-py3-none-any.whl", hash = "sha256:062d34222ad13e0cc312a4c02d73f059e86a4acbfbdea8f8f76b28c99f306922", size = 1201486, upload-time = "2025-05-27T00:56:49.664Z" },
+]
+
+[[package]]
 name = "six"
 version = "1.17.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1343,7 +1358,8 @@ name = "urllib3"
 version = "2.4.0"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version >= '3.9'",
+    "python_full_version >= '3.12'",
+    "python_full_version >= '3.9' and python_full_version < '3.12'",
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/8a/78/16493d9c386d8e60e442a35feac5e00f0913c0f4b7c217c11e8ec2ff53e0/urllib3-2.4.0.tar.gz", hash = "sha256:414bc6535b787febd7567804cc015fee39daab8ad86268f1310a9250697de466", size = 390672, upload-time = "2025-04-10T15:23:39.232Z" }
 wheels = [
@@ -1368,6 +1384,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "requests" },
     { name = "rfc3986" },
+    { name = "setuptools", marker = "python_full_version >= '3.12'" },
     { name = "urlcanon" },
     { name = "urllib3", version = "2.2.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.9'" },
     { name = "urllib3", version = "2.4.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
@@ -1389,6 +1406,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=5.1" },
     { name = "requests", specifier = ">=2.0.1" },
     { name = "rfc3986", specifier = ">=1.5.0" },
+    { name = "setuptools", marker = "python_full_version >= '3.12'", specifier = ">=75.8.0" },
     { name = "trough", marker = "extra == 'trough'" },
     { name = "urlcanon", specifier = ">=0.3.0" },
     { name = "urllib3", specifier = ">=1.23" },
@@ -1532,7 +1550,8 @@ name = "yarl"
 version = "1.20.0"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version >= '3.9'",
+    "python_full_version >= '3.12'",
+    "python_full_version >= '3.9' and python_full_version < '3.12'",
 ]
 dependencies = [
     { name = "idna", marker = "python_full_version >= '3.9'" },
