@@ -24,7 +24,7 @@ import sys
 import setuptools
 
 deps = [
-    'warctools>=4.10.0',
+    'warctools>=5.0.0',
     'urlcanon>=0.3.0',
     'doublethink==0.4.9',
     'urllib3>=1.23',
