@@ -50,6 +50,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
     '''
     # self.server is WarcProxy
     logger = logging.getLogger("warcprox.warcprox.WarcProxyHandler")
+    allow_localhost = False
 
     def _enforce_blocks(self, warcprox_meta):
         """
@@ -199,7 +200,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
     def _proxy_request(self):
         warcprox_meta = self._parse_warcprox_meta()
         remote_ip = self._remote_server_conn.sock.getpeername()[0]
-        if remote_ip == "127.0.0.1" or remote_ip == "::1":
+        if not self.allow_localhost and (remote_ip == "127.0.0.1" or remote_ip == "::1"):
             raise warcprox.BadRequest(
                 "request rejected by warcprox: localhost access is not permitted"
                 )
