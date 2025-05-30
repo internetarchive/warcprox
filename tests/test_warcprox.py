@@ -391,7 +391,10 @@ def https_daemon(request, cert):
     # http://www.piware.de/2011/01/creating-an-https-server-in-python/
     https_daemon = ThreadedHTTPServer(('localhost', 0),
             RequestHandlerClass=_TestHttpRequestHandler)
-    https_daemon.socket = ssl.wrap_socket(https_daemon.socket, certfile=cert, server_side=True)
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(cert)
+    context.check_hostname = False
+    https_daemon.socket = context.wrap_socket(https_daemon.socket, server_side=True)
     logging.info('starting https://{}:{}'.format(https_daemon.server_address[0], https_daemon.server_address[1]))
     https_daemon_thread = threading.Thread(name='HttpsDaemonThread',
             target=https_daemon.serve_forever)
