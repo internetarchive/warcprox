@@ -19,6 +19,7 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 USA.
 '''
+import datetime
 import http.server as http_server
 import queue
 import logging
@@ -30,7 +31,6 @@ import urlcanon
 import os
 import tempfile
 import hashlib
-import doublethink
 import re
 import zlib
 import base64
@@ -204,7 +204,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
             raise warcprox.BadRequest(
                 "request rejected by warcprox: localhost access is not permitted"
                 )
-        timestamp = doublethink.utcnow()
+        timestamp = datetime.datetime.now(datetime.UTC)
         extra_response_headers = {}
         if warcprox_meta and 'accept' in warcprox_meta and \
                 'capture-metadata' in warcprox_meta['accept']:
@@ -230,7 +230,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 client_ip=self.client_address[0],
                 content_type=content_type, method=self.command,
                 timestamp=timestamp, host=self.hostname,
-                duration=doublethink.utcnow()-timestamp,
+                duration=datetime.datetime.now(datetime.UTC)-timestamp,
                 referer=self.headers.get('referer'),
                 payload_digest=prox_rec_res.payload_digest,
                 truncated=prox_rec_res.truncated)
@@ -295,7 +295,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
 
             if ('Content-Length' in self.headers and 'Content-Type' in self.headers
                     and (warc_type or 'WARC-Type' in self.headers)):
-                timestamp = doublethink.utcnow()
+                timestamp = datetime.datetime.now(datetime.UTC)
 
                 request_data = tempfile.SpooledTemporaryFile(
                         max_size=self._tmp_file_max_memory_size)
@@ -328,7 +328,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                         client_ip=self.client_address[0],
                         method=self.command,
                         timestamp=timestamp,
-                        duration=doublethink.utcnow()-timestamp,
+                        duration=datetime.datetime.now(datetime.UTC)-timestamp,
                         payload_digest=payload_digest)
                 request_data.seek(0)
 
@@ -367,7 +367,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 status=code,
                 client_ip=self.client_address[0],
                 method=self.command,
-                timestamp=doublethink.utcnow(),
+                timestamp=datetime.datetime.now(datetime.UTC),
                 host=self.hostname,
                 duration=None,
                 referer=self.headers.get('referer'),
@@ -495,7 +495,7 @@ class SingleThreadedWarcProxy(warcprox.mitmproxy.SingleThreadedMitmProxy):
     def __init__(
             self, stats_db=None, status_callback=None,
             options=warcprox.Options()):
-        self.start_time = doublethink.utcnow()
+        self.start_time = datetime.datetime.now(datetime.UTC)
 
         warcprox.mitmproxy.SingleThreadedMitmProxy.__init__(
                 self, WarcProxyHandler, options)

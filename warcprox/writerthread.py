@@ -20,7 +20,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 USA.
 """
 import logging
-from datetime import datetime
+import datetime
 import queue
 import warcprox
 
@@ -102,9 +102,9 @@ class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
             dedup_date = recorded_url.dedup_info.get('date')
             if dedup_date and recorded_url.dedup_info.get('url') == recorded_url.url:
                 try:
-                    dt = datetime.strptime(dedup_date.decode('utf-8'),
+                    dt = datetime.datetime.strptime(dedup_date.decode('utf-8'),
                                            '%Y-%m-%dT%H:%M:%SZ')
-                    return (datetime.utcnow() - dt).total_seconds() <= self.blackout_period
+                    return (datetime.datetime.now(datetime.UTC) - dt).total_seconds() <= self.blackout_period
                 except ValueError:
                     return False
         return False
