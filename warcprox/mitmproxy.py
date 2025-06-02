@@ -224,7 +224,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
     socks_proxy_password = None
 
     def __init__(self, request, client_address, server):
-        threading.current_thread().name = 'MitmProxyHandler(tid={},started={},client={}:{})'.format(warcprox.gettid(), datetime.datetime.now(datetime.UTC).isoformat(), client_address[0], client_address[1])
+        threading.current_thread().name = 'MitmProxyHandler(tid={},started={},client={}:{})'.format(warcprox.gettid(), datetime.datetime.now(datetime.timezone.utc).isoformat(), client_address[0], client_address[1])
         self.is_connect = False
         self._headers_buffer = []
         request.settimeout(self._socket_timeout)
@@ -649,7 +649,7 @@ class PooledMixIn(socketserver.ThreadingMixIn):
         return result
 
     def process_request(self, request, client_address):
-        self.active_requests[request] = datetime.datetime.now(datetime.UTC)
+        self.active_requests[request] = datetime.datetime.now(datetime.timezone.utc)
         future = self.pool.submit(
                 self.process_request_thread, request, client_address)
         future.add_done_callback(

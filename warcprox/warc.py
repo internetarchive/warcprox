@@ -101,7 +101,7 @@ class WarcRecordBuilder:
         content_length=None):
 
         if warc_date is None:
-            warc_date = self.format_warc_date(datetime.datetime.now(datetime.UTC))
+            warc_date = self.format_warc_date(datetime.datetime.now(datetime.timezone.utc))
 
         record_id = warctools.WarcRecord.random_warc_uuid()
 
@@ -189,7 +189,7 @@ class WarcRecordBuilder:
         return output
 
     def build_warcinfo_record(self, filename):
-        warc_record_date = self.format_warc_date(datetime.datetime.now(datetime.UTC))
+        warc_record_date = self.format_warc_date(datetime.datetime.now(datetime.timezone.utc))
         record_id = warctools.WarcRecord.random_warc_uuid()
 
         headers = []

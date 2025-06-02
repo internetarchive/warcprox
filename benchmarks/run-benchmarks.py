@@ -214,7 +214,7 @@ if __name__ == '__main__':
         args.directory = os.path.join(tmpdir, 'warcs')
         # if args.rethinkdb_servers:
         #     args.rethinkdb_db = 'benchmarks_{:%Y%m%d%H%M%S}' % (
-        #             datetime.datetime.now(datetime.UTC))
+        #             datetime.datetime.now(datetime.timezone.utc))
 
         start_servers()
         logging.info(
