@@ -104,7 +104,7 @@ class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
                 try:
                     dt = datetime.datetime.strptime(dedup_date.decode('utf-8'),
                                            '%Y-%m-%dT%H:%M:%SZ')
-                    return (datetime.datetime.now(datetime.UTC) - dt).total_seconds() <= self.blackout_period
+                    return (datetime.datetime.now(datetime.timezone.utc) - dt).total_seconds() <= self.blackout_period
                 except ValueError:
                     return False
         return False

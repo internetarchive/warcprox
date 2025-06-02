@@ -204,7 +204,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
             raise warcprox.BadRequest(
                 "request rejected by warcprox: localhost access is not permitted"
                 )
-        timestamp = datetime.datetime.now(datetime.UTC)
+        timestamp = datetime.datetime.now(datetime.timezone.utc)
         extra_response_headers = {}
         if warcprox_meta and 'accept' in warcprox_meta and \
                 'capture-metadata' in warcprox_meta['accept']:
@@ -230,7 +230,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 client_ip=self.client_address[0],
                 content_type=content_type, method=self.command,
                 timestamp=timestamp, host=self.hostname,
-                duration=datetime.datetime.now(datetime.UTC)-timestamp,
+                duration=datetime.datetime.now(datetime.timezone.utc)-timestamp,
                 referer=self.headers.get('referer'),
                 payload_digest=prox_rec_res.payload_digest,
                 truncated=prox_rec_res.truncated)
@@ -295,7 +295,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
 
             if ('Content-Length' in self.headers and 'Content-Type' in self.headers
                     and (warc_type or 'WARC-Type' in self.headers)):
-                timestamp = datetime.datetime.now(datetime.UTC)
+                timestamp = datetime.datetime.now(datetime.timezone.utc)
 
                 request_data = tempfile.SpooledTemporaryFile(
                         max_size=self._tmp_file_max_memory_size)
@@ -328,7 +328,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                         client_ip=self.client_address[0],
                         method=self.command,
                         timestamp=timestamp,
-                        duration=datetime.datetime.now(datetime.UTC)-timestamp,
+                        duration=datetime.datetime.now(datetime.timezone.utc)-timestamp,
                         payload_digest=payload_digest)
                 request_data.seek(0)
 
@@ -367,7 +367,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
                 status=code,
                 client_ip=self.client_address[0],
                 method=self.command,
-                timestamp=datetime.datetime.now(datetime.UTC),
+                timestamp=datetime.datetime.now(datetime.timezone.utc),
                 host=self.hostname,
                 duration=None,
                 referer=self.headers.get('referer'),
@@ -495,7 +495,7 @@ class SingleThreadedWarcProxy(warcprox.mitmproxy.SingleThreadedMitmProxy):
     def __init__(
             self, stats_db=None, status_callback=None,
             options=warcprox.Options()):
-        self.start_time = datetime.datetime.now(datetime.UTC)
+        self.start_time = datetime.datetime.now(datetime.timezone.utc)
 
         warcprox.mitmproxy.SingleThreadedMitmProxy.__init__(
                 self, WarcProxyHandler, options)
