@@ -78,8 +78,8 @@ def test_create_root_subdir():
     buff = ca.get_root_PKCS12()
     assert len(buff) > 0
 
-    expected_not_before = datetime.datetime.utcnow() - datetime.timedelta(seconds=60 * 60)
-    expected_not_after = datetime.datetime.utcnow() + datetime.timedelta(seconds=60 * 60 * 24 * 3)
+    expected_not_before = datetime.datetime.now(datetime.UTC) - datetime.timedelta(seconds=60 * 60)
+    expected_not_after = datetime.datetime.now(datetime.UTC) + datetime.timedelta(seconds=60 * 60 * 24 * 3)
 
     cert = crypto.load_pkcs12(buff).get_certificate()
 
