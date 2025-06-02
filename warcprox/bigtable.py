@@ -86,7 +86,7 @@ class RethinkCaptures:
         finally:
             if not self._stop.is_set():
                 t = threading.Timer(0.5, self._insert_batch)
-                t.name = "RethinkCaptures-batch-insert-timer-%s" % datetime.datetime.now(datetime.UTC).isoformat()
+                t.name = "RethinkCaptures-batch-insert-timer-%s" % datetime.datetime.now(datetime.timezone.utc).isoformat()
                 t.start()
                 # ensure self._timer joinable (already started) whenever
                 # close() happens to be called

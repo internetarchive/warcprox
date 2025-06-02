@@ -22,7 +22,7 @@ USA.
 import os
 import fcntl
 from multiprocessing import Process, Queue
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone
 import pytest
 import re
 from warcprox.mitmproxy import ProxyingRecorder
@@ -67,7 +67,7 @@ def test_warc_writer_locking(tmpdir):
             url='http://example.com', content_type='text/plain', status=200,
             client_ip='127.0.0.2', request_data=b'abc',
             response_recorder=recorder, remote_ip='127.0.0.3',
-            timestamp=datetime.now(UTC), payload_digest=hashlib.sha1())
+            timestamp=datetime.now(timezone.utc), payload_digest=hashlib.sha1())
 
     dirname = os.path.dirname(str(tmpdir.mkdir('test-warc-writer')))
     wwriter = WarcWriter(Options(
@@ -115,7 +115,7 @@ def test_special_dont_write_prefix():
                 url='http://example.com/no', content_type='text/plain',
                 status=200, client_ip='127.0.0.2', request_data=b'abc',
                 response_recorder=recorder, remote_ip='127.0.0.3',
-                timestamp=datetime.now(UTC),
+                timestamp=datetime.now(timezone.utc),
                 payload_digest=recorder.block_digest))
             # to be written due to warcprox-meta prefix
             recorder = ProxyingRecorder(io.BytesIO(b'some payload'), None)
@@ -124,7 +124,7 @@ def test_special_dont_write_prefix():
                 url='http://example.com/yes', content_type='text/plain',
                 status=200, client_ip='127.0.0.2', request_data=b'abc',
                 response_recorder=recorder, remote_ip='127.0.0.3',
-                timestamp=datetime.now(UTC),
+                timestamp=datetime.now(timezone.utc),
                 payload_digest=recorder.block_digest,
                 warcprox_meta={'warc-prefix': 'normal-warc-prefix'}))
             recorded_url = wwt.outq.get(timeout=10)
@@ -149,7 +149,7 @@ def test_special_dont_write_prefix():
                 url='http://example.com/yes', content_type='text/plain',
                 status=200, client_ip='127.0.0.2', request_data=b'abc',
                 response_recorder=recorder, remote_ip='127.0.0.3',
-                timestamp=datetime.now(UTC),
+                timestamp=datetime.now(timezone.utc),
                 payload_digest=recorder.block_digest))
             # not to be written due to warcprox-meta prefix
             recorder = ProxyingRecorder(io.BytesIO(b'some payload'), None)
@@ -158,7 +158,7 @@ def test_special_dont_write_prefix():
                 url='http://example.com/no', content_type='text/plain',
                 status=200, client_ip='127.0.0.2', request_data=b'abc',
                 response_recorder=recorder, remote_ip='127.0.0.3',
-                timestamp=datetime.now(UTC),
+                timestamp=datetime.now(timezone.utc),
                 payload_digest=recorder.block_digest,
                 warcprox_meta={'warc-prefix': '-'}))
             recorded_url = wwt.outq.get(timeout=10)
@@ -172,13 +172,13 @@ def test_special_dont_write_prefix():
             # because its inside the blackout_period.
             recorder = ProxyingRecorder(io.BytesIO(b'test1'), None)
             recorder.read()
-            old = datetime.now(UTC) - timedelta(0, 3600)
+            old = datetime.now(timezone.utc) - timedelta(0, 3600)
             ru = RecordedUrl(
                 url='http://example.com/dup',
                 content_type='text/plain',
                 status=200, client_ip='127.0.0.2', request_data=b'abc',
                 response_recorder=recorder, remote_ip='127.0.0.3',
-                timestamp=datetime.now(UTC),
+                timestamp=datetime.now(timezone.utc),
                 payload_digest=recorder.block_digest)
             ru.dedup_info = dict(id=b'1', url=b'http://example.com/dup',
                                  date=old.strftime('%Y-%m-%dT%H:%M:%SZ').encode('utf-8'))
@@ -186,12 +186,12 @@ def test_special_dont_write_prefix():
             recorded_url = wwt.outq.get(timeout=10)
             recorder = ProxyingRecorder(io.BytesIO(b'test2'), None)
             recorder.read()
-            recent = datetime.now(UTC) - timedelta(0, 5)
+            recent = datetime.now(timezone.utc) - timedelta(0, 5)
             ru = RecordedUrl(
                 url='http://example.com/dup', content_type='text/plain',
                 status=200, client_ip='127.0.0.2', request_data=b'abc',
                 response_recorder=recorder, remote_ip='127.0.0.3',
-                timestamp=datetime.now(UTC),
+                timestamp=datetime.now(timezone.utc),
                 payload_digest=recorder.block_digest)
             ru.dedup_info = dict(id=b'2', url=b'http://example.com/dup',
                                  date=recent.strftime('%Y-%m-%dT%H:%M:%SZ').encode('utf-8'))
@@ -222,7 +222,7 @@ def test_do_not_archive():
                 url='http://example.com/yes', content_type='text/plain',
                 status=200, client_ip='127.0.0.2', request_data=b'abc',
                 response_recorder=recorder, remote_ip='127.0.0.3',
-                timestamp=datetime.now(UTC),
+                timestamp=datetime.now(timezone.utc),
                 payload_digest=recorder.block_digest))
             # not to be written -- do_not_archive set True
             recorder = ProxyingRecorder(io.BytesIO(b'some payload'), None)
@@ -231,7 +231,7 @@ def test_do_not_archive():
                 url='http://example.com/no', content_type='text/plain',
                 status=200, client_ip='127.0.0.2', request_data=b'abc',
                 response_recorder=recorder, remote_ip='127.0.0.3',
-                timestamp=datetime.now(UTC),
+                timestamp=datetime.now(timezone.utc),
                 payload_digest=recorder.block_digest,
                 warcprox_meta={'warc-prefix': '-'},
                 do_not_archive=True))
@@ -252,7 +252,7 @@ def test_warc_writer_filename(tmpdir):
             url='http://example.com', content_type='text/plain', status=200,
             client_ip='127.0.0.2', request_data=b'abc',
             response_recorder=recorder, remote_ip='127.0.0.3',
-            timestamp=datetime.now(UTC), payload_digest=hashlib.sha1())
+            timestamp=datetime.now(timezone.utc), payload_digest=hashlib.sha1())
 
     dirname = os.path.dirname(str(tmpdir.mkdir('test-warc-writer')))
     wwriter = WarcWriter(Options(directory=dirname, prefix='foo',
@@ -279,7 +279,7 @@ def test_close_for_prefix(tmpdir):
             url='http://example.com/1', content_type='text/plain',
             status=200, client_ip='127.0.0.2', request_data=b'abc',
             response_recorder=recorder, remote_ip='127.0.0.3',
-            timestamp=datetime.now(UTC),
+            timestamp=datetime.now(timezone.utc),
             payload_digest=recorder.block_digest))
         time.sleep(0.5)
         rurl = wwp.outq.get() # wait for it to finish
@@ -300,7 +300,7 @@ def test_close_for_prefix(tmpdir):
             url='http://example.com/2', content_type='text/plain',
             status=200, client_ip='127.0.0.2', request_data=b'abc',
             response_recorder=recorder, remote_ip='127.0.0.3',
-            timestamp=datetime.now(UTC),
+            timestamp=datetime.now(timezone.utc),
             payload_digest=recorder.block_digest,
             warcprox_meta={'warc-prefix': 'some-prefix'}))
         time.sleep(0.5)
@@ -324,7 +324,7 @@ def test_close_for_prefix(tmpdir):
             url='http://example.com/3', content_type='text/plain',
             status=200, client_ip='127.0.0.2', request_data=b'abc',
             response_recorder=recorder, remote_ip='127.0.0.3',
-            timestamp=datetime.now(UTC),
+            timestamp=datetime.now(timezone.utc),
             payload_digest=recorder.block_digest))
         time.sleep(0.5)
         rurl = wwp.outq.get() # wait for it to finish
@@ -347,7 +347,7 @@ def test_close_for_prefix(tmpdir):
             url='http://example.com/4', content_type='text/plain',
             status=200, client_ip='127.0.0.2', request_data=b'abc',
             response_recorder=recorder, remote_ip='127.0.0.3',
-            timestamp=datetime.now(UTC),
+            timestamp=datetime.now(timezone.utc),
             payload_digest=recorder.block_digest,
             warcprox_meta={'warc-prefix': 'some-prefix'}))
         time.sleep(0.5)
