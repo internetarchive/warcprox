@@ -1,11 +1,9 @@
 name: Test setup
 
-on:
-  workflow-call:
-    inputs:
-      python-version:
-        required: true
-        type: string
+inputs:
+  python-version:
+    required: true
+    type: string
 
 runs:
   using: composite
