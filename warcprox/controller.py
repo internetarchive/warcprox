@@ -390,7 +390,7 @@ class WarcproxController:
         """
         self.start()
 
-        last_mem_dbg = datetime.datetime.utcfromtimestamp(0)
+        # last_mem_dbg = datetime.datetime.fromtimestamp(0, datetime.timezone.utc)
         last_profile_dump = datetime.datetime.now(datetime.timezone.utc)
 
         try:
