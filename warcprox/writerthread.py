@@ -103,7 +103,7 @@ class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
             if dedup_date and recorded_url.dedup_info.get('url') == recorded_url.url:
                 try:
                     dt = datetime.datetime.strptime(dedup_date.decode('utf-8'),
-                                           '%Y-%m-%dT%H:%M:%SZ')
+                                           '%Y-%m-%dT%H:%M:%S%z')
                     return (datetime.datetime.now(datetime.timezone.utc) - dt).total_seconds() <= self.blackout_period
                 except ValueError:
                     return False
