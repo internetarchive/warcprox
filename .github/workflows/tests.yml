@@ -26,4 +26,4 @@ jobs:
 
       - name: Run tests
         run: |
-          uv run py.test --tb=native --verbose tests/test_certauth.py tests/test_dedup.py tests/test_warcprox.py tests/test_writer.py
+          uv run py.test --tb=native --verbose tests/test_certauth.py tests/test_dedup.py tests/test_filters.py tests/test_warcprox.py tests/test_writer.py
