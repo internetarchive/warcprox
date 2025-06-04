@@ -9,6 +9,7 @@ maintainers = [
   { name="Barbara Miller", email="barbara@archive.org" },
   { name="Alex Dempsey", email="avdempsey@archive.org" },
   { name="Gretchen Leigh Miller", email="gmiller@archive.org" },
+  { name="Misty De Méo", email="misty@archive.org" },
 ]
 description = "WARC writing MITM HTTP/S proxy"
 readme = "README.rst"
