@@ -39,6 +39,8 @@ import warcprox
 import warcprox.main
 import threading
 
+warcprox.warcproxy.WarcProxyHandler.allow_localhost = True
+
 # https://medium.com/@generativist/a-simple-streaming-http-server-in-aiohttp-4233dbc173c7
 async def do_get(request):
     n = int(request.match_info.get('n'))
