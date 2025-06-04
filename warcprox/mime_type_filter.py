@@ -2,7 +2,7 @@
 warcprox/mime_type_filter.py - postfetch processor for filtering RecordedUrls
 by MIME type specified in Content-Type header.
 
-Copyright (C) 2024 Internet Archive
+Copyright (C) 2024-2025 Internet Archive
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
