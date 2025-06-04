@@ -57,10 +57,10 @@ async def do_get(request):
             bs = rando + b'x' * 49 + b'\n'
         else:
             bs = b'x' * 79 + b'\n'
-        response.write(bs)
+        await response.write(bs)
         await response.drain()
     if n % 80 > 0:
-        response.write(b'x' * (n % 80 - 1) + b'\n')
+        await response.write(b'x' * (n % 80 - 1) + b'\n')
         await response.drain()
 
     return response
