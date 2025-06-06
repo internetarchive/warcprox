@@ -24,17 +24,20 @@ import sys
 import setuptools
 
 deps = [
-    'warctools>=4.10.0',
+    'warctools>=5.0.0',
     'urlcanon>=0.3.0',
     'doublethink==0.4.9',
     'urllib3>=1.23',
     'requests>=2.0.1',
     'PySocks>=1.6.8',
-    'cryptography>=39,<40',
+    'cryptography>=45,<46',
     'idna',
     'PyYAML>=5.1',
     'cachetools',
     'rfc3986>=1.5.0',
+    # Needed because of rethinkdb 2.4.9;
+    # can be removed once doublethink upgrades to 2.4.10.post1
+    'setuptools>=75.8.0;python_version>="3.12"',
 ]
 try:
     import concurrent.futures
@@ -43,7 +46,7 @@ except:
 
 setuptools.setup(
         name='warcprox',
-        version='2.6.3',
+        version='2.7.0',
         description='WARC writing MITM HTTP/S proxy',
         url='https://github.com/internetarchive/warcprox',
         author='Noah Levitt',
@@ -55,7 +58,7 @@ setuptools.setup(
         # preferred trough 'trough @ git+https://github.com/internetarchive/trough.git@jammy_focal'
         extras_require={'trough': 'trough'},
         setup_requires=['pytest-runner'],
-        tests_require=['mock', 'pytest', 'warcio'],
+        tests_require=['mock', 'pytest', 'warcio', 'pyOpenSSL'],
         entry_points={
             'console_scripts': [
                 'warcprox=warcprox.main:main',

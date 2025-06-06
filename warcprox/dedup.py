@@ -25,6 +25,7 @@ import sys
 from hanzo import warctools
 import warcprox
 import sqlite3
+import sys
 import doublethink
 import datetime
 import urllib3

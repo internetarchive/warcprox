@@ -63,7 +63,6 @@ try:
 except ImportError:
     import Queue as queue
 
-import certauth.certauth
 
 import warcprox
 import warcprox.main
@@ -367,7 +366,10 @@ def cert(request):
 # MitmProxyHandler._connect_to_remote_server(). (Unless we run warcprox
 # single-threaded for these tests, which maybe we should consider?)
 class ThreadedHTTPServer(socketserver.ThreadingMixIn, http_server.HTTPServer):
+    daemon_threads = True
     pass
+
+warcprox.warcproxy.WarcProxyHandler.allow_localhost = True
 
 @pytest.fixture(scope="module")
 def http_daemon(request):
@@ -392,7 +394,10 @@ def https_daemon(request, cert):
     # http://www.piware.de/2011/01/creating-an-https-server-in-python/
     https_daemon = ThreadedHTTPServer(('localhost', 0),
             RequestHandlerClass=_TestHttpRequestHandler)
-    https_daemon.socket = ssl.wrap_socket(https_daemon.socket, certfile=cert, server_side=True)
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(cert)
+    context.check_hostname = False
+    https_daemon.socket = context.wrap_socket(https_daemon.socket, server_side=True)
     logging.info('starting https://{}:{}'.format(https_daemon.server_address[0], https_daemon.server_address[1]))
     https_daemon_thread = threading.Thread(name='HttpsDaemonThread',
             target=https_daemon.serve_forever)
@@ -1499,9 +1504,9 @@ def test_limit_large_resource(archiving_proxies, http_daemon, warcprox_):
 
     # this should be truncated
     url = 'http://localhost:%s/300k-content' % http_daemon.server_port
-    response = requests.get(
-        url, proxies=archiving_proxies, verify=False, timeout=10)
-    assert len(response.content) == 262144
+    with pytest.raises(requests.exceptions.ChunkedEncodingError, match=r"262144 bytes read"):
+        response = requests.get(
+            url, proxies=archiving_proxies, verify=False, timeout=10)
 
     # test that the connection is cleaned up properly after truncating a
     # response (no hang or timeout)

@@ -27,10 +27,6 @@ def create_chrome_ssl_context():
     # Set TLS versions (Chrome supports 1.2 and 1.3)
     context.options |= ssl.OP_NO_SSLv2 | ssl.OP_NO_SSLv3 | ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1
 
-    # Chrome's preferred elliptic curves
-    if hasattr(context, 'set_ecdh_curve'):
-        context.set_ecdh_curve("prime256v1")
-
     return context
 
 

@@ -12,3 +12,6 @@ build
 dist
 .tox
 out.*
+
+# runtime files
+/warcprox.sqlite

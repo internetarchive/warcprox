@@ -39,6 +39,8 @@ import warcprox
 import warcprox.main
 import threading
 
+warcprox.warcproxy.WarcProxyHandler.allow_localhost = True
+
 # https://medium.com/@generativist/a-simple-streaming-http-server-in-aiohttp-4233dbc173c7
 async def do_get(request):
     n = int(request.match_info.get('n'))
@@ -55,11 +57,9 @@ async def do_get(request):
             bs = rando + b'x' * 49 + b'\n'
         else:
             bs = b'x' * 79 + b'\n'
-        response.write(bs)
-        await response.drain()
+        await response.write(bs)
     if n % 80 > 0:
-        response.write(b'x' * (n % 80 - 1) + b'\n')
-        await response.drain()
+        await response.write(b'x' * (n % 80 - 1) + b'\n')
 
     return response
 
@@ -124,7 +124,7 @@ async def fetch(session, url, proxy=None):
 async def benchmarking_client(
         base_url, requests=200, payload_size=100000, proxy=None):
     start = time.time()
-    connector = aiohttp.TCPConnector(verify_ssl=False)
+    connector = aiohttp.TCPConnector(ssl=False)
     n_urls = 0
     n_bytes = 0
     url = '%s/%s' % (base_url, payload_size)
