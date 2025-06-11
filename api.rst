@@ -219,6 +219,23 @@ Is equivalent to::
 
     {"blocks": [{"ssurt": "com,example,//http:/"}, {"domain": "malware.us", "substring": "wp-login.php?action=logout"}]}
 
+``mime-type-filters`` (list)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+``mime-type-filters`` is a list of dictionaries, each of which has two required
+fields, ``regex`` and ``type``. Each entry in the ``mime-type-filters`` list
+defines behavior to filter WARC-writing by the MIME type specified in the HTTP
+response's Content-Type header.
+
+There are two expected keys in a MIME type filter block:
+
+* ``regex``: A regex expression to be applied to the Content-Type header value.
+* ``type``: The type of filtering logic to apply. Two values are supported.
+
+Valid values for ``type`` key:
+
+* ``REJECT``: Any Content-Type header value matching the regex will be rejected.
+* ``LIMIT``: Only Content-Type values matching the regex will be allowed.
+
 ``stats`` (dictionary)
 ~~~~~~~~~~~~~~~~~~~~~~
 ``stats`` is a dictionary with only one field understood by warcprox,
