@@ -317,9 +317,6 @@ def main(argv=None):
             conf = yaml.safe_load(fd)
             logging.config.dictConfig(conf)
 
-    # see https://github.com/pyca/cryptography/issues/2911
-    cryptography.hazmat.backends.openssl.backend.activate_builtin_random()
-
     options = warcprox.Options(**vars(args))
     controller = warcprox.controller.WarcproxController(options)
 
