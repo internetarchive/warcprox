@@ -184,9 +184,6 @@ Benchmarking code uses asyncio/aiohttp and requires python 3.5 or later.
     return arg_parser
 
 if __name__ == '__main__':
-    # see https://github.com/pyca/cryptography/issues/2911
-    cryptography.hazmat.backends.openssl.backend.activate_builtin_random()
-
     # with tempfile.TemporaryDirectory() as tmpdir:
     tmpdir = tempfile.mkdtemp()
     if True:
