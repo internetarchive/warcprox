@@ -20,6 +20,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 USA.
 '''
 
+from http import HTTPStatus
 import pytest
 import threading
 import time
@@ -296,6 +297,12 @@ class _TestHttpRequestHandler(http_server.BaseHTTPRequestHandler):
             payload = b'test'
             headers = (b'HTTP/1.1 200 OK\r\n'
                     +  b'Content-Type:  \r\n'
+                    +  b'Content-Length: ' + str(len(payload)).encode('ascii') + b'\r\n'
+                    +  b'\r\n')
+        elif self.path == '/some-mimetype':
+            payload = b'aa'
+            headers = (b'HTTP/1.1 200 OK\r\n'
+                    +  b'Content-Type: some/mimetype\r\n'
                     +  b'Content-Length: ' + str(len(payload)).encode('ascii') + b'\r\n'
                     +  b'\r\n')
         else:
@@ -2468,6 +2475,27 @@ def test_incomplete_read(http_daemon, warcprox_, archiving_proxies):
 
     # wait for postfetch chain
     wait(lambda: warcprox_.proxy.running_stats.urls - urls_before == 1)
+
+
+def test_mimetype_filter_reject(
+        http_daemon, warcprox_, archiving_proxies, playback_proxies):
+    request_meta = {
+        "mime-type-filters": [{'type': 'REJECT', 'regex': 'some/mimetype'}],
+    }
+    headers = {"Warcprox-Meta": json.dumps(request_meta)}
+
+    url = 'http://localhost:%s/some-mimetype' % http_daemon.server_port
+    response = requests.get(
+        url, proxies=archiving_proxies, verify=False, timeout=10, headers=headers)
+    assert response.status_code == HTTPStatus.OK
+    assert 'warcprox-test-header' not in response.headers
+    assert response.content == b'aa'
+
+    # test playback - should fail since it wasn't archived
+    response = requests.get(url, proxies=playback_proxies, verify=False)
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    assert response.content == b'404 Not in Archive\n'
+
 
 if __name__ == '__main__':
     pytest.main()
