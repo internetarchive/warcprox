@@ -238,11 +238,11 @@ class ListenerPostfetchProcessor(BaseStandardPostfetchProcessor):
                         '%s raised exception', self.listener.stop, exc_info=True)
 
 def timestamp17():
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc)
     return '{:%Y%m%d%H%M%S}{:03d}'.format(now, now.microsecond//1000)
 
 def timestamp14():
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc)
     return '{:%Y%m%d%H%M%S}'.format(now)
 
 # monkey-patch log levels TRACE and NOTICE
