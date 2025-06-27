@@ -211,7 +211,7 @@ response's Content-Type header.
 
 There are two expected keys in a MIME type filter block:
 
-* ``regex``: A regex expression to be applied to the Content-Type header value.
+* ``regex``: A Python-compatible regex expression to be applied to the Content-Type header value.
 * ``type``: The type of filtering logic to apply. Two values are supported.
 
 Valid values for ``type`` key:
