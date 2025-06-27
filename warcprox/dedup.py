@@ -21,6 +21,7 @@ USA.
 import logging
 import os
 import json
+import sys
 from hanzo import warctools
 import warcprox
 import sqlite3
