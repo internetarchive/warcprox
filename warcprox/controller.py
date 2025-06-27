@@ -168,7 +168,7 @@ class WarcproxController:
     def postfetch_status(self):
         earliest = self.earliest_still_active_fetch_start()
         if earliest:
-            seconds_behind = (doublethink.utcnow() - earliest).total_seconds()
+            seconds_behind = (datetime.datetime.now(datetime.timezone.utc) - earliest).total_seconds()
         else:
             seconds_behind = 0
         result = {
@@ -393,8 +393,8 @@ class WarcproxController:
         """
         self.start()
 
-        last_mem_dbg = datetime.datetime.utcfromtimestamp(0)
-        last_profile_dump = datetime.datetime.utcnow()
+        # last_mem_dbg = datetime.datetime.fromtimestamp(0, datetime.timezone.utc)
+        last_profile_dump = datetime.datetime.now(datetime.timezone.utc)
 
         try:
             utc = datetime.timezone.utc
@@ -419,16 +419,16 @@ class WarcproxController:
                     self._service_heartbeat()
 
                 # if self.options.profile and (
-                #             datetime.datetime.utcnow() - last_mem_dbg
+                #             datetime.datetime.now(datetime.timezone.utc) - last_mem_dbg
                 #         ).total_seconds() > 60:
                 #     self.debug_mem()
-                #     last_mem_dbg = datetime.datetime.utcnow()
+                #     last_mem_dbg = datetime.datetime.now(datetime.timezone.utc)
 
                 if (self.options.profile and
-                        (datetime.datetime.utcnow() - last_profile_dump
+                        (datetime.datetime.now(datetime.timezone.utc) - last_profile_dump
                             ).total_seconds() > 60*10):
                     self._dump_profiling()
-                    last_profile_dump = datetime.datetime.utcnow()
+                    last_profile_dump = datetime.datetime.now(datetime.timezone.utc)
 
                 time.sleep(0.5)
 

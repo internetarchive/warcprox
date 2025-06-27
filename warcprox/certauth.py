@@ -1,7 +1,8 @@
 import os
 import random
 from argparse import ArgumentParser
-from datetime import datetime, timedelta
+import datetime
+from datetime import timedelta, timezone
 import threading
 
 from cryptography import x509
@@ -115,9 +116,9 @@ class CertificateAuthority:
         ).serial_number(
             random.randint(0, 2**64 - 1)
         ).not_valid_before(
-            datetime.utcnow()
+            datetime.datetime.now(timezone.utc)
         ).not_valid_after(
-            datetime.utcnow() + timedelta(seconds=self.cert_not_after)
+            datetime.datetime.now(timezone.utc) + timedelta(seconds=self.cert_not_after)
         ).add_extension(
             x509.BasicConstraints(ca=True, path_length=0), critical=True,
         ).add_extension(
@@ -168,9 +169,9 @@ class CertificateAuthority:
         ).serial_number(
             random.randint(0, 2**64 - 1)
         ).not_valid_before(
-            datetime.utcnow()
+            datetime.datetime.now(timezone.utc)
         ).not_valid_after(
-            datetime.utcnow() + timedelta(seconds=self.cert_not_after)
+            datetime.datetime.now(timezone.utc) + timedelta(seconds=self.cert_not_after)
         )
 
         if wildcard:
