@@ -59,7 +59,8 @@ def test_mime_type_filter_should_block():
 
     filter.inq.put(url)
     filter._get_process_put()
-    assert filter.outq.empty()
+    assert not filter.outq.empty()
+    assert filter.outq.get(block=True, timeout=0.5).do_not_archive
 
 
 def test_mime_type_filter_not_blocked():
@@ -91,6 +92,7 @@ def test_mime_type_filter_limit_allowed():
     filter.inq.put(url)
     filter._get_process_put()
     assert not filter.outq.empty()
+    assert not filter.outq.get(block=True, timeout=0.5).do_not_archive
 
 
 def test_mime_type_filter_limit_filtered_out():
@@ -106,4 +108,5 @@ def test_mime_type_filter_limit_filtered_out():
 
     filter.inq.put(url)
     filter._get_process_put()
-    assert filter.outq.empty()
+    assert not filter.outq.empty()
+    assert filter.outq.get(block=True, timeout=0.5).do_not_archive
