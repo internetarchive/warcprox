@@ -65,7 +65,9 @@ class MimeTypeFilter(BasePostfetchProcessor):
         recorded_url as it's added to the inbound queue.
         """
         recorded_url = self.inq.get(block=True, timeout=0.5)
-        if self.outq and not self._should_block(recorded_url):
+        if self._should_block(recorded_url):
+            recorded_url.do_not_archive = True
+        if self.outq:
             self.outq.put(recorded_url)
 
     # recorded_url is typed against RequestedUrl because FailedUrls can also be
