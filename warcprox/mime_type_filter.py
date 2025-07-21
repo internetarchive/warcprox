@@ -97,6 +97,13 @@ class MimeTypeFilter(BasePostfetchProcessor):
         for filter in mime_type_filters:
             filter_type = filter.get("type")
             filter_regex = filter.get("regex")
+
+            if recorded_url.content_type is None:
+                self.logger.warning(
+                    "content_type not known for %s; skipping match", recorded_url.url
+                )
+                continue
+
             try:
                 match = re.match(filter_regex, recorded_url.content_type)
             except re.error:
