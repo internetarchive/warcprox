@@ -90,7 +90,7 @@ class MimeTypeFilter(BasePostfetchProcessor):
     ) -> List[bool]:
         """
         Checks each MIME type filter against the recorded_url's content_type
-        and returns the a list of results.
+        and returns the list of results.
         """
         filtered_results: List[bool] = []
 
