@@ -36,7 +36,7 @@ class CrawlLogger:
 
     def start(self):
         if not os.path.exists(self.dir):
-            logging.info('creating directory %r', self.dir)
+            logging.debug('creating directory %r', self.dir)
             os.mkdir(self.dir)
 
     def notify(self, recorded_url, records):
@@ -65,7 +65,7 @@ class CrawlLogger:
         else:
             content_length = 0
             payload_digest = '-'
-        logging.info('warcprox_meta %s' , recorded_url.warcprox_meta)
+        logging.debug('warcprox_meta %s' , recorded_url.warcprox_meta)
 
         hop_path = recorded_url.warcprox_meta.get('metadata', {}).get('hop_path')
         #URLs are url encoded into plain ascii urls by HTTP spec. Since we're comparing against those, our urls sent over the json blob need to be encoded similarly
@@ -83,7 +83,7 @@ class CrawlLogger:
                 hop_via_url = "-"
             #Prefer referer header. Otherwise use provided via_url
             via_url = recorded_url.referer or hop_via_url if hop_path != "-" else "-"
-            logging.info('brozzled_url:%s recorded_url:%s' , brozzled_url, recorded_url.url)
+            logging.debug('brozzled_url:%s recorded_url:%s' , brozzled_url, recorded_url.url)
             if brozzled_url != recorded_url.url.decode('ascii') and "brozzled_url" in recorded_url.warcprox_meta.get('metadata', {}).keys():
                 #Requested page is not the Brozzled url, thus we are an embed or redirect.
                 via_url = brozzled_url
