@@ -118,7 +118,7 @@ class WarcWriterProcessor(warcprox.BaseStandardPostfetchProcessor):
         type_ = records[0].type.decode('utf-8') if records else '-'
         filename = records[0].warc_filename if records else '-'
         offset = records[0].offset if records else '-'
-        self.logger.info(
+        self.logger.debug(
                 '%s %s %s %s %s size=%s %s %s %s offset=%s',
                 recorded_url.client_ip, recorded_url.status,
                 recorded_url.method, recorded_url.url.decode('utf-8'),
