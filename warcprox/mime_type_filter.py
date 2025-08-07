@@ -94,15 +94,16 @@ class MimeTypeFilter(BasePostfetchProcessor):
         """
         filtered_results: List[bool] = []
 
-        if recorded_url.content_type is None:
-            self.logger.warning(
-                "content_type not known for %s; skipping match", recorded_url.url
-            )
-            return []
-
         for filter in mime_type_filters:
             filter_type = filter.get("type")
             filter_regex = filter.get("regex")
+
+            if recorded_url.content_type is None:
+                # A null content type will by definition never match
+                # the LIMIT regex, so always return True
+                if filter_type == MimeTypeFilterTypes.LIMIT.value:
+                    filtered_results.append(True)
+                continue
 
             try:
                 match = re.match(filter_regex, recorded_url.content_type)
