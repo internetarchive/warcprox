@@ -2032,7 +2032,7 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     assert fields[3].endswith(b'/space_in_content_type')
     assert fields[4] == b'-'
     assert fields[5] == b'-'
-    assert fields[6] == b'-'
+    assert fields[6] == b'unknown'
     assert fields[7] == b'-'
     assert re.match(br'^\d{17}[+]\d{3}', fields[8])
     assert fields[9] == b'sha1:a94a8fe5ccb19ba61c4c0873d391e987982fbbd3'
@@ -2073,7 +2073,7 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     assert fields[3].endswith(b'/connection-error')
     assert fields[4] == b'-'
     assert fields[5] == b'-'
-    assert fields[6] == b'-'
+    assert fields[6] == b'unknown'
     assert fields[7] == b'-'
     assert fields[8] == b'-'
     assert fields[9] == b'-'
@@ -2109,7 +2109,7 @@ def test_crawl_log(warcprox_, http_daemon, archiving_proxies):
     assert fields[3].endswith(b'/connection-error')
     assert fields[4] == b'-'
     assert fields[5] == b'-'
-    assert fields[6] == b'-'
+    assert fields[6] == b'unknown'
     assert fields[7] == b'-'
     assert fields[8] == b'-'
     assert fields[9] == b'-'

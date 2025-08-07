@@ -96,7 +96,7 @@ class CrawlLogger:
             recorded_url.url,
             hop_path,
             via_url,
-            recorded_url.mimetype if recorded_url.mimetype is not None and recorded_url.mimetype.strip() else '-',
+            recorded_url.mimetype if recorded_url.mimetype is not None and recorded_url.mimetype.strip() else 'unknown',
             '-',
             '{:%Y%m%d%H%M%S}{:03d}+{:03d}'.format(
                 recorded_url.timestamp,
