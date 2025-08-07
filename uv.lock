@@ -1543,6 +1543,7 @@ wheels = [
 
 [[package]]
 name = "warcprox"
+version = "2.9.0"
 source = { editable = "." }
 dependencies = [
     { name = "cachetools" },

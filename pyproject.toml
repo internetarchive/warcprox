@@ -1,5 +1,6 @@
 [project]
 name = "warcprox"
+version = "2.9.0"
 authors = [
   { name="Noah Levitt", email="nlevitt@archive.org" },
 ]
@@ -13,21 +14,56 @@ maintainers = [
 ]
 description = "WARC writing MITM HTTP/S proxy"
 readme = "README.rst"
+license = "GPL-2.0-or-later"
 requires-python = ">=3.8"
 classifiers = [
+    "Development Status :: 5 - Production/Stable",
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
     "Operating System :: OS Independent",
+    "Environment :: Console",
+    "Topic :: Internet :: Proxy Servers",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Archiving",
 ]
-dynamic = [ "version", "license", "scripts", "dependencies", "optional-dependencies" ]
+dependencies = [
+  "warctools>=5.0.0",
+  "urlcanon>=0.3.0",
+  "doublethink==0.4.9",
+  "urllib3>=1.23",
+  "requests>=2.0.1",
+  "PySocks>=1.6.8",
+  "cryptography>=45,<46",
+  "idna",
+  "PyYAML>=5.1",
+  "cachetools",
+  "rfc3986>=1.5.0",
+  # Needed because of rethinkdb 2.4.9;
+  # can be removed once doublethink upgrades to 2.4.10.post1
+  'setuptools>=75.8.0;python_version>="3.12"',
+]
+
+[project.optional-dependencies]
+trough = ["trough"]
 
 [project.urls]
 Homepage = "https://github.com/internetarchive/warcprox"
 Issues = "https://github.com/internetarchive/warcprox/issues"
 
+[project.scripts]
+warcprox = "warcprox.main:main"
+warcprox-ensure-rethinkdb-tables = "warcprox.main:ensure_rethinkdb_tables"
+
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["warcprox"]
 
 [dependency-groups]
 dev = [
