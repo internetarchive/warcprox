@@ -12,6 +12,7 @@ build
 dist
 .tox
 out.*
+.DS_Store
 
 # runtime files
 /warcprox.sqlite
