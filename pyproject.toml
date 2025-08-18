@@ -73,3 +73,11 @@ dev = [
   "pyopenssl",
   "warcio",
 ]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+  # urllib3 flags this as a warning, but we're doing this on purpose for testing
+  "ignore: Unverified HTTPS request is being made to host",
+  # pyopenssl warning; the deprecated calls we're making are in the tests, not app code
+  "ignore: CSR support in pyOpenSSL is deprecated.",
+]
