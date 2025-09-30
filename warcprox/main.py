@@ -261,7 +261,7 @@ def _build_arg_parser(prog='warcprox', show_hidden=False):
             help='Sentry DSN for error reporting and monitoring')
     arg_parser.add_argument(
         '--sentry-traces-sample-rate', dest='sentry_traces_sample_rate', default=1,
-        help=('Sample rate for Sentry traces. Default is 1, which means 1% of transactions are sampled. '
+        help=('Sample rate for Sentry traces. Default is 1, which means 1 percent of transactions are sampled. '
               'warcprox converts the value to a float ratio required by sentry-sdk.'))
     arg_parser.add_argument(
             '--deploy-environment', dest='deploy_environment', default='DEV',
