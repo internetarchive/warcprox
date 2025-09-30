@@ -258,6 +258,9 @@ def _build_arg_parser(prog='warcprox', show_hidden=False):
             '--sentry-dsn', dest='sentry_dsn', default=None,
             help='Sentry DSN for error reporting and monitoring')
     arg_parser.add_argument(
+        '--sentry-traces-sample-rate', dest='sentry_traces_sample_rate', default=1,
+        help='Sample rate for Sentry traces. Default is 1, which means 1% of transactions are sampled.')
+    arg_parser.add_argument(
             '--deploy-environment', dest='deploy_environment', default='DEV',
             help=('Is this warcprox running in PROD, QA, DEV, etc? '
                   'Used to distinguish events in Sentry.')
@@ -342,7 +345,7 @@ def main(argv=None):
         sentry_sdk.init(
             dsn=args.sentry_dsn,
             integrations=[sentry_logging],
-            traces_sample_rate=0.01,  # 1% of transactions for performance monitoring
+            traces_sample_rate=args.sentry_traces_sample_rate, # 1 is 1%, 100 is 100%
             environment=args.deploy_environment,
             release=warcprox.__version__
         )
