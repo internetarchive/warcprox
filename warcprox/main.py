@@ -35,6 +35,12 @@ import warcprox
 import doublethink
 import cryptography.hazmat.backends.openssl
 
+try:
+    import sentry_sdk
+    from sentry_sdk.integrations.logging import LoggingIntegration
+except ImportError:
+    sentry_sdk = None
+
 class BetterArgumentDefaultsHelpFormatter(
                 argparse.ArgumentDefaultsHelpFormatter,
                 argparse.RawDescriptionHelpFormatter):
@@ -249,6 +255,14 @@ def _build_arg_parser(prog='warcprox', show_hidden=False):
             '--logging-conf-file', dest='logging_conf_file', default=None,
             help=('reads logging configuration from a YAML file'))
     arg_parser.add_argument(
+            '--sentry-dsn', dest='sentry_dsn', default=None,
+            help='Sentry DSN for error reporting and monitoring')
+    arg_parser.add_argument(
+            '--deploy-environment', dest='deploy_environment', default='DEV',
+            help=('Is this warcprox running in PROD, QA, DEV, etc? '
+                  'Used to distinguish events in Sentry.')
+    )
+    arg_parser.add_argument(
             '--version', action='version',
             version="warcprox {}".format(warcprox.__version__))
 
@@ -316,6 +330,25 @@ def main(argv=None):
         with open(args.logging_conf_file) as fd:
             conf = yaml.safe_load(fd)
             logging.config.dictConfig(conf)
+
+    # Initialize Sentry if DSN is provided
+    if args.sentry_dsn and sentry_sdk:
+        # The majority of our Sentry reporting relies on the LoggingIntegration.
+        # Ensure handled exceptions that you want reported are logged ERROR or higher.
+        sentry_logging = LoggingIntegration(
+            level=logging.INFO,        # Capture info and above as breadcrumbs
+            event_level=logging.ERROR  # Send errors as events
+        )
+        sentry_sdk.init(
+            dsn=args.sentry_dsn,
+            integrations=[sentry_logging],
+            traces_sample_rate=0.01,  # 1% of transactions for performance monitoring
+            environment=args.deploy_environment,
+            release=warcprox.__version__
+        )
+        logging.info("Sentry initialized for error reporting")
+    elif args.sentry_dsn and not sentry_sdk:
+        logging.warning("Sentry DSN provided but sentry-sdk is not installed")
 
     options = warcprox.Options(**vars(args))
     controller = warcprox.controller.WarcproxController(options)
@@ -410,7 +443,7 @@ def ensure_rethinkdb_tables(argv=None):
         did_something = True
 
     if not did_something:
-        logging.error('nothing to do, no --rethinkdb-* options supplied')
+        logging.warning('nothing to do, no --rethinkdb-* options supplied')
 
 if __name__ == '__main__':
     main()
