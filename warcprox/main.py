@@ -346,7 +346,9 @@ def main(argv=None):
             event_level=logging.ERROR  # Send errors as events
         )
         # 1 is 1%, 100 is 100%
-        traces_sample_rate = args.sentry_traces_sample_rate / 100.0
+        traces_sample_rate = float(args.sentry_traces_sample_rate) / 100.0
+        if traces_sample_rate > 1.0 or traces_sample_rate < 0.0:
+            raise ValueError("sentry_traces_sample_rate must be between 1 and 100")
         sentry_sdk.init(
             dsn=args.sentry_dsn,
             integrations=[sentry_logging],
