@@ -20,6 +20,7 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 USA.
 '''
+import importlib.util
 import logging
 import logging.config
 import sys
@@ -30,16 +31,17 @@ import socket
 import traceback
 import signal
 import threading
+
 import yaml
 import warcprox
 import doublethink
 import cryptography.hazmat.backends.openssl
 
-try:
+sentry_sdk = None
+if importlib.util.find_spec("sentry_sdk"):
     import sentry_sdk
     from sentry_sdk.integrations.logging import LoggingIntegration
-except ImportError:
-    sentry_sdk = None
+
 
 class BetterArgumentDefaultsHelpFormatter(
                 argparse.ArgumentDefaultsHelpFormatter,
