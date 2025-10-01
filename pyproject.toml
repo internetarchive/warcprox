@@ -50,6 +50,7 @@ dependencies = [
 
 [project.optional-dependencies]
 trough = ["trough"]
+sentry = ["sentry-sdk"]
 
 [project.urls]
 Homepage = "https://github.com/internetarchive/warcprox"

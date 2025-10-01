@@ -20,6 +20,7 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 USA.
 '''
+import importlib.util
 import logging
 import logging.config
 import sys
@@ -30,10 +31,12 @@ import socket
 import traceback
 import signal
 import threading
+
 import yaml
 import warcprox
 import doublethink
 import cryptography.hazmat.backends.openssl
+
 
 class BetterArgumentDefaultsHelpFormatter(
                 argparse.ArgumentDefaultsHelpFormatter,
@@ -249,6 +252,28 @@ def _build_arg_parser(prog='warcprox', show_hidden=False):
             '--logging-conf-file', dest='logging_conf_file', default=None,
             help=('reads logging configuration from a YAML file'))
     arg_parser.add_argument(
+            '--sentry-dsn', dest='sentry_dsn', default=None,
+            help='Sentry DSN for error reporting and monitoring')
+    arg_parser.add_argument(
+        '--sentry-traces-sample-rate', dest='sentry_traces_sample_rate', default=1,
+        help=('Sample rate for Sentry traces. Default is 1, which means 1 percent of transactions are sampled. '
+              'warcprox converts the value to a float ratio required by sentry-sdk.'))
+    arg_parser.add_argument(
+        '--sentry-profiles-sample-rate', dest='sentry_profiles_sample_rate', default=1,
+        help=('Sample rate for Sentry profiling. Default is 1, which means 1 percent of transactions are sampled. '
+              'warcprox converts the value to a float ratio required by sentry-sdk.'))
+    arg_parser.add_argument(
+        '--sentry-send-default-pii', dest='sentry_send_default_pii', default=False,
+        action='store_true',
+        help=('Send default PII data to Sentry. '
+              'Default is False, which means no PII data is sent.')
+    )
+    arg_parser.add_argument(
+            '--deploy-environment', dest='deploy_environment', default='DEV',
+            help=('Is this warcprox running in PROD, QA, DEV, etc? '
+                  'Used to distinguish events in Sentry.')
+    )
+    arg_parser.add_argument(
             '--version', action='version',
             version="warcprox {}".format(warcprox.__version__))
 
@@ -316,6 +341,37 @@ def main(argv=None):
         with open(args.logging_conf_file) as fd:
             conf = yaml.safe_load(fd)
             logging.config.dictConfig(conf)
+
+    # Initialize Sentry if DSN is provided
+    sentry_sdk_is_available = importlib.util.find_spec("sentry_sdk") is not None
+    if args.sentry_dsn and sentry_sdk_is_available:
+        import sentry_sdk
+        from sentry_sdk.integrations.logging import LoggingIntegration
+        # The majority of our Sentry reporting relies on the LoggingIntegration.
+        # Ensure handled exceptions that you want reported are logged ERROR or higher.
+        sentry_logging = LoggingIntegration(
+            level=logging.INFO,        # Capture info and above as breadcrumbs
+            event_level=logging.ERROR  # Send errors as events
+        )
+        # 1 is 1%, 100 is 100%
+        traces_sample_rate = float(args.sentry_traces_sample_rate) / 100.0
+        if traces_sample_rate > 1.0 or traces_sample_rate < 0.0:
+            raise ValueError("sentry_traces_sample_rate must be between 1 and 100")
+        profiles_sample_rate = float(args.sentry_profiles_sample_rate) / 100.0
+        if profiles_sample_rate > 1.0 or profiles_sample_rate < 0.0:
+            raise ValueError("sentry_profiles_sample_rate must be between 1 and 100")
+        sentry_sdk.init(
+            dsn=args.sentry_dsn,
+            integrations=[sentry_logging],
+            traces_sample_rate=traces_sample_rate,
+            profiles_sample_rate=profiles_sample_rate,
+            send_default_pii=args.sentry_send_default_pii,
+            environment=args.deploy_environment,
+            release=f"warcprox@{warcprox.__version__}"
+        )
+        logging.info("Sentry initialized for error reporting")
+    elif args.sentry_dsn and not sentry_sdk_is_available:
+        logging.warning("Sentry DSN provided but sentry-sdk is not installed")
 
     options = warcprox.Options(**vars(args))
     controller = warcprox.controller.WarcproxController(options)
@@ -410,7 +466,7 @@ def ensure_rethinkdb_tables(argv=None):
         did_something = True
 
     if not did_something:
-        logging.error('nothing to do, no --rethinkdb-* options supplied')
+        logging.warning('nothing to do, no --rethinkdb-* options supplied')
 
 if __name__ == '__main__':
     main()

@@ -13,6 +13,8 @@ dist
 .tox
 out.*
 .DS_Store
+.idea
+.eggs/README.txt
 
 # runtime files
 /warcprox.sqlite
