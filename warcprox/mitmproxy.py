@@ -797,6 +797,7 @@ class SingleThreadedMitmProxy(http_server.HTTPServer):
             ssl_context = create_urllib3_context()
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
+        ssl_context.options |= 0x80  # OP_IGNORE_UNEXPECTED_EOF
 
         if options.legacy_renegotiation:
             ssl_context.options |= 0x4  # OP_LEGACY_SERVER_CONNECT
