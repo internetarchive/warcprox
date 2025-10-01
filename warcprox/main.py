@@ -37,11 +37,6 @@ import warcprox
 import doublethink
 import cryptography.hazmat.backends.openssl
 
-sentry_sdk = None
-if importlib.util.find_spec("sentry_sdk"):
-    import sentry_sdk
-    from sentry_sdk.integrations.logging import LoggingIntegration
-
 
 class BetterArgumentDefaultsHelpFormatter(
                 argparse.ArgumentDefaultsHelpFormatter,
@@ -264,6 +259,16 @@ def _build_arg_parser(prog='warcprox', show_hidden=False):
         help=('Sample rate for Sentry traces. Default is 1, which means 1 percent of transactions are sampled. '
               'warcprox converts the value to a float ratio required by sentry-sdk.'))
     arg_parser.add_argument(
+        '--sentry-profiles-sample-rate', dest='sentry_profiles_sample_rate', default=1,
+        help=('Sample rate for Sentry profiling. Default is 1, which means 1 percent of transactions are sampled. '
+              'warcprox converts the value to a float ratio required by sentry-sdk.'))
+    arg_parser.add_argument(
+        '--sentry-send-default-pii', dest='sentry_send_default_pii', default=False,
+        action='store_true',
+        help=('Send default PII data to Sentry. '
+              'Default is False, which means no PII data is sent.')
+    )
+    arg_parser.add_argument(
             '--deploy-environment', dest='deploy_environment', default='DEV',
             help=('Is this warcprox running in PROD, QA, DEV, etc? '
                   'Used to distinguish events in Sentry.')
@@ -338,7 +343,10 @@ def main(argv=None):
             logging.config.dictConfig(conf)
 
     # Initialize Sentry if DSN is provided
-    if args.sentry_dsn and sentry_sdk:
+    sentry_sdk_is_available = importlib.util.find_spec("sentry_sdk") is not None
+    if args.sentry_dsn and sentry_sdk_is_available:
+        import sentry_sdk
+        from sentry_sdk.integrations.logging import LoggingIntegration
         # The majority of our Sentry reporting relies on the LoggingIntegration.
         # Ensure handled exceptions that you want reported are logged ERROR or higher.
         sentry_logging = LoggingIntegration(
@@ -349,15 +357,20 @@ def main(argv=None):
         traces_sample_rate = float(args.sentry_traces_sample_rate) / 100.0
         if traces_sample_rate > 1.0 or traces_sample_rate < 0.0:
             raise ValueError("sentry_traces_sample_rate must be between 1 and 100")
+        profiles_sample_rate = float(args.sentry_profiles_sample_rate) / 100.0
+        if profiles_sample_rate > 1.0 or profiles_sample_rate < 0.0:
+            raise ValueError("sentry_profiles_sample_rate must be between 1 and 100")
         sentry_sdk.init(
             dsn=args.sentry_dsn,
             integrations=[sentry_logging],
             traces_sample_rate=traces_sample_rate,
+            profiles_sample_rate=profiles_sample_rate,
+            send_default_pii=args.sentry_send_default_pii,
             environment=args.deploy_environment,
-            release=warcprox.__version__
+            release=f"warcprox@{warcprox.__version__}"
         )
         logging.info("Sentry initialized for error reporting")
-    elif args.sentry_dsn and not sentry_sdk:
+    elif args.sentry_dsn and not sentry_sdk_is_available:
         logging.warning("Sentry DSN provided but sentry-sdk is not installed")
 
     options = warcprox.Options(**vars(args))
