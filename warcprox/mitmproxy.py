@@ -798,6 +798,9 @@ class SingleThreadedMitmProxy(http_server.HTTPServer):
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
 
+        if options.legacy_renegotiation:
+            ssl_context.options |= 0x4  # OP_LEGACY_SERVER_CONNECT
+
         self.remote_connection_pool = PoolManager(
             ssl_context=ssl_context,
             num_pools=max((options.max_threads or 0) // 6, 400), maxsize=6)
