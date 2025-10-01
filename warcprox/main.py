@@ -201,6 +201,10 @@ def _build_arg_parser(prog='warcprox', show_hidden=False):
             '--ssl-context', dest='ssl_context', default=None, help=(
                 'emulate chrome and firefox tls fingerprints'))
     arg_parser.add_argument(
+            '--unsafe-legacy-renegotiation', dest='legacy_renegotiation',
+            default=False, action='store_true', 
+            help='enable legacy unsafe SSL renegotiation')
+    arg_parser.add_argument(
             '--onion-tor-socks-proxy', dest='onion_tor_socks_proxy',
             default=None, help=(
                 'host:port of tor socks proxy, used only to connect to '
