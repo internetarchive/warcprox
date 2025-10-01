@@ -85,7 +85,7 @@ def _build_arg_parser(prog='warcprox', show_hidden=False):
     arg_parser.add_argument('-d', '--dir', dest='directory',
             default='./warcs', help='where to write warcs')
     arg_parser.add_argument('--subdir-prefix', dest='subdir_prefix', action='store_true',
-                            help='write warcs to --dir subdir equal to the current warc-prefix'),
+                            help='write warcs to --dir subdir equal to the current warc-prefix')
     arg_parser.add_argument('--warc-filename', dest='warc_filename',
             default='{prefix}-{timestamp17}-{serialno}-{randomtoken}',
             help='define custom WARC filename with variables {prefix}, {timestamp14}, {timestamp17}, {serialno}, {randomtoken}, {hostname}, {shorthostname}, {port}')
