@@ -328,6 +328,8 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         # Load the certificate into the context
         context.load_cert_chain(certfile)
 
+        context.options |= 0x80  # OP_IGNORE_UNEXPECTED_EOF
+
         self.request = self.connection = context.wrap_socket(
                 self.connection, server_side=True)
         # logging.info('self.hostname=%s certfile=%s', self.hostname, certfile)
