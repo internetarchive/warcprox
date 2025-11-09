@@ -90,7 +90,7 @@ class CrawlLogger:
                 hop_path = "B" if hop_path == "-" else "".join([hop_path,"B"])
 
         fields = [
-            '{:%Y-%m-%dT%H:%M:%S}.{:03d}Z'.format(now, now.microsecond//1000),
+            f'{now:%Y-%m-%dT%H:%M:%S}.{now.microsecond//1000:03d}Z',
             '% 5s' % status,
             '% 10s' % content_length,
             recorded_url.url,

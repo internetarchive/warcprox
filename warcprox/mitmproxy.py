@@ -183,7 +183,7 @@ class ProxyingRecordingHTTPResponse(http_client.HTTPResponse):
                     'connection', 'proxy-connection', 'keep-alive',
                     'proxy-authenticate', 'proxy-authorization', 'upgrade',
                     'strict-transport-security'):
-                status_and_headers += '{}: {}\r\n'.format(k, v)
+                status_and_headers += f'{k}: {v}\r\n'
         status_and_headers += 'Connection: close\r\n\r\n'
         self.proxy_client.sendall(status_and_headers.encode('latin1'))
 
@@ -224,7 +224,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
     socks_proxy_password = None
 
     def __init__(self, request, client_address, server):
-        threading.current_thread().name = 'MitmProxyHandler(tid={},started={},client={}:{})'.format(warcprox.gettid(), datetime.datetime.now(datetime.timezone.utc).isoformat(), client_address[0], client_address[1])
+        threading.current_thread().name = f'MitmProxyHandler(tid={warcprox.gettid()},started={datetime.datetime.now(datetime.timezone.utc).isoformat()},client={client_address[0]}:{client_address[1]})'
         self.is_connect = False
         self._headers_buffer = []
         request.settimeout(self._socket_timeout)
@@ -250,7 +250,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         self.hostname = urlcanon.normalize_host(host).decode('ascii')
 
     def _hostname_port_cache_key(self):
-        return '{}:{}'.format(self.hostname, self.port)
+        return f'{self.hostname}:{self.port}'
 
     def _connect_to_remote_server(self):
         '''
@@ -367,7 +367,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                 else:
                     self.send_error(500, str(e))
             except Exception as f:
-                self.logger.warning("failed to send error response ({}) to proxy client: {}".format(e, f))
+                self.logger.warning(f"failed to send error response ({e}) to proxy client: {f}")
             return
 
         # Reload!
@@ -378,7 +378,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         if int(self.port) == 443:
             netloc = self.hostname
         else:
-            netloc = '{}:{}'.format(self.hostname, self.port)
+            netloc = f'{self.hostname}:{self.port}'
 
         result = urllib_parse.urlunparse(
             urllib_parse.ParseResult(
@@ -514,7 +514,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
         # Add headers to the request
         # XXX in at least python3.3 str(self.headers) uses \n not \r\n :(
         req_str += '\r\n'.join(
-            '{}: {}'.format(k,v) for (k,v) in self.headers.items())
+            f'{k}: {v}' for (k,v) in self.headers.items())
 
         req = req_str.encode('latin1') + b'\r\n\r\n'
 

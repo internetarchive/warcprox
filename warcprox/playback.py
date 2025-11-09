@@ -44,7 +44,7 @@ class PlaybackProxyHandler(MitmProxyHandler):
     # @Override
     def _proxy_request(self):
         date, location = self.server.playback_index_db.lookup_latest(self.url)
-        self.logger.debug('lookup_latest returned {}:{}'.format(date, location))
+        self.logger.debug(f'lookup_latest returned {date}:{location}')
 
         status = None
         if location is not None:
@@ -52,8 +52,8 @@ class PlaybackProxyHandler(MitmProxyHandler):
                 status, sz = self._send_response_from_warc(location['f'], location['o'])
             except:
                 status = 500
-                self.logger.error('PlaybackProxyHandler problem playing back {}'.format(self.url), exc_info=1)
-                payload = '500 Warcprox Error\n\n{}\n'.format(traceback.format_exc()).encode('utf-8')
+                self.logger.error(f'PlaybackProxyHandler problem playing back {self.url}', exc_info=1)
+                payload = f'500 Warcprox Error\n\n{traceback.format_exc()}\n'.encode('utf-8')
                 headers = (b'HTTP/1.1 500 Internal Server Error\r\n'
                         +  b'Content-Type: text/plain;charset=utf-8\r\n'
                         +  b'Content-Length: ' + str(len(payload)).encode('utf-8') + b'\r\n'
@@ -78,16 +78,16 @@ class PlaybackProxyHandler(MitmProxyHandler):
 
 
     def _open_warc_at_offset(self, warcfilename, offset):
-        self.logger.debug('opening {} at offset {}'.format(warcfilename, offset))
+        self.logger.debug(f'opening {warcfilename} at offset {offset}')
 
         warcpath = None
         for p in (os.path.sep.join([self.server.warcs_dir, warcfilename]),
-                os.path.sep.join([self.server.warcs_dir, '{}.open'.format(warcfilename)])):
+                os.path.sep.join([self.server.warcs_dir, f'{warcfilename}.open'])):
             if os.path.exists(p):
                 warcpath = p
 
         if warcpath is None:
-            raise Exception('{} not found'.format(warcfilename))
+            raise Exception(f'{warcfilename} not found')
 
         return warctools.warc.WarcRecord.open_archive(filename=warcpath, mode='rb', offset=offset)
 
@@ -113,7 +113,7 @@ class PlaybackProxyHandler(MitmProxyHandler):
             self, headers, refers_to_target_uri, refers_to_date, payload_digest):
         location = self.server.playback_index_db.lookup_exact(
                 refers_to_target_uri, refers_to_date, payload_digest)
-        self.logger.debug('loading http payload from {}'.format(location))
+        self.logger.debug(f'loading http payload from {location}')
 
         fh = self._open_warc_at_offset(location['f'], location['o'])
         try:
@@ -121,13 +121,13 @@ class PlaybackProxyHandler(MitmProxyHandler):
                 pass
 
             if not record:
-                raise Exception('failed to read record at offset {} from {}'.format(offset, warcfilename))
+                raise Exception(f'failed to read record at offset {offset} from {warcfilename}')
 
             if errors:
                 raise Exception('warc errors at {}:{} -- {}'.format(location['f'], offset, errors))
 
             if record.type != warctools.WarcRecord.RESPONSE:
-                raise Exception('invalid attempt to retrieve http payload of "{}" record'.format(warc_type))
+                raise Exception(f'invalid attempt to retrieve http payload of "{warc_type}" record')
 
             # find end of headers
             while True:
@@ -148,10 +148,10 @@ class PlaybackProxyHandler(MitmProxyHandler):
                 pass
 
             if not record:
-                raise Exception('failed to read record at offset {} from {}'.format(offset, warcfilename))
+                raise Exception(f'failed to read record at offset {offset} from {warcfilename}')
 
             if errors:
-                raise Exception('warc errors at {}:{} -- {}'.format(warcfilename, offset, errors))
+                raise Exception(f'warc errors at {warcfilename}:{offset} -- {errors}')
 
             if record.type == warctools.WarcRecord.RESPONSE:
                 headers_buf = bytearray()
@@ -168,7 +168,7 @@ class PlaybackProxyHandler(MitmProxyHandler):
                 # payload from the referenced record
                 warc_profile = record.get_header(warctools.WarcRecord.PROFILE)
                 if warc_profile != warctools.WarcRecord.PROFILE_IDENTICAL_PAYLOAD_DIGEST:
-                    raise Exception('unknown revisit record profile {}'.format(warc_profile))
+                    raise Exception(f'unknown revisit record profile {warc_profile}')
 
                 refers_to_target_uri = record.get_header(
                         warctools.WarcRecord.REFERS_TO_TARGET_URI).decode(
@@ -214,7 +214,7 @@ class PlaybackProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
 
     def server_activate(self):
         http_server.HTTPServer.server_activate(self)
-        self.logger.info('PlaybackProxy listening on {}:{}'.format(self.server_address[0], self.server_address[1]))
+        self.logger.info(f'PlaybackProxy listening on {self.server_address[0]}:{self.server_address[1]}')
 
     def server_close(self):
         self.logger.info('PlaybackProxy shutting down')
@@ -291,7 +291,7 @@ class PlaybackIndexDb:
             conn.commit()
             conn.close()
 
-        self.logger.debug('playback index saved: {}:{}'.format(url, json_value))
+        self.logger.debug(f'playback index saved: {url}:{json_value}')
 
     def lookup_latest(self, url):
         conn = sqlite3.connect(self.file)
