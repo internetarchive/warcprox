@@ -214,13 +214,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         req, prox_rec_res = warcprox.mitmproxy.MitmProxyHandler._proxy_request(
                 self, extra_response_headers=extra_response_headers)
 
-        content_type = None
-        try:
-            content_type = prox_rec_res.headers.get('content-type')
-        except AttributeError: # py2
-            raw = prox_rec_res.msg.getrawheader('content-type')
-            if raw:
-                content_type = raw.strip()
+        content_type = prox_rec_res.headers.get('content-type')
 
         recorded_url = RecordedUrl(
                 url=self.url, request_data=req,
