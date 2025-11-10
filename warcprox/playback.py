@@ -52,7 +52,7 @@ class PlaybackProxyHandler(MitmProxyHandler):
                 status, sz = self._send_response_from_warc(location['f'], location['o'])
             except:
                 status = 500
-                self.logger.error(f'PlaybackProxyHandler problem playing back {self.url}', exc_info=1)
+                self.logger.error('PlaybackProxyHandler problem playing back %s', self.url, exc_info=1)
                 payload = f'500 Warcprox Error\n\n{traceback.format_exc()}\n'.encode('utf-8')
                 headers = (b'HTTP/1.1 500 Internal Server Error\r\n'
                         +  b'Content-Type: text/plain;charset=utf-8\r\n'
