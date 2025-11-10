@@ -44,7 +44,7 @@ class PlaybackProxyHandler(MitmProxyHandler):
     # @Override
     def _proxy_request(self):
         date, location = self.server.playback_index_db.lookup_latest(self.url)
-        self.logger.debug(f'lookup_latest returned {date}:{location}')
+        self.logger.debug('lookup_latest returned %s:%s', date, location)
 
         status = None
         if location is not None:
@@ -78,7 +78,7 @@ class PlaybackProxyHandler(MitmProxyHandler):
 
 
     def _open_warc_at_offset(self, warcfilename, offset):
-        self.logger.debug(f'opening {warcfilename} at offset {offset}')
+        self.logger.debug('opening %s at offset %s', warcfilename, offset)
 
         warcpath = None
         for p in (os.path.sep.join([self.server.warcs_dir, warcfilename]),
@@ -113,7 +113,7 @@ class PlaybackProxyHandler(MitmProxyHandler):
             self, headers, refers_to_target_uri, refers_to_date, payload_digest):
         location = self.server.playback_index_db.lookup_exact(
                 refers_to_target_uri, refers_to_date, payload_digest)
-        self.logger.debug(f'loading http payload from {location}')
+        self.logger.debug('loading http payload from %s', location)
 
         fh = self._open_warc_at_offset(location['f'], location['o'])
         try:
@@ -214,7 +214,7 @@ class PlaybackProxy(socketserver.ThreadingMixIn, http_server.HTTPServer):
 
     def server_activate(self):
         http_server.HTTPServer.server_activate(self)
-        self.logger.info(f'PlaybackProxy listening on {self.server_address[0]}:{self.server_address[1]}')
+        self.logger.info('PlaybackProxy listening on %s:%s', self.server_address[0], self.server_address[1])
 
     def server_close(self):
         self.logger.info('PlaybackProxy shutting down')
@@ -291,7 +291,7 @@ class PlaybackIndexDb:
             conn.commit()
             conn.close()
 
-        self.logger.debug(f'playback index saved: {url}:{json_value}')
+        self.logger.debug('playback index saved: %s:%s', url, json_value)
 
     def lookup_latest(self, url):
         conn = sqlite3.connect(self.file)
