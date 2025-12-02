@@ -73,7 +73,7 @@ class RequestBlockedByRule(Exception):
     def __init__(self, msg):
         self.msg = msg
     def __str__(self):
-        return "{}: {}".format(self.__class__.__name__, self.msg)
+        return f"{self.__class__.__name__}: {self.msg}"
 
 class BadRequest(Exception):
     '''
@@ -82,7 +82,7 @@ class BadRequest(Exception):
     def __init__(self, msg):
         self.msg = msg
     def __str__(self):
-        return "{}: {}".format(self.__class__.__name__, self.msg)
+        return f"{self.__class__.__name__}: {self.msg}"
 
 class BasePostfetchProcessor(threading.Thread):
     logger = logging.getLogger("warcprox.BasePostfetchProcessor")
@@ -239,11 +239,11 @@ class ListenerPostfetchProcessor(BaseStandardPostfetchProcessor):
 
 def timestamp17():
     now = datetime.datetime.now(datetime.timezone.utc)
-    return '{:%Y%m%d%H%M%S}{:03d}'.format(now, now.microsecond//1000)
+    return f'{now:%Y%m%d%H%M%S}{now.microsecond//1000:03d}'
 
 def timestamp14():
     now = datetime.datetime.now(datetime.timezone.utc)
-    return '{:%Y%m%d%H%M%S}'.format(now)
+    return f'{now:%Y%m%d%H%M%S}'
 
 # monkey-patch log levels TRACE and NOTICE
 logging.TRACE = (logging.NOTSET + logging.DEBUG) // 2

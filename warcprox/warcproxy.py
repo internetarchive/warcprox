@@ -93,8 +93,8 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
         if ":" in bucket0:
             b, raw_domain = bucket0.split(":", 1)
             domain = urlcanon.normalize_host(raw_domain).decode("ascii")
-            bucket0 = "{}:{}".format(b, domain)
-            limit_key = "{}/{}/{}".format(bucket0, bucket1, bucket2)
+            bucket0 = f"{b}:{domain}"
+            limit_key = f"{bucket0}/{bucket1}/{bucket2}"
 
         if not bucket0 in buckets:
             return

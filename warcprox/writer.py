@@ -76,7 +76,7 @@ class WarcWriter:
         fname = self.filename_template.format(
                 prefix=self.prefix, timestamp14=warcprox.timestamp14(),
                 timestamp17=warcprox.timestamp17(),
-                serialno='{:05d}'.format(serial),
+                serialno=f'{serial:05d}',
                 randomtoken=self.randomtoken, hostname=hostname,
                 shorthostname=shorthostname, port=self.port)
         if self.gzip:

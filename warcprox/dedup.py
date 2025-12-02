@@ -196,7 +196,7 @@ class RethinkDedupDb(DedupDb, DedupableMixin):
 
     def save(self, digest_key, response_record, bucket=""):
         k = digest_key.decode("utf-8") if isinstance(digest_key, bytes) else digest_key
-        k = "{}|{}".format(k, bucket)
+        k = f"{k}|{bucket}"
         record_id = response_record.get_header(warctools.WarcRecord.ID).decode('latin1')
         url = response_record.get_header(warctools.WarcRecord.URL).decode('latin1')
         date = response_record.get_header(warctools.WarcRecord.DATE).decode('latin1')
@@ -209,7 +209,7 @@ class RethinkDedupDb(DedupDb, DedupableMixin):
 
     def lookup(self, digest_key, bucket="", url=None):
         k = digest_key.decode("utf-8") if isinstance(digest_key, bytes) else digest_key
-        k = "{}|{}".format(k, bucket)
+        k = f"{k}|{bucket}"
         result = self.rr.table(self.table).get(k).run()
         if result:
             for x in result:

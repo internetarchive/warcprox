@@ -201,7 +201,7 @@ class WarcRecordBuilder:
         warcinfo_fields = []
         warcinfo_fields.append(b'software: warcprox ' + warcprox.__version__.encode('latin1'))
         hostname = socket.gethostname()
-        warcinfo_fields.append('hostname: {}'.format(hostname).encode('latin1'))
+        warcinfo_fields.append(f'hostname: {hostname}'.encode('latin1'))
         warcinfo_fields.append(('ip: %s' % self._local_address()).encode('latin1'))
         warcinfo_fields.append(b'format: WARC File Format 1.0')
         # warcinfo_fields.append('robots: ignore')

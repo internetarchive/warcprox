@@ -77,10 +77,10 @@ def _build_arg_parser(prog='warcprox', show_hidden=False):
     arg_parser.add_argument('-b', '--address', dest='address',
             default='localhost', help='address to listen on')
     arg_parser.add_argument('-c', '--cacert', dest='cacert',
-            default='./{}-warcprox-ca.pem'.format(socket.gethostname()),
+            default=f'./{socket.gethostname()}-warcprox-ca.pem',
             help='CA certificate file; if file does not exist, it will be created')
     arg_parser.add_argument('--certs-dir', dest='certs_dir',
-            default='./{}-warcprox-ca'.format(socket.gethostname()),
+            default=f'./{socket.gethostname()}-warcprox-ca',
             help='where to store and load generated certificates')
     arg_parser.add_argument('-d', '--dir', dest='directory',
             default='./warcs', help='where to write warcs')
@@ -279,7 +279,7 @@ def _build_arg_parser(prog='warcprox', show_hidden=False):
     )
     arg_parser.add_argument(
             '--version', action='version',
-            version="warcprox {}".format(warcprox.__version__))
+            version=f"warcprox {warcprox.__version__}")
 
     return arg_parser
 

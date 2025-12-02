@@ -308,7 +308,7 @@ class WarcproxController:
                     try:
                         value = repr(obj)[:100]
                     except BaseException as e:
-                        value = "<{} getting value>".format(e)
+                        value = f"<{e} getting value>"
                 self.logger.info("#%s (%s) (%s bytes) (%s refs) (id=%s): %s", i+1, type(obj), sys.getsizeof(obj), sys.getrefcount(obj), id(obj), value)
             self.logger.info("%s unreachable objects totaling %s bytes", len(gc.garbage), sum(sys.getsizeof(x) for x in gc.garbage))
 
