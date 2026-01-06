@@ -650,10 +650,18 @@ class PooledMixIn(socketserver.ThreadingMixIn):
 
     def process_request(self, request, client_address):
         self.active_requests[request] = datetime.datetime.now(datetime.timezone.utc)
-        future = self.pool.submit(
+        try:
+            future = self.pool.submit(
                 self.process_request_thread, request, client_address)
-        future.add_done_callback(
+            future.add_done_callback(
                 lambda f: self.active_requests.pop(request, None))
+        except Exception:
+            try:
+                self.active_requests.pop(request)
+            except KeyError:
+                pass
+            self.logger.exception("Exception occurred when adding request %s to the pool", request)
+            return
         if future.done():
             # avoid theoretical timing issue, in case process_request_thread
             # managed to finish before future.add_done_callback() ran
