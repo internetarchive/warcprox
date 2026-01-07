@@ -154,28 +154,48 @@ class WarcproxController:
         earliest fetch start time, and returns that time.
         '''
         earliest = None
-        for timestamp in list(self.proxy.active_requests.values()):
+        request = None
+        for (active_request, timestamp) in self.proxy.active_requests.items():
             if earliest is None or timestamp < earliest:
                 earliest = timestamp
+                request = active_request
         for processor in self._postfetch_chain:
             with processor.inq.mutex:
                 l = list(processor.inq.queue)
             for recorded_url in l:
                 if earliest is None or recorded_url.timestamp < earliest:
                     earliest = recorded_url.timestamp
-        return earliest
+                    request = None
+        return (earliest, request)
 
     def postfetch_status(self):
-        earliest = self.earliest_still_active_fetch_start()
+        earliest, sock = self.earliest_still_active_fetch_start()
         if earliest:
             seconds_behind = (datetime.datetime.now(datetime.timezone.utc) - earliest).total_seconds()
         else:
             seconds_behind = 0
         result = {
             'earliest_still_active_fetch_start': earliest,
+            'earliest_still_active_socket': {
+                'socket': str(sock),
+                'name': None,
+                'peername': None,
+            },
             'seconds_behind': seconds_behind,
             'postfetch_chain': []
         }
+        if sock is not None:
+            if isinstance(sock, socket.socket):
+                try:
+                    result['earliest_still_active_socket']['name'] = sock.getsockname()
+                    self.logger.debug("Unable to get socket name for socket %s", sock)
+                except OSError:
+                    pass
+                try:
+                    result['earliest_still_active_socket']['peername'] = sock.getpeername()
+                    self.logger.debug("Unable to get socket peername for socket %s", sock)
+                except OSError:
+                    pass
         for processor in self._postfetch_chain:
             if processor.__class__ == warcprox.ListenerPostfetchProcessor:
                 name = processor.listener.__class__.__name__
