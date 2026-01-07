@@ -1650,7 +1650,7 @@ def test_status_api(warcprox_):
             'rates_5min', 'rates_1min', 'unaccepted_requests', 'rates_15min',
             'active_requests','start_time','urls_processed',
             'warc_bytes_written', 'postfetch_chain',
-            'earliest_still_active_fetch_start',}
+            'earliest_still_active_fetch_start', 'earliest_still_active_socket',}
     assert status['role'] == 'warcprox'
     assert status['version'] == warcprox.__version__
     assert status['port'] == warcprox_.proxy.server_port
@@ -1673,7 +1673,7 @@ def test_svcreg_status(warcprox_):
                 'rates_5min', 'rates_1min', 'unaccepted_requests',
                 'rates_15min', 'active_requests','start_time','urls_processed',
                 'warc_bytes_written', 'postfetch_chain',
-                'earliest_still_active_fetch_start',}
+                'earliest_still_active_fetch_start', 'earliest_still_active_socket',}
         assert status['id'] == 'warcprox:{}:{}'.format(
                 socket.gethostname(), warcprox_.proxy.server_port)
         assert status['role'] == 'warcprox'
