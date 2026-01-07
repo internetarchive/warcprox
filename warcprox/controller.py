@@ -33,6 +33,7 @@ import importlib
 import queue
 import socket
 import os
+from typing import Optional, TypedDict
 
 class Factory:
     @staticmethod
@@ -119,6 +120,12 @@ class Factory:
         else:
             return None
 
+
+class ActiveRequestStatus(TypedDict):
+    earliest: Optional[datetime.datetime]
+    request: Optional[socket.socket]
+
+
 class WarcproxController:
     logger = logging.getLogger("warcprox.controller.WarcproxController")
 
@@ -147,35 +154,65 @@ class WarcproxController:
 
         self.service_registry = Factory.service_registry(options)
 
-    def earliest_still_active_fetch_start(self):
+    def earliest_still_active_fetch_start(self) -> ActiveRequestStatus:
         '''
         Looks at urls currently in flight, either being fetched or being
         processed at some step of the postfetch chain, finds the one with the
         earliest fetch start time, and returns that time.
         '''
-        earliest = None
-        for timestamp in list(self.proxy.active_requests.values()):
-            if earliest is None or timestamp < earliest:
-                earliest = timestamp
+        result: ActiveRequestStatus = {
+            'earliest': None,
+            'request': None,
+        }
+
+        for (active_request, timestamp) in self.proxy.active_requests.items():
+            if result['earliest'] is None or timestamp < result['earliest']:
+                result = {
+                    'earliest': timestamp,
+                    'request': active_request,
+                }
         for processor in self._postfetch_chain:
             with processor.inq.mutex:
                 l = list(processor.inq.queue)
             for recorded_url in l:
-                if earliest is None or recorded_url.timestamp < earliest:
-                    earliest = recorded_url.timestamp
-        return earliest
+                if result['earliest'] is None or recorded_url.timestamp < result['earliest']:
+                    result = {
+                        'earliest': recorded_url.timestamp,
+                        'request': None,
+                    }
+        return result
 
     def postfetch_status(self):
-        earliest = self.earliest_still_active_fetch_start()
+        active_fetch = self.earliest_still_active_fetch_start()
+        earliest = active_fetch['earliest']
+        sock = active_fetch['request']
+
         if earliest:
             seconds_behind = (datetime.datetime.now(datetime.timezone.utc) - earliest).total_seconds()
         else:
             seconds_behind = 0
         result = {
             'earliest_still_active_fetch_start': earliest,
+            'earliest_still_active_socket': {
+                'socket': str(sock),
+                'name': None,
+                'peername': None,
+            },
             'seconds_behind': seconds_behind,
             'postfetch_chain': []
         }
+        if sock is not None:
+            if isinstance(sock, socket.socket):
+                try:
+                    result['earliest_still_active_socket']['name'] = sock.getsockname()
+                    self.logger.debug("Unable to get socket name for socket %s", sock)
+                except OSError:
+                    pass
+                try:
+                    result['earliest_still_active_socket']['peername'] = sock.getpeername()
+                    self.logger.debug("Unable to get socket peername for socket %s", sock)
+                except OSError:
+                    pass
         for processor in self._postfetch_chain:
             if processor.__class__ == warcprox.ListenerPostfetchProcessor:
                 name = processor.listener.__class__.__name__
