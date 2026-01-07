@@ -155,7 +155,16 @@ class WarcproxController:
         '''
         earliest = None
         request = None
+
+        sockets_to_remove = []
+
         for (active_request, timestamp) in self.proxy.active_requests.items():
+            # We've sometimes seen closed sockets lingering in the dict;
+            # we want to get rid of them as soon as we notice.
+            if active_request._closed:
+                sockets_to_remove.append(active_request)
+                continue
+
             if earliest is None or timestamp < earliest:
                 earliest = timestamp
                 request = active_request
@@ -166,6 +175,14 @@ class WarcproxController:
                 if earliest is None or recorded_url.timestamp < earliest:
                     earliest = recorded_url.timestamp
                     request = None
+
+        for active_request in sockets_to_remove:
+            try:
+                self.proxy.active_requests.pop(active_request)
+                self.logger.debug("Removing closed socket from self.proxy.active_requests socket=%s", active_request)
+            except KeyError:
+                pass
+
         return (earliest, request)
 
     def postfetch_status(self):
