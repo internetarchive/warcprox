@@ -662,10 +662,6 @@ class PooledMixIn(socketserver.ThreadingMixIn):
                 pass
             self.logger.exception("Exception occurred when adding request %s to the pool", request)
             return
-        if future.done():
-            # avoid theoretical timing issue, in case process_request_thread
-            # managed to finish before future.add_done_callback() ran
-            self.active_requests.pop(request, None)
 
     def get_request(self):
         '''
