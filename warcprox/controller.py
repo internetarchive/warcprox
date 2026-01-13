@@ -33,6 +33,8 @@ import importlib
 import queue
 import socket
 import os
+import traceback
+from concurrent.futures import CancelledError, Future, TimeoutError
 from typing import Any, Optional, TypedDict
 
 class Factory:
@@ -126,6 +128,7 @@ class ActiveRequestStatus(TypedDict):
     request: Optional[socket.socket]
     url: Optional[Any]
     postfetch_plugin: Optional[str]
+    future: Optional[Future]
 
 
 class WarcproxController:
@@ -167,15 +170,18 @@ class WarcproxController:
             'request': None,
             'url': None,
             'postfetch_plugin': None,
+            'future': None,
         }
 
-        for (active_request, timestamp) in self.proxy.active_requests.items():
+        for (active_request, status) in self.proxy.active_requests.items():
+            timestamp = status['timestamp']
             if result['earliest'] is None or timestamp < result['earliest']:
                 result = {
                     'earliest': timestamp,
                     'request': active_request,
                     'url': None,
                     'postfetch_plugin': None,
+                    'future': status['future'],
                 }
         for processor in self._postfetch_chain:
             with processor.inq.mutex:
@@ -192,6 +198,7 @@ class WarcproxController:
                         'request': None,
                         'url': recorded_url,
                         'postfetch_plugin': name,
+                        'future': None,
                     }
         return result
 
@@ -210,6 +217,8 @@ class WarcproxController:
                 'socket': str(sock),
                 'name': None,
                 'peername': None,
+                'future_status': None,
+                'exception': None,
             },
             'earliest_still_active_postfetch': {
                 'url': None,
@@ -230,6 +239,21 @@ class WarcproxController:
                     self.logger.debug("Unable to get socket peername for socket %s", sock)
                 except OSError:
                     pass
+
+        if future := active_fetch['future']:
+            if future.cancelled():
+                result['earliest_still_active_socket']['future_status'] = 'cancelled'
+            elif future.running():
+                result['earliest_still_active_socket']['future_status'] = 'running'
+            elif future.done():
+                result['earliest_still_active_socket']['future_status'] = 'done'
+
+            try:
+                if exc := future.exception(timeout=0):
+                    result['earliest_still_active_socket']['exception'] = '\n'.join(traceback.format_tb(exc.__traceback__))
+            except (CancelledError, TimeoutError):
+                pass
+
         if recorded_url := active_fetch['url']:
             result['earliest_still_active_postfetch']['url'] = recorded_url.url.decode(errors='ignore')
         if postfetch_plugin := active_fetch['postfetch_plugin']:
