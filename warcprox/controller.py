@@ -231,7 +231,7 @@ class WarcproxController:
                 except OSError:
                     pass
         if recorded_url := active_fetch['url']:
-            result['earliest_still_active_postfetch']['url'] = recorded_url.url
+            result['earliest_still_active_postfetch']['url'] = recorded_url.url.decode(errors='ignore')
         if postfetch_plugin := active_fetch['postfetch_plugin']:
             result['earliest_still_active_postfetch']['postfetch_plugin'] = postfetch_plugin
 
