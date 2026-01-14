@@ -33,7 +33,7 @@ import importlib
 import queue
 import socket
 import os
-from typing import Optional, TypedDict
+from typing import Any, Optional, TypedDict
 
 class Factory:
     @staticmethod
@@ -124,6 +124,7 @@ class Factory:
 class ActiveRequestStatus(TypedDict):
     earliest: Optional[datetime.datetime]
     request: Optional[socket.socket]
+    url: Optional[Any]
 
 
 class WarcproxController:
@@ -163,6 +164,7 @@ class WarcproxController:
         result: ActiveRequestStatus = {
             'earliest': None,
             'request': None,
+            'url': None,
         }
 
         for (active_request, timestamp) in self.proxy.active_requests.items():
@@ -170,6 +172,7 @@ class WarcproxController:
                 result = {
                     'earliest': timestamp,
                     'request': active_request,
+                    'url': None,
                 }
         for processor in self._postfetch_chain:
             with processor.inq.mutex:
@@ -179,6 +182,7 @@ class WarcproxController:
                     result = {
                         'earliest': recorded_url.timestamp,
                         'request': None,
+                        'url': recorded_url,
                     }
         return result
 
@@ -198,6 +202,9 @@ class WarcproxController:
                 'name': None,
                 'peername': None,
             },
+            'earliest_still_active_postfetch': {
+                'url': None,
+            },
             'seconds_behind': seconds_behind,
             'postfetch_chain': []
         }
@@ -213,6 +220,9 @@ class WarcproxController:
                     self.logger.debug("Unable to get socket peername for socket %s", sock)
                 except OSError:
                     pass
+        if recorded_url := active_fetch['url']:
+            result['earliest_still_active_postfetch']['url'] = recorded_url.url
+
         for processor in self._postfetch_chain:
             if processor.__class__ == warcprox.ListenerPostfetchProcessor:
                 name = processor.listener.__class__.__name__
