@@ -649,12 +649,19 @@ class PooledMixIn(socketserver.ThreadingMixIn):
         return result
 
     def process_request(self, request, client_address):
-        self.active_requests[request] = datetime.datetime.now(datetime.timezone.utc)
+        status = {
+            'timestamp': datetime.datetime.now(datetime.timezone.utc),
+            'future': None,
+        }
+
+        self.active_requests[request] = status
         try:
             future = self.pool.submit(
                 self.process_request_thread, request, client_address)
             future.add_done_callback(
                 lambda f: self.active_requests.pop(request, None))
+            if request in self.active_requests:
+                self.active_requests[request]['future'] = future
         except Exception:
             try:
                 self.active_requests.pop(request)
