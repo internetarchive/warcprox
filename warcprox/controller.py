@@ -125,6 +125,7 @@ class ActiveRequestStatus(TypedDict):
     earliest: Optional[datetime.datetime]
     request: Optional[socket.socket]
     url: Optional[Any]
+    postfetch_plugin: Optional[str]
 
 
 class WarcproxController:
@@ -165,6 +166,7 @@ class WarcproxController:
             'earliest': None,
             'request': None,
             'url': None,
+            'postfetch_plugin': None,
         }
 
         for (active_request, timestamp) in self.proxy.active_requests.items():
@@ -173,16 +175,23 @@ class WarcproxController:
                     'earliest': timestamp,
                     'request': active_request,
                     'url': None,
+                    'postfetch_plugin': None,
                 }
         for processor in self._postfetch_chain:
             with processor.inq.mutex:
                 l = list(processor.inq.queue)
             for recorded_url in l:
                 if result['earliest'] is None or recorded_url.timestamp < result['earliest']:
+                    if processor.__class__ == warcprox.ListenerPostfetchProcessor:
+                        name = processor.listener.__class__.__name__
+                    else:
+                        name = processor.__class__.__name__
+
                     result = {
                         'earliest': recorded_url.timestamp,
                         'request': None,
                         'url': recorded_url,
+                        'postfetch_plugin': name,
                     }
         return result
 
@@ -204,6 +213,7 @@ class WarcproxController:
             },
             'earliest_still_active_postfetch': {
                 'url': None,
+                'postfetch_plugin': None,
             },
             'seconds_behind': seconds_behind,
             'postfetch_chain': []
@@ -222,6 +232,8 @@ class WarcproxController:
                     pass
         if recorded_url := active_fetch['url']:
             result['earliest_still_active_postfetch']['url'] = recorded_url.url
+        if postfetch_plugin := active_fetch['postfetch_plugin']:
+            result['earliest_still_active_postfetch']['postfetch_plugin'] = postfetch_plugin
 
         for processor in self._postfetch_chain:
             if processor.__class__ == warcprox.ListenerPostfetchProcessor:
