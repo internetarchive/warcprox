@@ -231,13 +231,13 @@ class WarcproxController:
             if isinstance(sock, socket.socket):
                 try:
                     result['earliest_still_active_socket']['name'] = sock.getsockname()
-                    self.logger.debug("Unable to get socket name for socket %s", sock)
                 except OSError:
+                    self.logger.debug("Unable to get socket name for socket %s", sock)
                     pass
                 try:
                     result['earliest_still_active_socket']['peername'] = sock.getpeername()
-                    self.logger.debug("Unable to get socket peername for socket %s", sock)
                 except OSError:
+                    self.logger.debug("Unable to get socket peername for socket %s", sock)
                     pass
 
         if future := active_fetch['future']:
