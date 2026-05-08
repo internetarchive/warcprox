@@ -223,6 +223,13 @@ def _build_arg_parser(prog='warcprox', show_hidden=False):
             help=suppress(
                 'socket timeout, used for proxy client connection and for '
                 'connection to remote server'))
+    arg_parser.add_argument(
+            '--fetch-timeout', dest='fetch_timeout', type=float, default=1800,
+            help=(
+                'wall-clock timeout per upstream fetch in seconds; a watchdog '
+                'aborts upstream sockets older than this. Protects against '
+                'slow-trickle upstream responses where the per-recv socket '
+                'timeout never fires. 0 to disable. Default: 1800 (30 min)'))
     # Increasing this value increases memory usage but reduces /tmp disk I/O.
     hidden.add_argument(
             '--tmp-file-max-memory-size', dest='tmp_file_max_memory_size',

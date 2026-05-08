@@ -135,6 +135,7 @@ class WarcproxController:
     logger = logging.getLogger("warcprox.controller.WarcproxController")
 
     HEARTBEAT_INTERVAL = 20.0
+    WATCHDOG_INTERVAL = 5.0
 
     def __init__(self, options=warcprox.Options()):
         """
@@ -144,6 +145,7 @@ class WarcproxController:
 
         self.proxy_thread = None
         self.playback_proxy_thread = None
+        self.watchdog_thread = None
         self._last_rss = None
         self.stop = threading.Event()
         self._start_stop_lock = threading.Lock()
@@ -433,6 +435,46 @@ class WarcproxController:
             for processor in self._postfetch_chain:
                 processor.start()
 
+            if getattr(self.options, 'fetch_timeout', 0):
+                self.watchdog_thread = threading.Thread(
+                        target=self._watchdog, name='FetchWatchdogThread')
+                self.watchdog_thread.start()
+
+    def _watchdog(self):
+        '''
+        Periodically aborts upstream sockets whose fetch has been running
+        longer than `options.fetch_timeout`. Required because the per-recv
+        socket timeout doesn't fire when a malicious or buggy upstream
+        dribbles bytes (e.g. inside a chunk-size header that never ends in
+        \\n), parking the handler thread inside a single readline indefinitely.
+        '''
+        while not self.stop.wait(self.WATCHDOG_INTERVAL):
+            try:
+                self._abort_stuck_fetches()
+            except Exception:
+                self.logger.error(
+                        'fetch watchdog raised; will retry next tick',
+                        exc_info=True)
+
+    def _abort_stuck_fetches(self):
+        timeout = getattr(self.options, 'fetch_timeout', 0)
+        if not timeout:
+            return
+        now = time.monotonic()
+        with self.proxy.remote_server_socks_lock:
+            stuck = [(s, now - t)
+                     for s, t in self.proxy.remote_server_socks.items()
+                     if now - t > timeout]
+        for sock, age in stuck:
+            try:
+                self.logger.warning(
+                        'aborting stuck upstream fetch (age=%.0fs sock=%r)',
+                        age, sock)
+                sock.shutdown(socket.SHUT_RDWR)
+            except OSError as e:
+                self.logger.debug(
+                        'shutdown of stuck upstream sock failed: %r', e)
+
     def shutdown(self):
         '''
         Shut down, aborting active connections, but allowing completed fetches
@@ -448,6 +490,10 @@ class WarcproxController:
             if not self.proxy_thread or not self.proxy_thread.is_alive():
                 self.logger.info('warcprox is not running')
                 return
+
+            # ensure the watchdog wakes from its self.stop.wait() even if
+            # shutdown() is called directly rather than via run_until_shutdown.
+            self.stop.set()
 
             self.proxy.shutdown()
             self.proxy.server_close()
@@ -465,6 +511,11 @@ class WarcproxController:
 
             if self.playback_proxy is not None:
                 self.playback_proxy_thread.join()
+
+            if self.watchdog_thread is not None:
+                # self.stop is already set by run_until_shutdown / caller;
+                # the watchdog wakes from its self.stop.wait() and exits.
+                self.watchdog_thread.join()
 
             if self.service_registry and hasattr(self, "status_info"):
                 self.service_registry.unregister(self.status_info["id"])

@@ -1685,6 +1685,47 @@ def test_svcreg_status(warcprox_):
         assert status['pid'] == os.getpid()
         assert status['threads'] == warcprox_.proxy.pool._max_workers
 
+def _make_watchdog_controller(fetch_timeout):
+    """Build a controller with port=0 so concurrent test runs don't clash."""
+    options = warcprox.Options(
+            port=0, address='127.0.0.1', fetch_timeout=fetch_timeout)
+    return warcprox.controller.WarcproxController(options=options)
+
+
+def test_fetch_watchdog_aborts_stuck_upstream_sockets():
+    """Watchdog calls shutdown(SHUT_RDWR) on upstream sockets older than
+    options.fetch_timeout, leaves fresh ones alone, and tolerates already-
+    closed sockets."""
+    controller = _make_watchdog_controller(fetch_timeout=10.0)
+
+    fresh = mock.Mock()       # young — should not be aborted
+    stuck = mock.Mock()       # old — should be aborted
+    closed = mock.Mock()      # old, already-closed — shutdown raises OSError
+    closed.shutdown.side_effect = OSError('already closed')
+
+    now = 1000.0
+    controller.proxy.remote_server_socks = {
+        fresh: now - 5.0,     # 5s old, under threshold
+        stuck: now - 30.0,    # 30s old, over threshold
+        closed: now - 30.0,   # also over threshold
+    }
+
+    with mock.patch('time.monotonic', return_value=now):
+        controller._abort_stuck_fetches()
+
+    fresh.shutdown.assert_not_called()
+    stuck.shutdown.assert_called_once_with(socket.SHUT_RDWR)
+    closed.shutdown.assert_called_once_with(socket.SHUT_RDWR)
+
+
+def test_fetch_watchdog_disabled_when_timeout_zero():
+    controller = _make_watchdog_controller(fetch_timeout=0)
+    sock = mock.Mock()
+    controller.proxy.remote_server_socks = {sock: 0.0}  # ancient
+    controller._abort_stuck_fetches()
+    sock.shutdown.assert_not_called()
+
+
 def test_controller_with_defaults():
     # tests some initialization code that we rarely touch otherwise
     controller = warcprox.controller.WarcproxController()
