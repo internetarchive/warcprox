@@ -699,16 +699,19 @@ class PooledMixIn(socketserver.ThreadingMixIn):
 
 class MitmProxy(http_server.HTTPServer):
     def __init__(self, *args, **kwargs):
-        self.remote_server_socks = set()
+        # maps in-flight upstream socket -> monotonic time when the fetch
+        # started, used by WarcproxController's watchdog to abort fetches
+        # whose upstream is dribbling bytes (defeating per-recv timeouts).
+        self.remote_server_socks = {}
         self.remote_server_socks_lock = threading.Lock()
 
     def register_remote_server_sock(self, sock):
         with self.remote_server_socks_lock:
-            self.remote_server_socks.add(sock)
+            self.remote_server_socks[sock] = time.monotonic()
 
     def unregister_remote_server_sock(self, sock):
         with self.remote_server_socks_lock:
-            self.remote_server_socks.discard(sock)
+            self.remote_server_socks.pop(sock, None)
 
     def finish_request(self, request, client_address):
         '''
