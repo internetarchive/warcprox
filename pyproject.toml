@@ -1,6 +1,6 @@
 [project]
 name = "warcprox"
-version = "2.13.0"
+version = "2.13.1"
 authors = [
   { name="Noah Levitt", email="nlevitt@archive.org" },
 ]
