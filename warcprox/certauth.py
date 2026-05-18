@@ -73,6 +73,11 @@ class CertificateAuthority:
     def cert_for_host(self, host, overwrite=False, wildcard=False):
         with self._lock:
             host_filename = os.path.join(self.certs_dir, host) + '.pem'
+            # Prevent path traversal: ensure resolved path stays inside certs_dir
+            # (os.path.join silently discards certs_dir when host is absolute)
+            if not os.path.realpath(host_filename).startswith(
+                    os.path.realpath(self.certs_dir) + os.sep):
+                raise ValueError('hostname would escape certs_dir: %r' % host)
 
             if not overwrite and os.path.exists(host_filename):
                 self._file_created = False
