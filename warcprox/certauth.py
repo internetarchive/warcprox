@@ -5,6 +5,8 @@ import datetime
 from datetime import timedelta, timezone
 import threading
 
+import tldextract
+
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
@@ -85,9 +87,15 @@ class CertificateAuthority:
             return host_filename
 
     def get_wildcard_cert(self, cert_host):
-        host_parts = cert_host.split('.', 1)
-        if len(host_parts) == 2 and '.' in host_parts[1]:
-            cert_host = host_parts[1]
+        ext = tldextract.extract(cert_host)
+        registered_domain = ext.top_domain_under_public_suffix
+
+        if registered_domain and cert_host != registered_domain:
+            subdomain_labels = ext.subdomain.split('.')
+            if len(subdomain_labels) == 1:
+                cert_host = registered_domain
+            else:
+                cert_host = '.'.join(subdomain_labels[1:]) + '.' + registered_domain
 
         certfile = self.cert_for_host(cert_host,
                                       wildcard=True)
