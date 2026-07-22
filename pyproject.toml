@@ -36,7 +36,6 @@ dependencies = [
   "urlcanon>=0.3.0",
   "doublethink==0.4.9",
   "urllib3>=1.23",
-  "requests>=2.0.1",
   "PySocks>=1.6.8",
   "cryptography>=45,<46",
   "idna",
@@ -72,6 +71,7 @@ dev = [
   "mock",
   "pytest>=8.3.5",
   "pyopenssl",
+  "requests>=2.0.1",
   "warcio",
 ]
 
