@@ -1,7 +1,7 @@
 '''
 warcprox/mitmproxy.py - man-in-the-middle http/s proxy code, handles http
 CONNECT method by creating a snakeoil certificate for the requested site,
-calling ssl.wrap_socket() on the client connection; connects to remote
+wrapping the client connection with an SSLContext; connects to remote
 (proxied) host, possibly using tor if host tld is .onion and tor proxy is
 configured
 
@@ -303,17 +303,6 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
                     self._remote_server_conn.sock = context.wrap_socket(
                             self._remote_server_conn.sock,
                             server_hostname=self.hostname)
-                except AttributeError:
-                    try:
-                        self._remote_server_conn.sock = ssl.wrap_socket(
-                                self._remote_server_conn.sock)
-                    except ssl.SSLError:
-                        self.logger.warning(
-                                "failed to establish ssl connection to %s; "
-                                "python ssl library does not support SNI, "
-                                "consider upgrading to python 2.7.9+ or 3.4+",
-                                self.hostname)
-                    raise
                 except ssl.SSLError as e:
                     self.logger.error(
                             'error connecting to %s (%s) port %s: %s',
