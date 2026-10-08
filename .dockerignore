@@ -1,0 +1,9 @@
+.git
+.github
+*.pem
+*.egg
+*.egg-info
+.venv
+Dockerfile
+.dockerignore
+warcs
