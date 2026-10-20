@@ -35,9 +35,6 @@ import warcprox
 import warcprox.controller
 import warcprox.warcproxy
 
-# warcprox blocks proxy requests to localhost by default; allow them here.
-warcprox.warcproxy.WarcProxyHandler.allow_localhost = True
-
 
 class SlowLoris(http.server.BaseHTTPRequestHandler):
     """Sends a single valid chunk, then dribbles bytes without newlines."""
@@ -89,6 +86,7 @@ def start_warcprox(fetch_timeout):
         max_threads=8,
         socket_timeout=3.0,
         fetch_timeout=fetch_timeout,
+        blocked_subnets=[],
     )
     controller = warcprox.controller.WarcproxController(options=options)
     controller.start()

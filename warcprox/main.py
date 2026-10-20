@@ -36,6 +36,7 @@ import yaml
 import warcprox
 import doublethink
 import cryptography.hazmat.backends.openssl
+import ipaddress
 
 
 class BetterArgumentDefaultsHelpFormatter(
@@ -54,6 +55,17 @@ class BetterArgumentDefaultsHelpFormatter(
             return action.help
         else:
             return argparse.ArgumentDefaultsHelpFormatter._get_help_string(self, action)
+
+def _make_subnet_list(arg: str):
+    if not arg:
+        return []
+    subnets = []
+    for subnet in arg.split(","):
+        try:
+            subnets.append(ipaddress.ip_network(subnet))
+        except ValueError as e:
+            raise argparse.ArgumentTypeError(e)
+    return subnets
 
 def _build_arg_parser(prog='warcprox', show_hidden=False):
     if show_hidden:
@@ -239,6 +251,10 @@ def _build_arg_parser(prog='warcprox', show_hidden=False):
     arg_parser.add_argument(
             '--max-resource-size', dest='max_resource_size', type=int,
             default=None, help='maximum resource size limit in bytes')
+    arg_parser.add_argument(
+            '--blocked-subnets', dest='blocked_subnets', default='127.0.0.1/32,::1/128',
+            help='comma-separated list of IP subnets to block',
+            type=_make_subnet_list)
     arg_parser.add_argument(
             '--crawl-log-dir', dest='crawl_log_dir', default=None, help=(
                 'if specified, write crawl log files in the specified '

@@ -34,6 +34,7 @@ import hashlib
 import re
 import zlib
 import base64
+import ipaddress
 
 class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
     '''
@@ -50,7 +51,6 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
     '''
     # self.server is WarcProxy
     logger = logging.getLogger("warcprox.warcprox.WarcProxyHandler")
-    allow_localhost = False
 
     def _enforce_blocks(self, warcprox_meta):
         """
@@ -200,9 +200,12 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
     def _proxy_request(self):
         warcprox_meta = self._parse_warcprox_meta()
         remote_ip = self._remote_server_conn.sock.getpeername()[0]
-        if not self.allow_localhost and (remote_ip == "127.0.0.1" or remote_ip == "::1"):
+        parsed_ip = ipaddress.ip_address(remote_ip)
+        # Normalize IPv4-mapped IPv6 to IPv4 (cf. #277)
+        parsed_ip = getattr(parsed_ip, "ipv4_mapped", None) or parsed_ip
+        if any(parsed_ip in net for net in self._blocked_subnets):
             raise warcprox.BadRequest(
-                "request rejected by warcprox: localhost access is not permitted"
+                "request rejected by warcprox: access to this subnet is not permitted"
                 )
         timestamp = datetime.datetime.now(datetime.timezone.utc)
         extra_response_headers = {}

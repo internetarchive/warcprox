@@ -376,8 +376,6 @@ class ThreadedHTTPServer(socketserver.ThreadingMixIn, http_server.HTTPServer):
     daemon_threads = True
     pass
 
-warcprox.warcproxy.WarcProxyHandler.allow_localhost = True
-
 @pytest.fixture(scope="module")
 def http_daemon(request):
     http_daemon = ThreadedHTTPServer(
@@ -442,7 +440,8 @@ def warcprox_(request, http_daemon, https_daemon):
             '--socket-timeout=4',
             '--max-resource-size=200000',
             '--dedup-min-text-size=3',
-            '--dedup-min-binary-size=5']
+            '--dedup-min-binary-size=5',
+            '--blocked-subnets=""']
     if request.config.getoption('--rethinkdb-dedup-url'):
         argv.append('--rethinkdb-dedup-url=%s' % request.config.getoption('--rethinkdb-dedup-url'))
         # test these here only

@@ -216,6 +216,7 @@ class MitmProxyHandler(http_server.BaseHTTPRequestHandler):
     _socket_timeout = 60
     _max_resource_size = None
     _tmp_file_max_memory_size = 512 * 1024
+    _blocked_subnets = []
     onion_tor_socks_proxy_host = None
     onion_tor_socks_proxy_port = None
     socks_proxy_host = None
@@ -843,6 +844,7 @@ class SingleThreadedMitmProxy(http_server.HTTPServer):
             MitmProxyHandlerClass._max_resource_size = options.max_resource_size
         if options.tmp_file_max_memory_size:
             MitmProxyHandlerClass._tmp_file_max_memory_size = options.tmp_file_max_memory_size
+        MitmProxyHandlerClass._blocked_subnets = options.blocked_subnets
 
         self.digest_algorithm = options.digest_algorithm or 'sha1'
 

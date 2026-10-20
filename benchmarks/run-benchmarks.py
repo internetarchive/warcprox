@@ -39,8 +39,6 @@ import warcprox
 import warcprox.main
 import threading
 
-warcprox.warcproxy.WarcProxyHandler.allow_localhost = True
-
 # https://medium.com/@generativist/a-simple-streaming-http-server-in-aiohttp-4233dbc173c7
 async def do_get(request):
     n = int(request.match_info.get('n'))
@@ -212,6 +210,7 @@ if __name__ == '__main__':
         args.cacert = os.path.join(tmpdir, 'benchmark-warcprox-ca.pem')
         args.certs_dir = os.path.join(tmpdir, 'benchmark-warcprox-ca')
         args.directory = os.path.join(tmpdir, 'warcs')
+        args.blocked_subnets = []
         # if args.rethinkdb_servers:
         #     args.rethinkdb_db = 'benchmarks_{:%Y%m%d%H%M%S}' % (
         #             datetime.datetime.now(datetime.timezone.utc))
