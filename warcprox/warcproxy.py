@@ -34,6 +34,22 @@ import hashlib
 import re
 import zlib
 import base64
+import ipaddress
+
+def is_local_address(ip):
+    '''
+    Returns True if `ip` (a string as returned by `socket.getpeername()`)
+    refers to the local host: any loopback address (127.0.0.0/8, ::1), the
+    unspecified address (0.0.0.0, ::), or an IPv4-mapped IPv6 form of those
+    (e.g. ::ffff:127.0.0.1).
+    '''
+    try:
+        addr = ipaddress.ip_address(ip.split('%', 1)[0])
+    except ValueError:
+        return False
+    if addr.version == 6 and addr.ipv4_mapped:
+        addr = addr.ipv4_mapped
+    return addr.is_loopback or addr.is_unspecified
 
 class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
     '''
@@ -200,7 +216,7 @@ class WarcProxyHandler(warcprox.mitmproxy.MitmProxyHandler):
     def _proxy_request(self):
         warcprox_meta = self._parse_warcprox_meta()
         remote_ip = self._remote_server_conn.sock.getpeername()[0]
-        if not self.allow_localhost and (remote_ip == "127.0.0.1" or remote_ip == "::1"):
+        if not self.allow_localhost and is_local_address(remote_ip):
             raise warcprox.BadRequest(
                 "request rejected by warcprox: localhost access is not permitted"
                 )
