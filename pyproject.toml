@@ -42,6 +42,7 @@ dependencies = [
   "idna",
   "PyYAML>=5.1",
   "cachetools",
+  "tldextract",
   "rfc3986>=1.5.0",
   # Needed because of rethinkdb 2.4.9;
   # can be removed once doublethink upgrades to 2.4.10.post1
